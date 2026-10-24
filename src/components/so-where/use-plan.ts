@@ -75,8 +75,8 @@ export function usePlan() {
   }, [replay]);
 
   /** `you` is the device location, already rounded to ~100 m by the caller; it is only sent, never stored here. */
-  /** opts.refine = previous accumulated query → POST {mode:"refine", query, previous:{query}}; opts.display = ask kept on screen. */
-  const submit = useCallback(async (query: string, previous?: Previous, you?: { lat: number; lng: number }, opts?: { refine?: string; display?: string; focus?: { id: string; name: string; lat: number; lng: number } }) => {
+  /** opts.refine = previous accumulated query → POST {mode:"refine", query, previous:{query, result?}} (result = the plan on screen, as received; server never stores it); opts.display = ask kept on screen. */
+  const submit = useCallback(async (query: string, previous?: Previous, you?: { lat: number; lng: number }, opts?: { refine?: string; display?: string; focus?: { id: string; name: string; lat: number; lng: number }; result?: PlanResultWithAgent | null }) => {
     ctrl.current?.abort();
     const ac = new AbortController();
     ctrl.current = ac;
@@ -90,7 +90,7 @@ export function usePlan() {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({
-          ...(refine ? { mode: "refine", query, previous: { query: refine } } : previous ? { query: previous.query, answer: previous.answer, previous } : { query }),
+          ...(refine ? { mode: "refine", query, previous: { query: refine, ...(opts?.result ? { result: opts.result } : {}) } } : previous ? { query: previous.query, answer: previous.answer, previous } : { query }),
           ...(you ? { you } : {}),
           // Refine only: the place the follow-up is about ("other Italian places in the area").
           ...(refine && opts?.focus ? { focus: opts.focus } : {}),

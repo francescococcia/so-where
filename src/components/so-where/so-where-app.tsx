@@ -473,7 +473,7 @@ export function SoWhereApp() {
       setDetailId(null);
       setTurns((t) => [...t, { id: Date.now(), role: "user", text: label ?? text }]);
       awaitingReply.current = true;
-      submit(text, undefined, you ?? undefined, { refine: prev, display: baseAsk.current, focus });
+      submit(text, undefined, you ?? undefined, { refine: prev, display: baseAsk.current, focus, result: state.result ?? shown });
       scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     },
     [state.query, state.ask, state.result, shown, detailId, query, submit, you]
