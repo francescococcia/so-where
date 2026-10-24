@@ -5,6 +5,7 @@ import type { AnyBulkWriteOperation, Db } from "mongodb";
 import snapshot from "@/data/osm-snapshot.json";
 import { seedEvents, type SeedEvent } from "@/lib/events";
 import { addressOf } from "@/lib/osm";
+import { seatingOf } from "@/lib/venue-weather";
 
 type SnapEl = { type: string; id: number; lat: number; lng: number; tags: Record<string, string> };
 type Point = { type: "Point"; coordinates: [number, number] };
@@ -24,7 +25,12 @@ export type VenueDoc = {
   wheelchair: string | null;
   website: string | null;
   phone: string | null;
-  tags: string[]; // searchable keywords: category, cuisine, "free", "wheelchair", ...
+  tags: string[]; // searchable keywords: category, cuisine, "free", "wheelchair", "outdoor", "indoor", ...
+  // Weather-relevant OSM seating tags, normalised: true / false when tagged, null when OSM doesn't say.
+  outdoor_seating: boolean | null;
+  indoor_seating: boolean | null;
+  covered: boolean | null;
+  beer_garden: boolean | null; // beer_garden=yes, garden:type=beer_garden, or amenity=biergarten
   osm_tags: Record<string, string>; // raw OSM tags, so the planner can reuse its OSM hours/verdict logic
   location: Point;
   source: string;
@@ -62,10 +68,14 @@ export function venueDocs(): VenueDoc[] {
     if (t.amenity && t.tourism) kw.add(t.tourism);
     for (const c of (t.cuisine ?? "").split(/[;,]/)) if (c.trim()) kw.add(c.trim().toLowerCase());
     if (category === "cafe") kw.add("coffee");
-    if (category === "pub" || category === "bar") kw.add("drinks");
+    if (category === "pub" || category === "bar" || category === "biergarten") kw.add("drinks");
     if (t.fee === "no") kw.add("free");
     if (t.wheelchair === "yes") kw.add("wheelchair");
-    if (t.outdoor_seating === "yes") kw.add("outdoor");
+    const seat = seatingOf(t);
+    if (seat.outdoor_seating) kw.add("outdoor");
+    if (seat.beer_garden) kw.add("beer_garden");
+    if (seat.indoor_seating) kw.add("indoor");
+    if (seat.covered) kw.add("covered");
     out.push({
       _id: `${e.type}/${e.id}`,
       osmType: e.type,
@@ -82,6 +92,7 @@ export function venueDocs(): VenueDoc[] {
       website: t.website ?? t["contact:website"] ?? null,
       phone: t.phone ?? t["contact:phone"] ?? null,
       tags: [...kw],
+      ...seat,
       osm_tags: t,
       location: point(e.lat, e.lng),
       source: "OSM snapshot",

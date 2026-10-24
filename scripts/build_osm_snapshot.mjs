@@ -9,7 +9,7 @@ const UA = "SoWhere/0.1 (Encode London 2026 hackathon app)";
 const hubs = JSON.parse(readFileSync(new URL("../src/data/hubs.json", import.meta.url), "utf8")).hubs;
 const ENCODE_HUB = { lat: 51.529, lng: -0.083 };
 const around = (r, p) => `(around:${r},${p.lat},${p.lng})`;
-const food = hubs.map((h) => `nwr["amenity"~"^(pub|bar|cafe|restaurant)$"]["name"]${around(500, h)};`).join("\n");
+const food = hubs.map((h) => `nwr["amenity"~"^(pub|bar|biergarten|cafe|restaurant)$"]["name"]${around(500, h)};`).join("\n");
 const free = [ENCODE_HUB, ...hubs]
   .map((p, i) => {
     const r = i === 0 ? 2500 : 1000;
@@ -17,7 +17,7 @@ const free = [ENCODE_HUB, ...hubs]
   })
   .join("\n");
 const query = `[out:json][timeout:120];(\n${food}\n${free}\n);out center tags;`;
-const KEEP = /^(name|amenity|tourism|shop|opening_hours|check_date.*|survey:date|addr:.*|fee|website|contact:website|wheelchair|cuisine|description)$/;
+const KEEP = /^(name|amenity|tourism|shop|opening_hours|check_date.*|survey:date|addr:.*|fee|website|contact:website|wheelchair|cuisine|description|outdoor_seating|indoor_seating|beer_garden|garden:type|covered)$/;
 
 const endpoints = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
 let json = null;

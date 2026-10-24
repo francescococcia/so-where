@@ -31,6 +31,22 @@
     { "id": "nonsense-keys", "query": "asdf qwerty",
       "expect": { "clarify": true, "missing": "category" } },
     { "id": "nonsense-question", "query": "What is the meaning of life?",
-      "expect": { "clarify": true, "missing": "category" } }
+      "expect": { "clarify": true, "missing": "category" } },
+    {"id": "typo-greenwich-liverpolstreet", "query": "i nee to meet a frind tonigh check pub opern i'm in greenwich he is at liverpolstreet",
+      "expect": {"intent": "meet_halfway", "clarify": false, "category": "pub", "minCards": 1, "themArea": "Liverpool Street"} },
+    {"id": "me-them-slots-coffee", "query": "me at Waterloo, them near Camden Town, coffee Saturday 3pm",
+      "expect": {"intent": "meet_halfway", "clarify": false, "weekday": "Sat", "time": "15:00", "category": "cafe", "minCards": 1, "themArea": "Camden"} },
+    {"id": "coffee-friend-me-them", "query": "Coffee with a friend, me at Waterloo, them near Camden Town, Saturday 3pm",
+      "expect": {"intent": "meet_halfway", "clarify": false, "weekday": "Sat", "time": "15:00", "category": "cafe", "minCards": 1, "themArea": "Camden"} },
+    {"id": "kingsx-brixton-pair", "query": "kings x and brixton drinks friday 7",
+      "expect": {"intent": "meet_halfway", "clarify": false, "weekday": "Fri", "time": "19:00", "category": "pub", "minCards": 1, "themArea": "Brixton"} },
+    {"id": "tonight-at-8-is-pm", "query": "pub with a friend tonight at 8, I am at Waterloo, they are at Camden Town",
+      "expect": {"intent": "meet_halfway", "clarify": false, "time": "20:00", "category": "pub", "minCards": 1, "themArea": "Camden"} },
+    {"id": "two-step-clarify", "query": "Find somewhere halfway for me and Jo tonight", "answers": ["liverpolstreet", "Waterloo"],
+      "expect": {"intent": "meet_halfway", "clarify": false, "clarifySteps": 2, "minCards": 1} },
+    {"id": "weather-rain-indoor", "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham", "weather": {"tempC": 11, "rainPct": 70, "rainMm": 1.2},
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "weather": "wet"} },
+    {"id": "weather-sun-terrace", "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham", "weather": {"tempC": 21, "rainPct": 5, "rainMm": 0, "sunny": true},
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "weather": "warm"} }
   ]
 }

@@ -14,7 +14,7 @@ const LIMIT = 300;
 
 /** Text terms per venue kind, matched (fuzzy) against `category` and `tags` in Atlas Search. */
 export const KIND_TERMS: Record<OsmKind, string[]> = {
-  pub: ["pub", "bar"],
+  pub: ["pub", "bar", "biergarten"],
   cafe: ["cafe", "coffee"],
   restaurant: ["restaurant"],
   free: ["museum", "gallery", "arts_centre", "marketplace", "free"],
@@ -22,7 +22,7 @@ export const KIND_TERMS: Record<OsmKind, string[]> = {
 
 /** Equivalent plain-MongoDB filter for the $geoNear fallback (same rules as osm.ts `matches`). */
 export const KIND_FILTER: Record<OsmKind, Document> = {
-  pub: { category: { $in: ["pub", "bar"] }, name: { $ne: null } },
+  pub: { category: { $in: ["pub", "bar", "biergarten"] }, name: { $ne: null } },
   cafe: { category: "cafe", name: { $ne: null } },
   restaurant: { category: "restaurant", name: { $ne: null } },
   free: { fee: "no", $or: [{ tourism: { $in: ["museum", "gallery"] } }, { amenity: { $in: ["marketplace", "arts_centre"] } }] },

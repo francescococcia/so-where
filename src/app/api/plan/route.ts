@@ -1,7 +1,7 @@
 // POST /api/plan {query, you?, when?, previous?} → PlanResultWithAgent (JSON), or NDJSON when
 // `Accept: application/x-ndjson`: {"type":"step",...} lines then one {"type":"result"} or {"type":"clarify"}.
 // Request bodies are never logged (they can hold someone's location).
-import { runPlan, type PlanRequest } from "@/lib/plan";
+import { planRunWrite, runPlan, type PlanRequest } from "@/lib/plan";
 import type { AgentStep, PlanResultWithAgent } from "@/lib/plan-types";
 
 export const runtime = "nodejs";
@@ -38,7 +38,9 @@ export async function POST(req: Request) {
   const stream = (req.headers.get("accept") ?? "").includes("application/x-ndjson");
   if (!stream) {
     try {
-      return Response.json(await runPlan(body), { headers: { "Cache-Control": "no-store" } });
+      const r = await runPlan(body);
+      await planRunWrite(r); // finish the plan_runs insert before the serverless function returns
+      return Response.json(r, { headers: { "Cache-Control": "no-store" } });
     } catch {
       return Response.json({ error: "Planning failed" }, { status: 500 });
     }
@@ -51,8 +53,11 @@ export async function POST(req: Request) {
       const send = (o: unknown) => controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
       try {
         const r: PlanResultWithAgent = await runPlan(plan, (step: AgentStep) => send({ type: "step", step }));
-        if (r.clarify) send({ type: "clarify", clarify: r.clarify });
+        // `query` is the accumulated ask (earlier answers appended as "; them: X"): resend it as
+        // previous.query with the next answer so a second clarify never loses the first answer.
+        if (r.clarify) send({ type: "clarify", clarify: r.clarify, query: r.query });
         else send({ type: "result", result: r });
+        await planRunWrite(r); // result already sent; keep the function alive until plan_runs is written
       } catch {
         send({ type: "error", error: "Planning failed" });
       } finally {

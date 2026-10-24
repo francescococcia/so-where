@@ -4,25 +4,53 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { POST } from "@/app/api/plan/route";
 import type { PlanResultWithAgent } from "@/lib/plan-types";
 import { londonClock, londonDayShort } from "@/lib/london-time";
+import { setForecastOverride } from "@/lib/weather";
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string };
-type Case = { id: string; query: string; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; expect: Expect };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number };
+// `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
+// exactly like the UI, and the same clarify must never come back twice. `weather`: injected forecast (no Open-Meteo call).
+type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
+type Case = { id: string; query: string; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; weather?: Wx; expect: Expect };
 
 const { cases } = JSON.parse(readFileSync("evals/plan-evals.json", "utf8")) as { cases: Case[] };
 
-async function call(c: Case) {
-  const req = new Request("http://local/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: c.query, you: c.you, answer: c.answer, previous: c.previous }) });
-  const t0 = Date.now();
-  const res = await POST(req);
-  return { status: res.status, body: (await res.json()) as PlanResultWithAgent, ms: Date.now() - t0 };
+async function post(body: Record<string, unknown>) {
+  const res = await POST(new Request("http://local/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
+  return { status: res.status, body: (await res.json()) as PlanResultWithAgent };
 }
 
-function check(c: Case, r: PlanResultWithAgent) {
+async function call(c: Case) {
+  const t0 = Date.now();
+  setForecastOverride(
+    c.weather
+      ? async () => ({ value: `${c.weather!.tempC}°C, ${c.weather!.rainPct}% chance of rain (eval-injected)`, tempC: c.weather!.tempC, rainPct: c.weather!.rainPct, rainMm: c.weather!.rainMm ?? 0, sunny: c.weather!.sunny ?? false, fetchedAt: new Date().toISOString(), ms: 0 })
+      : null,
+  );
+  try {
+    let r = await post({ query: c.query, you: c.you, answer: c.answer, previous: c.previous });
+    const asked: string[] = [];
+    for (const a of c.answers ?? []) {
+      if (r.status !== 200 || !r.body.clarify) break;
+      asked.push(`${r.body.clarify.missing}: ${r.body.clarify.question}`);
+      r = await post({ query: a, you: c.you, answer: a, previous: { query: r.body.query, answer: a } });
+    }
+    if (r.status === 200 && r.body.clarify && c.answers) asked.push(`${r.body.clarify.missing}: ${r.body.clarify.question}`);
+    return { ...r, asked, ms: Date.now() - t0 };
+  } finally {
+    setForecastOverride(null);
+  }
+}
+
+function check(c: Case, r: PlanResultWithAgent, asked: string[]) {
   const e = c.expect;
   const out: { name: string; pass: boolean; got?: unknown }[] = [];
   const add = (name: string, pass: boolean, got?: unknown) => out.push({ name, pass, ...(got !== undefined ? { got } : {}) });
   if (e.intent) add(`intent = ${e.intent}`, r.intent === e.intent, r.intent);
   add(e.clarify ? "asks to clarify" : "no clarify", !!r.clarify === e.clarify, r.clarify?.question ?? null);
+  if (c.answers) {
+    add("clarify never repeats", new Set(asked).size === asked.length, asked);
+    if (e.clarifySteps !== undefined) add(`${e.clarifySteps} clarify step(s)`, asked.length === e.clarifySteps, asked.length);
+  }
   if (e.clarify) {
     if (e.missing) add(`missing = ${e.missing}`, r.clarify?.missing === e.missing, r.clarify?.missing);
     add("2–3 suggestions", !!r.clarify && (r.clarify.suggestions?.length ?? 0) >= 2 && (r.clarify.suggestions?.length ?? 0) <= 3);
@@ -46,6 +74,15 @@ function check(c: Case, r: PlanResultWithAgent) {
   if (e.time) add(`time = ${e.time}`, londonClock(r.when) === e.time, londonClock(r.when));
   if (e.budgetGBP) add(`budget £${e.budgetGBP}`, r.filters.budgetGBP === e.budgetGBP, r.filters.budgetGBP);
   if (e.category) add(`category ${e.category}`, r.filters.category === e.category, r.filters.category);
+  if (e.weather) {
+    const venues = r.steps?.find((s) => s.id === "venues")?.detail ?? "";
+    const want = e.weather === "wet" ? /weather: Rain likely .*indoor\/covered first/ : /weather: Dry and .*terraces\/beer gardens first/;
+    add(`venues step names the ${e.weather} decision`, want.test(venues), venues);
+    const fits = r.cards.map((x) => x.facts.find((f) => f.label === "Weather fit"));
+    add("every card has a Weather fit fact (OSM + Open-Meteo)", fits.length > 0 && fits.every((f) => !!f && f.source.endsWith("+ Open-Meteo") && (e.weather === "wet" ? /^Rain likely/ : /^Dry and/).test(f.value)), fits.map((f) => f?.value ?? null));
+    const good = (v?: string) => (e.weather === "wet" ? /indoor seating \(OSM|covered seating/ : /beer garden \(OSM|terrace/).test(v ?? "");
+    add("best weather fit ranked first", !fits.some((f) => good(f?.value)) || good(fits[0]?.value), fits[0]?.value ?? null);
+  }
   if (e.walkIn) {
     add("walk-in filter on", r.filters.walkIn === true);
     const rsvp = r.cards.filter((x) => x.facts.some((f) => f.label === "Sign-up" && f.verdict !== "unknown" && /rsvp|registration|register/i.test(f.value)));
@@ -61,10 +98,10 @@ function check(c: Case, r: PlanResultWithAgent) {
   for (const c of cases) {
     let row;
     try {
-      const { status, body, ms } = await call(c);
-      const checks = status === 200 ? check(c, body) : [{ name: "HTTP 200", pass: false, got: status }];
+      const { status, body, ms, asked } = await call(c);
+      const checks = status === 200 ? check(c, body, asked) : [{ name: "HTTP 200", pass: false, got: status }];
       const pass = checks.every((x) => x.pass);
-      row = { id: c.id, query: c.query, pass, ms, checks, headline: body.headline, middle: body.middle?.name ?? null, cards: body.cards?.map((x) => x.name) ?? [], clarify: body.clarify ?? null, unknowns: body.unknowns, steps: body.steps?.map((s) => ({ id: s.id, status: s.status, ms: s.ms, detail: s.detail })) };
+      row = { id: c.id, query: c.query, pass, ms, checks, headline: body.headline, middle: body.middle?.name ?? null, cards: body.cards?.map((x) => x.name) ?? [], clarify: body.clarify ?? null, ...(c.answers ? { asked } : {}), when: body.when, cardFacts: body.cards?.map((x) => ({ name: x.name, weather: x.facts.find((f) => f.label === "Weather fit") ?? null })), unknowns: body.unknowns, steps: body.steps?.map((s) => ({ id: s.id, status: s.status, ms: s.ms, detail: s.detail })) };
     } catch (err) {
       row = { id: c.id, query: c.query, pass: false, ms: 0, checks: [{ name: "handler ran", pass: false, got: String(err) }] };
     }

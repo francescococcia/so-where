@@ -11,7 +11,8 @@ import { getDb, withTimeout } from "@/lib/mongo";
 import type { PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import type { HubScore } from "@/lib/tfl";
 
-const WRITE_BUDGET_MS = 1500;
+const WRITE_BUDGET_MS = 5000; // off the critical path: the result is already sent when this runs
+const WRITE_CONNECT_WAIT_MS = 8000; // a cold serverless instance may still be connecting
 const HUB_PRIVACY_M = 1000;
 
 export type PlanRunDoc = {
@@ -73,7 +74,7 @@ export function planRunDoc(r: PlanResultWithAgent, latencyMs: number, now = new 
 /** Insert the anonymised run; returns false (never throws) when Mongo is unavailable. */
 export async function recordPlanRun(r: PlanResultWithAgent, latencyMs: number, dbIn?: Db | null): Promise<boolean> {
   try {
-    const db = dbIn === undefined ? await getDb() : dbIn;
+    const db = dbIn === undefined ? await getDb(WRITE_CONNECT_WAIT_MS) : dbIn;
     if (!db) return false;
     await withTimeout(db.collection<PlanRunDoc>("plan_runs").insertOne(planRunDoc(r, latencyMs)), WRITE_BUDGET_MS, "plan_runs insert");
     return true;
@@ -179,7 +180,7 @@ export function statsPipeline(now = new Date()) {
 }
 
 export async function planStats(dbIn?: Db | null): Promise<PlanStats | null> {
-  const db = dbIn === undefined ? await getDb() : dbIn;
+  const db = dbIn === undefined ? await getDb(8000) : dbIn;
   if (!db) return null;
   type F = { _id: string | null; count: number };
   const [f] = await db.collection("plan_runs").aggregate<Record<string, Record<string, unknown>[]>>(statsPipeline(), { maxTimeMS: 5000 }).toArray();

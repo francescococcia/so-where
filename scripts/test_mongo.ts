@@ -69,6 +69,9 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
     assert.equal(r.counts.events, seedEvents().length);
     const v = await db.collection("venues").findOne({ _id: "node/26699558" as never });
     assert.ok(v && v.location.type === "Point" && v.location.coordinates[0] < 0 && v.name === "The Flying Horse" && v.category === "pub" && v.opening_hours && v.check_date === "2026-01-07");
+    assert.ok(v && "outdoor_seating" in v && "indoor_seating" in v && "covered" in v && "beer_garden" in v); // normalised seating fields
+    assert.ok((await db.collection("venues").countDocuments({ indoor_seating: true, tags: "indoor" })) > 100);
+    assert.ok((await db.collection("venues").countDocuments({ outdoor_seating: true, tags: "outdoor" })) > 100);
     const idx = await db.collection("venues").indexes();
     assert.ok(idx.some((i) => i.key.location === "2dsphere"));
     assert.equal(r.searchIndexes.venues, "unsupported"); // not Atlas: logged, not thrown
@@ -193,7 +196,7 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
   });
 
   await test("end-to-end runPlan (live TfL) uses MongoDB venues and records an anonymised plan_run", async () => {
-    const { runPlan } = await import("@/lib/plan");
+    const { runPlan, planRunWrite } = await import("@/lib/plan");
     const before = await db.collection("plan_runs").countDocuments();
     const steps: { id: string; detail?: string; source?: string }[] = [];
     const r = await runPlan({ query: "Pub halfway between Old Street and Brixton on Thursday at 7" }, (s) => steps.push(s));
@@ -203,6 +206,7 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
     assert.match(venues?.detail ?? "", /Searched 2,765 venues in MongoDB Atlas/);
     assert.ok(r.sources.some((s) => s.name === "MongoDB Atlas (OSM snapshot 24 Oct)"), JSON.stringify(r.sources));
     assert.ok(r.cards.length >= 1);
+    assert.equal(await planRunWrite(r), true, "plan_runs insert should complete (route awaits this before closing)");
     const last = await db.collection("plan_runs").find().sort({ createdAt: -1 }).limit(1).next();
     assert.equal(await db.collection("plan_runs").countDocuments(), before + 1);
     const json = JSON.stringify(last);

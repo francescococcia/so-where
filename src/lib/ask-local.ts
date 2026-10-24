@@ -8,6 +8,7 @@ import { dayWindow, type DayKey, type Hours } from "@/lib/hours";
 import { sessionLink } from "@/lib/links";
 import { allSessions, TYPE_LABEL, venueGoodFor, venueType, type GoodFor } from "@/lib/venue-facts";
 import { mentionedIn } from "@/lib/venue-match";
+import { matchPlace } from "@/lib/gazetteer";
 import { datesIn, resolveWhen, type When } from "@/lib/when";
 
 export type VenueRow = {
@@ -261,7 +262,7 @@ export type PlanAsk = {
 };
 
 const PLACE_STOP =
-  /\s+(?:and|but|so|then|who|which|for|with|tomorrow|tonight|today|this|next|later|after|before|in the|morning|afternoon|evening|on\s+(?:mon|tue|wed|thu|fri|sat|sun)\w*|(?:at|around|about|by|from)\s+\d)\b.*$/i;
+  /\s+(?:and|but|so|then|who|which|for|with|tomorrow|tonight|today|this|next|later|after|before|in the|morning|afternoon|evening|on\s+(?:mon|tue|wed|thu|fri|sat|sun)\w*|(?:at|around|about|by|from)\s+\d|(?:she|he|they|them|him|her|me|friend|mate|my\s+\w+)(?:'s|'re|\s+is|\s+are|\s+will|\s+lives|\s+works|\s+at|\s+in|\s+near|\s+around|\s+by)|(?:mon|tues?|wed|thu(?:rs)?|fri|sat|sun)(?:day)?|weekend|\d{1,2}(?::\d{2})?\s*(?:am|pm)|drinks?|pints?|pubs?|coffee|lunch|dinner|brunch|breakfast|check|find|looking|please|pls|need|want|can|could)\b.*$/i;
 const ELEPHANT = /elephant\s+(?:and|&)\s+castle/gi;
 
 function cleanPlace(raw: string | undefined | null): string | null {
@@ -271,6 +272,35 @@ function cleanPlace(raw: string | undefined | null): string | null {
   s = s.replace(/^(?:around|near|in|at)\s+/i, "").trim();
   if (!s || s.length < 3 || /^(me|here|home|work|the office|you|him|her|them)$/i.test(s)) return null;
   return s.length > 40 ? null : s;
+}
+
+// "me at Waterloo", "them near Camden Town": slot phrases at the start of a clause.
+const ME_SLOT_RE = /(?:^|[,;]\s*|\band\s+)me\s+(?:at|in|near|around|by|from)\s+([^,.;!?]+)/i;
+const THEM_SLOT_RE = /(?:^|[,;]\s*|\band\s+)(?:them|him|her|they|she|he|my friend|my mate|friend|mate)\s+(?:at|in|near|around|by|from)\s+([^,.;!?]+)/i;
+// Lowercase "between kings x and brixton" / "kings x and brixton drinks friday 7": only kept when both
+// sides are confident gazetteer hits, so ordinary prose ("drinks and dinner") is never read as places.
+const BETWEEN_ANY_RE = /\bbetween\s+(.+?)\s+and\s+([^,.;!?]+)/i;
+const PAIR_RE = /^\s*(?:from\s+)?([a-z][\w'&. ]{1,30}?)\s+(?:and|&|\/|to)\s+([a-z][\w'&. ]{1,30}?)(?=\s+(?:drinks?|pints?|pubs?|coffee|lunch|dinner|brunch|meet|halfway|on|this|tonight|tomorrow|today|at|(?:mon|tues?|wed|thu(?:rs)?|fri|sat|sun)(?:day)?)\b|\s*[,.;!?]|\s*$)/i;
+const known = (p: string | null) => !!p && matchPlace(p).confidence === "high";
+// Answers to earlier clarify questions, appended by the server: "…; them: Camden Town; you: Waterloo".
+const SLOT_TOKEN_RE = /;\s*(them|you):\s*([^;]+)/gi;
+
+// Common typos and text-speak, fixed before any rule runs.
+const TYPOS: [RegExp, string][] = [
+  [/\b(?:tonigh|tonite|tonght|tonihgt|2nite|2night|toniht)\b/gi, "tonight"],
+  [/\b(?:frind|freind|frend|firend|frnd)\b/gi, "friend"],
+  [/\b(?:opern|opne|oepn)\b/gi, "open"],
+  [/\bnee\b/gi, "need"],
+  [/\b(?:tmrw|tmr|tmrow|tomoz|2moro|2morrow|tommorow|tomorow)\b/gi, "tomorrow"],
+  [/\b(?:drnks|drinkz|drinsk)\b/gi, "drinks"],
+  [/\b(?:coffe|cofee|cofffee)\b/gi, "coffee"],
+  [/\b(?:resturant|restraunt|restaraunt)\b/gi, "restaurant"],
+  [/\b(?:ths|tis) (evening|weekend|afternoon)\b/gi, "this $1"],
+  [/\b(?:satuday|saturady|satruday)\b/gi, "saturday"],
+  [/\b(?:firday|fridy|friady)\b/gi, "friday"],
+];
+export function fixTypos(q: string): string {
+  return TYPOS.reduce((s, [re, to]) => s.replace(re, to), q);
 }
 
 const YOU_RE = /\b(?:i'?m|i am|im)\s+(?:currently\s+|now\s+|based\s+|staying\s+)?(?:at|in|near|around|by|over in|coming from|leaving from|starting from|starting at|working at|working in)\s+([^,.;!?]+)/i;
@@ -304,11 +334,15 @@ function whoOf(q: string): string {
 }
 
 function timeOf(q: string, category: PlanCategory | null): string | null {
-  const morningish = /\bmorning\b|\bbreakfast\b|\bbrunch\b|\bam\b/i.test(q) || category === "cafe";
+  // "I am at Waterloo" is not "am": only a number followed by am counts.
+  const morningish = /\bmorning\b|\bbreakfast\b|\bbrunch\b|\d\s*am\b/i.test(q) || category === "cafe";
+  // Tonight / this evening / drinks / pub / dinner + a bare hour 1–11 is always PM ("tonight at 8" = 20:00).
+  const eveningish = /\btonight\b|\bthis evening\b|\bevening\b|\bdrinks?\b|\bpubs?\b|\bpints?\b|\bbar\b|\bdinner\b|\bafter work\b/i.test(q) || category === "pub";
   const toHH = (h: number, mer?: string) => {
     if (mer) return mer.toLowerCase() === "pm" ? (h % 12) + 12 : h % 12;
     if (h >= 13) return h;
     if (h === 12) return 12;
+    if (eveningish) return h + 12;
     if (h <= 6) return h + 12;
     return morningish ? h : h + 12;
   };
@@ -318,6 +352,9 @@ function timeOf(q: string, category: PlanCategory | null): string | null {
   if (m && Number(m[1]) <= 12) return `${String(toHH(Number(m[1]), m[2])).padStart(2, "0")}:00`;
   m = /\b(?:at|around|about|by|from|for)\s+(?:half (?:past )?)?(\d{1,2})(?!\s*(?:min|mins|minutes|people|of us|quid|pounds|£|%|\/|th|st|nd|rd))\b/i.exec(q);
   if (m && Number(m[1]) >= 1 && Number(m[1]) <= 23) return `${String(toHH(Number(m[1]))).padStart(2, "0")}:${/half/i.test(m[0]) ? "30" : "00"}`;
+  // "friday 7", "saturday at 3", "tonight 8"
+  m = /\b(?:(?:mon|tues?|wed(?:nes)?|thu(?:rs)?|fri|sat(?:ur)?|sun)(?:day)?|tonight|tomorrow)\s+(\d{1,2})(?![:.\d]|\s*(?:min|mins|minutes|people|of us|quid|pounds|th|st|nd|rd))\b/i.exec(q);
+  if (m && Number(m[1]) >= 1 && Number(m[1]) <= 23) return `${String(toHH(Number(m[1]))).padStart(2, "0")}:00`;
   if (/\bnoon\b|\bmidday\b/i.test(q)) return "12:00";
   if (/\bbreakfast\b/i.test(q)) return "09:00";
   if (/\bmorning\b/i.test(q)) return "10:00";
@@ -330,26 +367,44 @@ function timeOf(q: string, category: PlanCategory | null): string | null {
 
 /** Rules-only parse of a "where shall we meet / what's on" ask. `today` is a London YYYY-MM-DD. */
 export function parsePlanAsk(raw: string, today = londonToday()): PlanAsk {
-  const q = raw.replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim();
+  const slots: { them?: string; you?: string } = {};
+  const q = fixTypos(raw.replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim())
+    .replace(SLOT_TOKEN_RE, (_m, k: string, v: string) => {
+      slots[k.toLowerCase() as "them" | "you"] = v.trim();
+      return "";
+    })
+    .trim();
   const signals: string[] = [];
   let youPlace: string | null = null;
   let themPlace: string | null = null;
-  const between = BETWEEN_RE.exec(q);
+  let between: RegExpExecArray | null = BETWEEN_RE.exec(q);
+  if (!between) {
+    const b = BETWEEN_ANY_RE.exec(q) ?? (YOU_RE.test(q) ? null : PAIR_RE.exec(q));
+    if (b && known(cleanPlace(b[1])) && known(cleanPlace(b[2]))) between = b;
+  }
   if (between) {
     youPlace = cleanPlace(between[1]);
     themPlace = cleanPlace(between[2]);
     signals.push("between A and B");
   }
   if (!youPlace) {
-    const m = YOU_RE.exec(q);
+    const m = YOU_RE.exec(q) ?? ME_SLOT_RE.exec(q);
     youPlace = cleanPlace(m?.[1]);
     if (youPlace) signals.push(`you: "${youPlace}"`);
   }
   if (!themPlace) {
     const m = THEM_PRONOUN_RE.exec(q) ?? THEM_NAME_RE.exec(q);
-    const n = m ? null : WITH_FROM_RE.exec(q);
-    themPlace = cleanPlace(m?.[2] ?? n?.[2]);
+    const n = m ? null : (WITH_FROM_RE.exec(q) ?? THEM_SLOT_RE.exec(q));
+    themPlace = cleanPlace(m?.[2] ?? n?.[2] ?? n?.[1]);
     if (themPlace) signals.push("other person's place found");
+  }
+  if (slots.you && cleanPlace(slots.you)) {
+    youPlace = cleanPlace(slots.you);
+    signals.push("your place from your answer");
+  }
+  if (slots.them && cleanPlace(slots.them)) {
+    themPlace = cleanPlace(slots.them);
+    signals.push("their place from your answer");
   }
   const category = categoryOf(q);
   const walkIn = WALKIN_RE.test(q);

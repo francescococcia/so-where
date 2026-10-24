@@ -5,6 +5,7 @@ import { parsePlanAsk, type PlanAsk } from "@/lib/ask-local";
 import { LONDON_CENTER } from "@/lib/areas";
 import { londonToday } from "@/lib/dates";
 import { seedEventsOn, type SeedEvent } from "@/lib/events";
+import { GAZETTEER_AS_OF, GAZETTEER_SOURCE, matchPlace, normPlace } from "@/lib/gazetteer";
 import { geminiFill } from "@/lib/gemini-intent";
 import { metresBetween, roundToArea, walkMinutes } from "@/lib/geo";
 import { londonClock, londonDayShort, londonLabel, londonParts, londonToUtc } from "@/lib/london-time";
@@ -14,6 +15,7 @@ import { recordPlanRun, tieBreakByHistory } from "@/lib/plan-memory";
 import type { AgentStep, Clarify, Fact, LatLng, Leg, PlanCard, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import { fairPoint, journey, lineStatus, searchPlace, trimPathStart, type Journey, type LineStatus, type Place } from "@/lib/tfl";
 import { forecastAt, type Forecast } from "@/lib/weather";
+import { weatherDecision, weatherFitFact, weatherMode, weatherRank, type WeatherMode } from "@/lib/venue-weather";
 
 export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string } };
 export type StepSink = (step: AgentStep) => void;
@@ -47,21 +49,59 @@ function stepper(emit?: StepSink) {
   return { steps, begin };
 }
 
-/** Merge a clarify answer into the original ask: the answer fills exactly the slot that was missing. */
-function mergeAnswer(prevQuery: string, answer: string, today: string): { ask: PlanAsk; text: string } {
+type Resolved = { place: Place | null; readAs: string | null; suggestions: string[]; confidence: "high" | "medium" | "low" };
+
+/** Typed place → station. Local gazetteer first (instant, typo-tolerant); TfL search only when it has no
+ *  idea; a middle-band guess is never used silently: the caller asks with the closest real stations. */
+async function resolveTyped(typed: string): Promise<Resolved> {
+  const g = matchPlace(typed);
+  const suggestions = g.top.map((m) => m.entry.name);
+  if (g.confidence === "high" && g.best) {
+    const e = g.best.entry;
+    const place: Place = { query: typed, name: e.name, id: e.id, location: e.location, modes: e.modes, source: GAZETTEER_SOURCE, asOf: GAZETTEER_AS_OF };
+    return { place, readAs: normPlace(typed) === normPlace(e.name) ? null : e.name, suggestions, confidence: "high" };
+  }
+  if (g.confidence === "medium") return { place: null, readAs: null, suggestions, confidence: "medium" };
+  const t = await searchPlace(typed);
+  return { place: t.place, readAs: null, suggestions, confidence: "low" };
+}
+
+/** Which slot the next clarify answer fills: mirrors the clarify order in runPlan. */
+async function pendingSlot(base: PlanAsk, reqYou: LatLng | undefined): Promise<"them" | "you" | null> {
+  const unresolved = async (p: string | null) => !!p && !(await resolveTyped(p)).place;
+  if (base.intent === "meet_halfway") {
+    if (!base.themPlace || (await unresolved(base.themPlace))) return "them";
+    if (await unresolved(base.youPlace)) return "you";
+    return !base.youPlace && !reqYou ? "you" : null;
+  }
+  if (base.youPlace) return !reqYou && (await unresolved(base.youPlace)) ? "you" : null;
+  return reqYou ? null : "you";
+}
+
+/** Merge a clarify answer cumulatively: `prevQuery` already carries every earlier answer as "; them: X" /
+ *  "; you: Y" tokens, and this answer is appended for the slot still missing. The merged text is returned
+ *  as the result's `query`, so resending it with the next answer never loses an earlier one. */
+async function mergeAnswer(prevQuery: string, answer: string, today: string, reqYou: LatLng | undefined): Promise<{ ask: PlanAsk; text: string }> {
+  const a = answer.replace(/[;]/g, ",").trim().replace(/[.!?]+$/, "");
   const base = parsePlanAsk(prevQuery, today);
-  const text = `${prevQuery} — ${answer}`;
-  const a = answer.trim().replace(/[.!?]+$/, "");
-  if (!base.intent) return { ask: parsePlanAsk(`${prevQuery}. ${answer}`, today), text };
-  const fromAnswer = parsePlanAsk(answer, today);
-  const ask = { ...base, signals: [...base.signals, "answer merged"] };
-  if (base.intent === "meet_halfway" && !base.themPlace) ask.themPlace = fromAnswer.themPlace ?? fromAnswer.youPlace ?? a;
-  else if (!base.youPlace) ask.youPlace = fromAnswer.youPlace ?? a;
+  const slot = base.intent ? await pendingSlot(base, reqYou) : null;
+  if (!slot) {
+    const text = `${prevQuery}. ${a}`;
+    return { ask: parsePlanAsk(text, today), text };
+  }
+  const fromAnswer = parsePlanAsk(a, today);
+  const value = slot === "them" ? (fromAnswer.themPlace ?? fromAnswer.youPlace ?? a) : (fromAnswer.youPlace ?? a);
+  const text = `${prevQuery}; ${slot}: ${value}`;
+  const ask = parsePlanAsk(text, today);
+  ask.signals.push("answer merged");
   ask.date ??= fromAnswer.date;
   ask.time ??= fromAnswer.time;
   ask.category ??= fromAnswer.category;
   return { ask, text };
 }
+
+/** "is he" / "is she" / "is Priya" / "are they" for clarify questions. */
+const nearestPhrase = (who: string) => (who === "them" ? "are they" : who === "her" ? "is she" : who === "him" ? "is he" : `is ${who}`);
 
 function planTime(ask: PlanAsk, reqWhen: string | undefined, now: Date, unknowns: string[]) {
   const today = londonToday(now);
@@ -104,12 +144,20 @@ function weatherFact(w: Forecast | { error: string } | null, at: Date): Fact {
   return fact("Weather", `${londonLabel(at)}: ${w.value}`, "forecast", "Open-Meteo", w.fetchedAt);
 }
 
-function venuePick(res: OsmResult, at: Date) {
+function venuePick(res: OsmResult, at: Date, wm?: WeatherMode) {
   const rank = { confirmed: 0, likely: 1, forecast: 2, unknown: 3 } as const;
   const rows = res.places.map((p) => ({ p, h: hoursAt(p.tags, at, p.location) }));
   const closed = rows.filter((r) => r.h.state === "closed").length;
-  const keep = rows.filter((r) => r.h.state !== "closed").sort((a, b) => rank[a.h.verdict] - rank[b.h.verdict] || a.p.distanceM - b.p.distanceM);
+  // Weather fit first (indoor when wet, terrace when warm; OSM seating tags), then hours confidence, then distance.
+  const wr = (p: OsmPlace) => (wm ? weatherRank(p.tags, wm) : 0);
+  const keep = rows.filter((r) => r.h.state !== "closed").sort((a, b) => wr(a.p) - wr(b.p) || rank[a.h.verdict] - rank[b.h.verdict] || a.p.distanceM - b.p.distanceM);
   return { picks: keep.slice(0, MAX_CARDS), total: rows.length, closed };
+}
+
+/** Weather-fit fact for a venue card (empty when the forecast doesn't change the choice). */
+function fitFact(tags: Record<string, string>, wm: WeatherMode, osm: OsmResult, wx: Forecast | { error: string }): Fact[] {
+  const f = weatherFitFact(tags, wm, osm.source, osm.asOf, "error" in wx ? "" : wx.fetchedAt);
+  return f ? [f] : [];
 }
 
 function stepFree(tags: Record<string, string>, asOf: string, src: string): Fact {
@@ -145,7 +193,7 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = new Date(
 
   // 1. Parse
   const endParse = begin("parse", "Reading your ask", "rules");
-  const merged = req.previous?.query ? mergeAnswer(req.previous.query, req.previous.answer || req.query, today) : null;
+  const merged = req.previous?.query ? await mergeAnswer(req.previous.query, req.previous.answer || req.query, today, reqYou) : null;
   const text = merged?.text ?? String(req.query ?? "").slice(0, 500);
   let ask = merged?.ask ?? parsePlanAsk(text, today);
   let parseSource = "rules";
@@ -183,26 +231,27 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = new Date(
   }
 
   // 2. Resolve places
-  const endResolve = begin("resolve", "Finding the places you named", "TfL StopPoint");
+  const endResolve = begin("resolve", "Finding the places you named", "TfL station list + StopPoint");
   const named = [ask.youPlace, ask.intent === "meet_halfway" ? ask.themPlace : null];
-  const [youR, themR] = await Promise.all(named.map((n) => (n ? searchPlace(n) : Promise.resolve(null))));
+  const [youR, themR] = await Promise.all(named.map((n) => (n ? resolveTyped(n) : Promise.resolve(null))));
+  const readAs = [youR, themR].flatMap((r, i) => (r?.readAs ? [`Read "${named[i]}" as ${r.readAs}`] : []));
   const youPlace: Place | null = youR?.place ?? null;
   const themPlace: Place | null = themR?.place ?? null;
   for (const p of [youPlace, themPlace]) if (p) addSource(sources, p.source, p.asOf);
   const resolvedCount = [youPlace, themPlace].filter(Boolean).length;
   const namedCount = named.filter(Boolean).length;
-  endResolve(namedCount ? "done" : "skipped", namedCount ? `${resolvedCount} of ${namedCount} place${namedCount > 1 ? "s" : ""} found${youPlace ? ` · you: ${youPlace.name}` : ""}${themPlace ? " · their area rounded to ~500 m" : ""}` : "No places named; using your location");
+  endResolve(namedCount ? "done" : "skipped", namedCount ? `${resolvedCount} of ${namedCount} place${namedCount > 1 ? "s" : ""} found${readAs.length ? ` · ${readAs.join(" · ")}` : ""}${youPlace ? ` · you: ${youPlace.name}` : ""}${themPlace ? " · their area rounded to ~500 m" : ""}` : "No places named; using your location");
 
   const who = ask.themWho;
   if (ask.intent === "meet_halfway") {
     if (ask.themPlace && !themPlace)
-      return clarify({ question: `I couldn't find "${ask.themPlace}" on TfL. Which station is ${who === "them" ? "the other person" : who} nearest?`, missing: "them_location", suggestions: THEM_SUGGESTIONS });
+      return clarify({ question: `${themR?.confidence === "medium" ? `Not sure which "${ask.themPlace}" you mean.` : `I couldn't find "${ask.themPlace}" on TfL.`} Which station ${nearestPhrase(who)} nearest?`, missing: "them_location", suggestions: themR?.suggestions.length ? themR.suggestions : THEM_SUGGESTIONS });
     if (!ask.themPlace) return clarify({ question: `Where's ${who === "them" ? "the other person" : who === "her" ? "she" : who === "him" ? "he" : who} coming from?`, missing: "them_location", suggestions: THEM_SUGGESTIONS });
-    if (ask.youPlace && !youPlace) return clarify({ question: `I couldn't find "${ask.youPlace}" on TfL. Which station are you nearest?`, missing: "my_location", suggestions: ME_SUGGESTIONS });
+    if (ask.youPlace && !youPlace) return clarify({ question: `${youR?.confidence === "medium" ? `Not sure which "${ask.youPlace}" you mean.` : `I couldn't find "${ask.youPlace}" on TfL.`} Which station are you nearest?`, missing: "my_location", suggestions: youR?.suggestions.length ? youR.suggestions : ME_SUGGESTIONS });
     if (!youPlace && !reqYou) return clarify({ question: "Where are you starting from?", missing: "my_location", suggestions: ME_SUGGESTIONS });
     return meetHalfway({ ask, text, when, base, begin, unknowns, sources, you: youPlace ? { ...youPlace.location, id: youPlace.id ?? undefined } : reqYou!, youName: youPlace?.name ?? "your location", them: themPlace!, themTyped: ask.themPlace! });
   }
-  if (ask.youPlace && !youPlace && !reqYou) return clarify({ question: `I couldn't find "${ask.youPlace}" on TfL. Where are you?`, missing: "my_location", suggestions: ME_SUGGESTIONS });
+  if (ask.youPlace && !youPlace && !reqYou) return clarify({ question: `${youR?.confidence === "medium" ? `Not sure which "${ask.youPlace}" you mean.` : `I couldn't find "${ask.youPlace}" on TfL.`} Which station are you nearest?`, missing: "my_location", suggestions: youR?.suggestions.length ? youR.suggestions : ME_SUGGESTIONS });
   const origin = youPlace?.location ?? reqYou;
   if (!origin) return clarify({ question: "Where are you? Share your location or name a station.", missing: "my_location", suggestions: ME_SUGGESTIONS });
   return nearMe({ ask, text, when, base, begin, unknowns, sources, you: origin, youName: youPlace?.name });
@@ -238,9 +287,15 @@ async function finish(ctx: Ctx, r: PlanResultWithAgent): Promise<PlanResultWithA
   r.unknowns = [...new Set(ctx.unknowns)];
   v("done", `${checked} facts checked · ${dropped} dropped without a source · ${r.sources.length} sources with as-of times`);
   // Agent memory: anonymised run record in MongoDB plan_runs (no coordinates, typed places or query text).
-  await recordPlanRun(r, Date.now() - (RUN_STARTED.get(r.steps) ?? Date.now()));
+  // Started here but not awaited, so the answer isn't held up; the route awaits planRunWrite(r) after
+  // sending the result and before ending the response, so serverless doesn't freeze the insert mid-flight.
+  PLAN_RUN_WRITES.set(r, recordPlanRun(r, Date.now() - (RUN_STARTED.get(r.steps) ?? Date.now())));
   return r;
 }
+
+const PLAN_RUN_WRITES = new WeakMap<PlanResultWithAgent, Promise<boolean>>();
+/** The pending plan_runs insert for a finished plan (false when there was none / it failed). Never rejects. */
+export const planRunWrite = (r: PlanResultWithAgent): Promise<boolean> => (PLAN_RUN_WRITES.get(r) ?? Promise.resolve(false)).catch(() => false);
 
 async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: string; them: Place; themTyped: string }): Promise<PlanResultWithAgent> {
   const { ask, when, begin, unknowns, sources } = ctx;
@@ -272,12 +327,8 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   const endVenues = begin("venues", `Finding ${kind === "pub" ? "pubs and bars" : kind + "s"} near ${best.hub.name}`, "OSM Overpass");
   const endLines = begin("lines", "Checking line status", "TfL");
   const endWeather = begin("weather", "Checking the forecast", "Open-Meteo");
-  const [osm, ls, wx] = await Promise.all([
-    findVenues(kind, result.middle.location, 500).then((r) => {
-      const pk = venuePick(r, when);
-      endVenues(pk.picks.length ? "done" : "failed", `${r.via ? `${r.via} · ${r.places.length} within 500 m` : `${r.places.length} found within 500 m (${r.source}${r.live ? "" : ", live call " + (r.note?.match(/Overpass (\w+)/)?.[1] ?? "failed")})`} · ${pk.closed} closed at ${londonClock(when.toISOString())} · ${pk.picks.length} kept`, r.stepSource);
-      return { r, pk };
-    }),
+  const [osmR, ls, wx] = await Promise.all([
+    findVenues(kind, result.middle.location, 500),
     lineStatus(lineIds).then((r) => {
       endLines("error" in r ? "failed" : "done", "error" in r ? `TfL line status ${r.error}` : `${r.lines.length} line${r.lines.length === 1 ? "" : "s"}: ${r.lines.map((l) => `${l.name} ${l.status}`).join(", ") || "none used"}`);
       return r;
@@ -287,6 +338,10 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
       return r;
     }),
   ]);
+  // Venues are ranked once the forecast is in, so the weather can decide indoor vs terrace.
+  const wm = weatherMode(wx, londonClock(when.toISOString()));
+  const osm = { r: osmR, pk: venuePick(osmR, when, wm) };
+  endVenues(osm.pk.picks.length ? "done" : "failed", `${osmR.via ? `${osmR.via} · ${osmR.places.length} within 500 m` : `${osmR.places.length} found within 500 m (${osmR.source}${osmR.live ? "" : ", live call " + (osmR.note?.match(/Overpass (\w+)/)?.[1] ?? "failed")})`} · ${osm.pk.closed} closed at ${londonClock(when.toISOString())} · ${osm.pk.picks.length} kept · ${weatherDecision(wm, osm.pk.picks.map((x) => x.p))}`, osmR.stepSource);
   addSource(sources, osm.r.source, osm.r.asOf);
   if (!osm.r.live && osm.r.note) unknowns.push(osm.r.note + ".");
   if (!("error" in ls)) addSource(sources, "TfL Line Status", ls.fetchedAt);
@@ -322,6 +377,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
         tflFact,
         ...lf,
         wf,
+        ...fitFact(p.tags, wm, osm.r, wx),
         fact("Price", ask.budgetGBP ? `Not listed, can't check £${ask.budgetGBP}` : "Not listed", "unknown", "OSM (no price tag)"),
         stepFree(p.tags, osm.r.asOf, osm.r.source),
       ],
@@ -361,12 +417,14 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   type Cand = { kind: "event"; e: SeedEvent } | { kind: "place"; p: OsmPlace; h: ReturnType<typeof hoursAt>; osm: OsmResult };
   const cands: Cand[] = [];
   let osm: OsmResult | null = null;
+  let wm: WeatherMode = { mode: "neutral", label: "" }; // weather only re-ranks pubs / cafés / restaurants
   const endFind = begin("venues", venueKind ? `Finding ${venueKind}s near you` : "Finding events and free-entry places near you", venueKind ? "OSM Overpass" : "Luma seed + OSM Overpass");
   if (venueKind) {
     osm = await findVenues(venueKind, ctx.you, 1200);
-    const pk = venuePick(osm, when);
+    wm = weatherMode(await wxP, t);
+    const pk = venuePick(osm, when, wm);
     for (const x of pk.picks.concat()) cands.push({ kind: "place", p: x.p, h: x.h, osm });
-    endFind(cands.length ? "done" : "failed", `${osm.via ? `${osm.via} · ` : ""}${osm.places.length} ${venueKind}s within 1.2 km (${osm.source}) · ${pk.closed} closed at ${t}`, osm.stepSource);
+    endFind(cands.length ? "done" : "failed", `${osm.via ? `${osm.via} · ` : ""}${osm.places.length} ${venueKind}s within 1.2 km (${osm.source}) · ${pk.closed} closed at ${t} · ${weatherDecision(wm, pk.picks.map((x) => x.p))}`, osm.stepSource);
   } else {
     const all = seedEventsOn(lp.date, when, (d) => londonParts(d).date);
     const mev = await mongoEventsNear(ctx.you, 8000, when, lp.date, new Date(londonToUtc(lp.date, 23, 59).getTime() + 60_000), (d) => londonParts(d).date);
@@ -398,9 +456,10 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   if (scored[0]) addSource(sources, "TfL Journey Planner", scored[0].j.fetchedAt);
   if (failedTrips) unknowns.push(`${failedTrips} option${failedTrips > 1 ? "s" : ""} skipped: TfL journey time didn't come back.`);
 
+  const wrC = (c: Cand) => (c.kind === "place" ? weatherRank(c.p.tags, wm) : 0);
   const walkScore = (c: Cand) => (c.kind === "place" ? (c.osm && c.p.tags.fee === "no" ? 0 : 1) : c.e.walkIn.verdict === "unknown" ? 1 : 2);
   within.sort((a, b) =>
-    ask.walkIn || ask.free ? walkScore(a.c) - walkScore(b.c) || a.j.minutes - b.j.minutes : (a.c.kind === "event" ? 0 : 1) - (b.c.kind === "event" ? 0 : 1) || a.j.minutes - b.j.minutes,
+    ask.walkIn || ask.free ? walkScore(a.c) - walkScore(b.c) || a.j.minutes - b.j.minutes : (a.c.kind === "event" ? 0 : 1) - (b.c.kind === "event" ? 0 : 1) || wrC(a.c) - wrC(b.c) || a.j.minutes - b.j.minutes,
   );
   const chosen = within.slice(0, MAX_CARDS);
   const lineIds = [...new Set(chosen.flatMap((x) => x.j.lines.map((l) => l.id)))];
@@ -458,6 +517,7 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
         travel,
         ...lf,
         wf,
+        ...fitFact(p.tags, wm, c.osm, wx),
         stepFree(p.tags, c.osm.asOf, c.osm.source),
       ],
       why: `${j.minutes} min away by TfL${free ? ", free entry" : ""}${c.h.state === "open" ? `, open at ${t}` : ", hours not listed"}.`,

@@ -16,14 +16,14 @@ export type OsmResult = { places: OsmPlace[]; source: string; asOf: string; live
 const OVERPASS = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
 
 const FILTERS: Record<OsmKind, string[]> = {
-  pub: ['["amenity"~"^(pub|bar)$"]["name"]'],
+  pub: ['["amenity"~"^(pub|bar|biergarten)$"]["name"]'],
   cafe: ['["amenity"="cafe"]["name"]'],
   restaurant: ['["amenity"="restaurant"]["name"]'],
   free: ['["tourism"~"^(museum|gallery)$"]["fee"="no"]', '["amenity"~"^(marketplace|arts_centre)$"]["fee"="no"]'],
 };
 
 export function matches(kind: OsmKind, t: Record<string, string>) {
-  if (kind === "pub") return /^(pub|bar)$/.test(t.amenity ?? "") && !!t.name;
+  if (kind === "pub") return /^(pub|bar|biergarten)$/.test(t.amenity ?? "") && !!t.name;
   if (kind === "cafe") return t.amenity === "cafe" && !!t.name;
   if (kind === "restaurant") return t.amenity === "restaurant" && !!t.name;
   return t.fee === "no" && (/^(museum|gallery)$/.test(t.tourism ?? "") || /^(marketplace|arts_centre)$/.test(t.amenity ?? ""));
@@ -102,5 +102,5 @@ export function addressOf(t: Record<string, string>) {
   return [line, pc].filter(Boolean).join(", ") || null;
 }
 
-export const KIND_LABEL: Record<string, string> = { pub: "Pub", bar: "Bar", cafe: "Café", restaurant: "Restaurant", museum: "Museum", gallery: "Gallery", marketplace: "Market", arts_centre: "Arts centre" };
+export const KIND_LABEL: Record<string, string> = { pub: "Pub", bar: "Bar", biergarten: "Beer garden", cafe: "Café", restaurant: "Restaurant", museum: "Museum", gallery: "Gallery", marketplace: "Market", arts_centre: "Arts centre" };
 export const kindLabel = (t: Record<string, string>) => KIND_LABEL[t.amenity ?? ""] ?? KIND_LABEL[t.tourism ?? ""] ?? "Place";
