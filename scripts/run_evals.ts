@@ -6,7 +6,7 @@ import type { PlanResultWithAgent } from "@/lib/plan-types";
 import { londonClock, londonDayShort } from "@/lib/london-time";
 import { setForecastOverride } from "@/lib/weather";
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
@@ -74,6 +74,22 @@ function check(c: Case, r: PlanResultWithAgent, asked: string[]) {
   if (e.time) add(`time = ${e.time}`, londonClock(r.when) === e.time, londonClock(r.when));
   if (e.budgetGBP) add(`budget £${e.budgetGBP}`, r.filters.budgetGBP === e.budgetGBP, r.filters.budgetGBP);
   if (e.category) add(`category ${e.category}`, r.filters.category === e.category, r.filters.category);
+  if (e.segments) {
+    type Seg = { mode: string; line?: string; from?: string; to?: string; minutes: number; path: { lat: number; lng: number }[] };
+    const legs = r.cards.flatMap((x) => x.legs) as (PlanResultWithAgent["cards"][number]["legs"][number] & { segments?: Seg[] })[];
+    const segs = legs.flatMap((l) => l.segments ?? []);
+    const transit = segs.filter((s) => s.mode !== "walking");
+    add("every leg has segments", legs.length > 0 && legs.every((l) => (l.segments?.length ?? 0) > 0), legs.map((l) => l.segments?.length ?? 0));
+    add("transit segments name a line and from/to stops", transit.length > 0 && transit.every((s) => !!s.line && !!s.from && !!s.to), transit.map((s) => `${s.line}: ${s.from} → ${s.to}`));
+    add("segment paths ≤ 80 points, ≥2 on transit", segs.every((s) => s.path.length <= 80) && transit.every((s) => s.path.length >= 2), segs.map((s) => s.path.length));
+    add("summary says 'X line from A to B'", legs.some((l) => /\bfrom .+ to /.test(l.summary)), legs.map((l) => l.summary));
+    const them = legs.find((l) => l.who === "them")?.segments?.[0];
+    add("them: first segment has no start name", !!them && !them.from, them ?? null);
+  }
+  if (e.noObjects) {
+    const bad = r.cards.filter((x) => /booth|kiosk|plaque|statue|bench|memorial|phone box|telephone/i.test(x.name));
+    add("no phone boxes / plaques / statues as places", bad.length === 0, bad.map((x) => x.name));
+  }
   if (e.weather) {
     const venues = r.steps?.find((s) => s.id === "venues")?.detail ?? "";
     const want = e.weather === "wet" ? /weather: Rain likely .*indoor\/covered first/ : /weather: Dry and .*terraces\/beer gardens first/;

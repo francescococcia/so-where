@@ -13,7 +13,7 @@ import { addressOf, hoursAt, kindLabel, osmUrl, type OsmKind, type OsmPlace, typ
 import { findVenues, mongoEventsNear } from "@/lib/mongo-venues";
 import { recordPlanRun, tieBreakByHistory } from "@/lib/plan-memory";
 import type { AgentStep, Clarify, Fact, LatLng, Leg, PlanCard, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
-import { fairPoint, journey, lineStatus, searchPlace, trimPathStart, type Journey, type LineStatus, type Place } from "@/lib/tfl";
+import { fairPoint, journey, lineStatus, searchPlace, trimPathStart, trimSegmentsStart, type Journey, type LegSegment, type LineStatus, type Place } from "@/lib/tfl";
 import { forecastAt, type Forecast } from "@/lib/weather";
 import { weatherDecision, weatherFitFact, weatherMode, weatherRank, type WeatherMode } from "@/lib/venue-weather";
 
@@ -21,6 +21,10 @@ export type PlanRequest = { query: string; you?: LatLng; when?: string; previous
 export type StepSink = (step: AgentStep) => void;
 
 const MAX_CARDS = 3;
+/** Leg plus the optional per-stretch `segments` the UI's journey.tsx reads (plan-types.ts stays unchanged). */
+type LegWithSegments = Leg & { segments?: LegSegment[] };
+const walkOn = (segs: LegSegment[], from: { name: string; location: LatLng }, to: { name: string; location: LatLng }, minutes: number): LegSegment[] =>
+  segs.length ? [...segs, { mode: "walking", from: from.name, to: to.name, minutes, path: [from.location, to.location], est: true }] : segs;
 const ME_SUGGESTIONS = ["Old Street", "King's Cross", "London Bridge"];
 const THEM_SUGGESTIONS = ["Clapham", "Brixton", "Stratford"];
 
@@ -357,12 +361,15 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   const lf = lineFacts(lineIds, ls);
   const wf = weatherFact(wx, when);
   const themPath = trimPathStart(best.b.path, 500, metresBetween);
+  const themSegs = trimSegmentsStart(best.b.segments, 500, metresBetween);
+  const hubEnd = { name: best.hub.name, location: result.middle.location };
   result.cards = osm.pk.picks.map(({ p, h }): PlanCard => {
     const walk = walkMinutes(metresBetween(result.middle!.location, p.location));
     const addr = addressOf(p.tags);
-    const legs: Leg[] = [
-      { who: "you", minutes: best.a.minutes, summary: `${best.a.summary} · then ~${walk} min walk (estimate)`, path: best.a.path },
-      { who: "them", minutes: best.b.minutes, summary: `${best.b.summary} · then ~${walk} min walk (estimate)`, path: themPath },
+    const venueEnd = { name: p.tags.name, location: p.location };
+    const legs: LegWithSegments[] = [
+      { who: "you", minutes: best.a.minutes, summary: `${best.a.summary} · then ~${walk} min walk (estimate)`, path: best.a.path, segments: walkOn(best.a.segments, hubEnd, venueEnd, walk) },
+      { who: "them", minutes: best.b.minutes, summary: `${best.b.summary} · then ~${walk} min walk (estimate)`, path: themPath, segments: walkOn(themSegs, hubEnd, venueEnd, walk) },
     ];
     if (h.state === "unknown") unknowns.push(`${p.tags.name}: opening hours not in OSM.`);
     return {
@@ -435,7 +442,9 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
     for (const e of all) addSource(sources, e.source, e.asOf);
     for (const e of evs) cands.push({ kind: "event", e });
     osm = await findVenues("free", ctx.you, 2500);
-    const open = osm.places.map((p) => ({ p, h: hoursAt(p.tags, when, p.location) })).filter((x) => x.h.state !== "closed");
+    // Prefer places that list opening hours or a website (a real venue), then nearest.
+    const info = (p: OsmPlace) => (p.tags.opening_hours || p.tags.website || p.tags["contact:website"] ? 0 : 1);
+    const open = osm.places.map((p) => ({ p, h: hoursAt(p.tags, when, p.location) })).filter((x) => x.h.state !== "closed").sort((a, b) => info(a.p) - info(b.p));
     const closed = osm.places.length - open.length;
     for (const x of open.slice(0, 6)) cands.push({ kind: "place", p: x.p, h: x.h, osm });
     endFind("done", `${mev ? `${mev.via} · ` : ""}${all.length} seed events that day · ${near.length} within 8 km${ask.walkIn ? ` · ${blocked.length} dropped as RSVP-only` : ""} · ${osm.places.length} free-entry places within 2.5 km (${osm.source}), ${closed} closed at ${t}`, mev?.stepSource ?? osm.stepSource);
@@ -473,7 +482,7 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   const day = londonDayShort(when);
 
   result.cards = chosen.map(({ c, j }): PlanCard => {
-    const leg: Leg = { who: "you", minutes: j.minutes, summary: j.summary, path: j.path };
+    const leg: LegWithSegments = { who: "you", minutes: j.minutes, summary: j.summary, path: j.path, segments: j.segments };
     const travel = fact("Travel", `TfL planner: ${j.minutes} min (${j.summary})`, "confirmed", "TfL", j.fetchedAt);
     const lf = lineFacts(j.lines.map((l) => l.id), ls);
     if (c.kind === "event") {

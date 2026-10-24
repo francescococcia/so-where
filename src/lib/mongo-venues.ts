@@ -25,7 +25,7 @@ export const KIND_FILTER: Record<OsmKind, Document> = {
   pub: { category: { $in: ["pub", "bar", "biergarten"] }, name: { $ne: null } },
   cafe: { category: "cafe", name: { $ne: null } },
   restaurant: { category: "restaurant", name: { $ne: null } },
-  free: { fee: "no", $or: [{ tourism: { $in: ["museum", "gallery"] } }, { amenity: { $in: ["marketplace", "arts_centre"] } }] },
+  free: { fee: "no", visitable: { $ne: false }, $or: [{ tourism: { $in: ["museum", "gallery"] } }, { amenity: { $in: ["marketplace", "arts_centre"] } }] },
 };
 
 const geoPoint = (p: LatLng) => ({ type: "Point" as const, coordinates: [p.lng, p.lat] as [number, number] });
@@ -53,6 +53,7 @@ export function venueSearchPipeline(kind: OsmKind, center: LatLng, radiusM: numb
         compound: {
           filter: [{ geoWithin: { circle: { center: geoPoint(center), radius: radiusM }, path: "location" } }],
           must: [{ text: { query: KIND_TERMS[kind], path: ["category", "tags"], fuzzy: { maxEdits: 1, prefixLength: 2 } } }],
+          mustNot: [{ text: { query: "unvisitable", path: "tags" } }], // phone boxes, plaques… (seed tag)
         },
       },
     },
@@ -98,7 +99,7 @@ export async function mongoVenuesNear(kind: OsmKind, center: LatLng, radiusM: nu
             const location = { lat: r.location.coordinates[1], lng: r.location.coordinates[0] };
             return { type: r.osmType, id: r.osmId, location, tags: r.osm_tags ?? {}, distanceM: metresBetween(center, location) };
           })
-          .filter((p) => p.distanceM <= radiusM && matches(kind, p.tags))
+          .filter((p) => p.distanceM <= radiusM && matches(kind, p.tags, p.type))
           .sort((a, b) => a.distanceM - b.distanceM);
         const asOf = rows.reduce<Date | null>((m, r) => (r.asOf && (!m || r.asOf > m) ? r.asOf : m), null) ?? new Date();
         return {

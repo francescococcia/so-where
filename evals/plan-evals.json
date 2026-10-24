@@ -47,6 +47,10 @@
     {"id": "weather-rain-indoor", "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham", "weather": {"tempC": 11, "rainPct": 70, "rainMm": 1.2},
       "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "weather": "wet"} },
     {"id": "weather-sun-terrace", "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham", "weather": {"tempC": 21, "rainPct": 5, "rainMm": 0, "sunny": true},
-      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "weather": "warm"} }
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "weather": "warm"} },
+    {"id": "legs-segments-halfway", "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "segments": true} },
+    {"id": "no-phone-booth-museum", "query": "Free things to do near me tomorrow afternoon", "you": {"lat": 51.5294, "lng": -0.1258},
+      "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "noObjects": true} }
   ]
 }

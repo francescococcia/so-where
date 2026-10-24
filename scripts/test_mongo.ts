@@ -11,7 +11,7 @@ import { metresBetween } from "@/lib/geo";
 import { londonParts, londonToUtc } from "@/lib/london-time";
 import { getDb, resetMongoForTests } from "@/lib/mongo";
 import { seedAll, venueDocs } from "@/lib/mongo-seed";
-import { findVenues, mongoEventsNear, mongoVenuesNear } from "@/lib/mongo-venues";
+import { KIND_FILTER, findVenues, mongoEventsNear, mongoVenuesNear } from "@/lib/mongo-venues";
 import { matches, type OsmKind } from "@/lib/osm";
 import { planRunDoc, planStats, recordPlanRun, tieBreakByHistory } from "@/lib/plan-memory";
 import type { PlanResultWithAgent } from "@/lib/plan-types";
@@ -35,7 +35,7 @@ const BOROUGH = { lat: 51.501199, lng: -0.09337 };
 const SHOREDITCH = { lat: 51.529, lng: -0.083 };
 const snap = snapshot as unknown as { elements: { type: string; id: number; lat: number; lng: number; tags: Record<string, string> }[] };
 const snapIds = (kind: OsmKind, c: { lat: number; lng: number }, r: number) =>
-  snap.elements.filter((e) => matches(kind, e.tags) && metresBetween(c, e) <= r).map((e) => `${e.type}/${e.id}`).sort();
+  snap.elements.filter((e) => matches(kind, e.tags, e.type) && metresBetween(c, e) <= r).map((e) => `${e.type}/${e.id}`).sort();
 
 function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgent {
   const f = (verdict: "confirmed" | "likely" | "unknown" | "forecast") => ({ label: "x", value: "y", verdict, source: "TfL", asOf: "2026-10-24T18:00:00Z" });
@@ -69,6 +69,9 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
     assert.equal(r.counts.events, seedEvents().length);
     const v = await db.collection("venues").findOne({ _id: "node/26699558" as never });
     assert.ok(v && v.location.type === "Point" && v.location.coordinates[0] < 0 && v.name === "The Flying Horse" && v.category === "pub" && v.opening_hours && v.check_date === "2026-01-07");
+    const booth = await db.collection("venues").findOne({ _id: "node/8071803025" as never }); // "Restored K6 phone booth", tourism=museum
+    assert.ok(booth && booth.visitable === false && booth.tags.includes("unvisitable"));
+    assert.equal(await db.collection("venues").countDocuments({ $and: [{ _id: "node/8071803025" as never }, KIND_FILTER.free] }), 0);
     assert.ok(v && "outdoor_seating" in v && "indoor_seating" in v && "covered" in v && "beer_garden" in v); // normalised seating fields
     assert.ok((await db.collection("venues").countDocuments({ indoor_seating: true, tags: "indoor" })) > 100);
     assert.ok((await db.collection("venues").countDocuments({ outdoor_seating: true, tags: "outdoor" })) > 100);
@@ -168,7 +171,7 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
   });
 
   await test("hub tie-break: near-tied hubs ordered by past picks", async () => {
-    const j = (m: number): Journey => ({ minutes: m, summary: "", lines: [], path: [], fetchedAt: "", ms: 0 });
+    const j = (m: number): Journey => ({ minutes: m, summary: "", lines: [], path: [], segments: [], fetchedAt: "", ms: 0 });
     const h = (name: string, a: number, b: number): HubScore => ({ hub: { name, id: name, tflName: name, lat: 0, lng: 0 }, a: j(a), b: j(b), worst: Math.max(a, b), gap: Math.abs(a - b) });
     const ranked = [h("Bank", 20, 20), h("Borough", 21, 19), h("Victoria", 30, 10)];
     const note = await tieBreakByHistory(ranked, db);

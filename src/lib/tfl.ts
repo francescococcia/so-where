@@ -46,15 +46,81 @@ export async function searchPlace(text: string): Promise<{ place: Place | null; 
   return { place: null, ms: r.ms, error: r.ok ? "no match" : r.error };
 }
 
-export type Journey = { minutes: number; summary: string; lines: { id: string; name: string }[]; path: LatLng[]; fetchedAt: string; ms: number };
+/**
+ * One stretch of a TfL journey, in the shape the UI's journey.tsx reads (`mode` / `line` / `from` / `to` /
+ * `minutes` / `path`): mode is the TfL mode id (walking, tube, bus, dlr, overground, elizabeth-line,
+ * national-rail, tram…), line is "Jubilee line" / "Bus 394", path is ≤ 80 points.
+ */
+export type LegSegment = { mode: string; line?: string; from?: string; to?: string; minutes: number; path: LatLng[]; est?: boolean };
+export type Journey = { minutes: number; summary: string; lines: { id: string; name: string }[]; path: LatLng[]; segments: LegSegment[]; fetchedAt: string; ms: number };
 
+type JpPoint = { commonName?: string; lat?: number; lon?: number };
 type JpLeg = {
   duration: number;
   mode: { id: string; name: string };
-  instruction?: { summary?: string };
+  instruction?: { summary?: string; detailed?: string };
   routeOptions?: { name?: string; lineIdentifier?: { id: string; name: string } }[];
-  path?: { lineString?: string };
+  departurePoint?: JpPoint;
+  arrivalPoint?: JpPoint;
+  path?: { lineString?: string; stopPoints?: { name?: string }[] };
 };
+
+export const SEGMENT_MAX_POINTS = 80;
+
+/** Keep ≤ max points: evenly spaced, first and last always kept, rounded to ~1 m. */
+export function simplifyPath(p: LatLng[], max = SEGMENT_MAX_POINTS): LatLng[] {
+  const r = (x: LatLng) => ({ lat: +x.lat.toFixed(5), lng: +x.lng.toFixed(5) });
+  if (p.length <= max) return p.map(r);
+  const out: LatLng[] = [];
+  for (let i = 0; i < max; i++) out.push(r(p[Math.round((i * (p.length - 1)) / (max - 1))]));
+  return out;
+}
+
+/** "Canary Wharf Underground Station" → "Canary Wharf"; street addresses are not stop names. */
+export function stopName(s?: string): string | undefined {
+  if (!s || /,\s*London\b|^\d|walk inside|^(entrance|exit)\b/i.test(s)) return undefined; // street addresses / building notes
+  const t = s
+    .replace(/\s+(Underground|Rail|DLR|Overground|Elizabeth line|Tram|Bus)?\s*Station\b.*$/i, "")
+    .replace(/\s*\((?:Stop|Stand)[^)]*\)$/i, "")
+    .trim();
+  return t || undefined;
+}
+
+const RAIL_WORD: Record<string, (n: string) => string> = {
+  tube: (n) => (/line$/i.test(n) ? n : `${n} line`),
+  overground: (n) => (/line$|overground/i.test(n) ? n : `${n} line`),
+  "elizabeth-line": () => "Elizabeth line",
+  dlr: () => "DLR",
+  bus: (n) => `Bus ${n}`,
+  tram: (n) => (n ? `Tram ${n}`.replace(/^Tram tram/i, "Tram") : "Tram"),
+};
+
+function segmentOf(l: JpLeg, first: boolean): LegSegment {
+  const id = l.mode.id;
+  const name = (l.routeOptions?.[0]?.name ?? l.routeOptions?.[0]?.lineIdentifier?.name ?? "").trim();
+  const walk = id === "walking";
+  const line = walk ? undefined : name ? (RAIL_WORD[id]?.(name) ?? name) : l.mode.name;
+  // The first walk starts at the person's own coordinates: TfL names it with a street address, so drop it.
+  const from = walk && first ? undefined : stopName(l.departurePoint?.commonName);
+  return { mode: id, ...(line ? { line } : {}), ...(from ? { from } : {}), ...(stopName(l.arrivalPoint?.commonName) ? { to: stopName(l.arrivalPoint?.commonName) } : {}), minutes: l.duration, path: simplifyPath(parsePath(l.path?.lineString)) };
+}
+
+/** "Jubilee line from Canary Wharf to Waterloo" (falls back to TfL's own summary). */
+const segText = (s: LegSegment, l: JpLeg) => (s.line && s.to ? `${s.line}${s.from ? ` from ${s.from}` : ""} to ${s.to}` : l.instruction?.summary ?? l.mode.name);
+
+/** Hide the first `m` metres around the start (same radial rule as trimPathStart): the other person's start is never shown precisely. */
+export function trimSegmentsStart(segs: LegSegment[], m: number, dist: (a: LatLng, b: LatLng) => number): LegSegment[] {
+  const origin = segs.find((s) => s.path.length)?.path[0];
+  if (!origin) return segs;
+  let done = false;
+  return segs.map((s, n) => {
+    if (done) return s;
+    const i = s.path.findIndex((p) => dist(origin, p) >= m);
+    if (i >= 0) done = true;
+    const { from, ...rest } = s;
+    return { ...(n === 0 ? rest : { ...rest, ...(from ? { from } : {}) }), path: i < 0 ? [] : s.path.slice(i) };
+  });
+}
 type JpResponse = { journeys?: { duration: number; legs: JpLeg[] }[] };
 
 const ll = (p: LatLng) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
@@ -91,10 +157,11 @@ export async function journey(from: End, to: End, arriveBy: Date): Promise<Journ
   const best = [...js].sort((a, b) => a.duration - b.duration)[0];
   const transit = best.legs.filter((l) => l.mode.id !== "walking");
   const lines = transit.flatMap((l) => (l.routeOptions ?? []).map((o) => o.lineIdentifier).filter(Boolean).slice(0, 1)) as { id: string; name: string }[];
+  const segments = best.legs.map((l, i) => segmentOf(l, i === 0));
   const summary = transit.length
-    ? transit.map((l) => l.instruction?.summary ?? l.mode.name).join(", then ") + (transit.length === 1 ? " (direct)" : "")
+    ? transit.map((l) => segText(segments[best.legs.indexOf(l)], l)).join(", then ") + (transit.length === 1 ? " (direct)" : "")
     : "Walk";
-  return { minutes: best.duration, summary, lines, path: best.legs.flatMap((l) => parsePath(l.path?.lineString)), fetchedAt: r.fetchedAt, ms: r.ms };
+  return { minutes: best.duration, summary, lines, path: best.legs.flatMap((l) => parsePath(l.path?.lineString)), segments, fetchedAt: r.fetchedAt, ms: r.ms };
 }
 
 export type HubScore = { hub: Hub; a: Journey; b: Journey; worst: number; gap: number };
@@ -109,7 +176,7 @@ function atHubJourney(from: End, hub: Hub): Journey | null {
   const same = (!!from.id && from.id === hub.id) || m < 150;
   if (!same && m > AT_HUB_M) return null;
   const minutes = same ? 0 : walkMinutes(m);
-  return { minutes, summary: same ? `Already at ${hub.name} (walk)` : `Walk to ${hub.name} (~${minutes} min, estimate)`, lines: [], path: [], fetchedAt: new Date().toISOString(), ms: 0 };
+  return { minutes, summary: same ? `Already at ${hub.name} (walk)` : `Walk to ${hub.name} (~${minutes} min, estimate)`, lines: [], path: [], segments: same ? [] : [{ mode: "walking", to: hub.name, minutes, path: [], est: true }], fetchedAt: new Date().toISOString(), ms: 0 };
 }
 
 /** Fairest hub: minimise the worse of the two journey times, then the gap between them. */

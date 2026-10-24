@@ -22,11 +22,41 @@ const FILTERS: Record<OsmKind, string[]> = {
   free: ['["tourism"~"^(museum|gallery)$"]["fee"="no"]', '["amenity"~"^(marketplace|arts_centre)$"]["fee"="no"]'],
 };
 
-export function matches(kind: OsmKind, t: Record<string, string>) {
+// Things OSM sometimes tags tourism=museum / gallery that you can't actually visit (seen live: "Restored K6
+// phone booth"): telephone boxes, kiosks, plaques, statues, benches, memorials, artworks, street furniture.
+const OBJECT_TAGS: [string, RegExp][] = [
+  ["historic", /^(memorial|monument|wayside_cross|wayside_shrine|milestone|boundary_stone|telephone_box|stone|plaque)$/],
+  ["memorial", /./],
+  ["tourism", /^artwork$/],
+  ["artwork_type", /./],
+  ["amenity", /^(telephone|bench|kiosk|post_box|clock|drinking_water|vending_machine)$/],
+  ["disused:amenity", /^telephone$/],
+  ["booth", /./],
+  ["man_made", /^(street_cabinet|telephone_box)$/],
+  ["shop", /^kiosk$/],
+];
+const OBJECT_NAME = /\b(phone ?box|phone ?booth|telephone|booth|kiosk|k6|plaque|statue|bench|post ?box)\b/i;
+const WEAK_OBJECT_NAME = /\b(memorial|monument|box|cabinet|clock|obelisk)\b/i;
+
+/**
+ * False for objects rather than places you can walk into. Strong object words in the name drop it unless it
+ * has opening hours; weak ones ("memorial", "box") only when it has neither hours nor a website and is a point.
+ */
+export function isVisitable(t: Record<string, string>, type = "node"): boolean {
+  if (OBJECT_TAGS.some(([k, re]) => t[k] != null && re.test(t[k])) && !t.opening_hours) return false;
+  const name = t.name ?? "";
+  const hasHours = !!t.opening_hours;
+  const hasWeb = !!(t.website ?? t["contact:website"] ?? t.url);
+  if (OBJECT_NAME.test(name) && !hasHours) return false;
+  if (WEAK_OBJECT_NAME.test(name) && !hasHours && !hasWeb && type === "node") return false;
+  return true;
+}
+
+export function matches(kind: OsmKind, t: Record<string, string>, type?: string) {
   if (kind === "pub") return /^(pub|bar|biergarten)$/.test(t.amenity ?? "") && !!t.name;
   if (kind === "cafe") return t.amenity === "cafe" && !!t.name;
   if (kind === "restaurant") return t.amenity === "restaurant" && !!t.name;
-  return t.fee === "no" && (/^(museum|gallery)$/.test(t.tourism ?? "") || /^(marketplace|arts_centre)$/.test(t.amenity ?? ""));
+  return t.fee === "no" && (/^(museum|gallery)$/.test(t.tourism ?? "") || /^(marketplace|arts_centre)$/.test(t.amenity ?? "")) && isVisitable(t, type);
 }
 
 type OverpassEl = { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> };
@@ -42,7 +72,7 @@ export async function findPlaces(kind: OsmKind, center: LatLng, radiusM: number)
   const shape = (els: { type: string; id: number; lat: number; lng: number; tags: Record<string, string> }[]) =>
     els
       .map((e) => ({ type: e.type, id: e.id, location: { lat: e.lat, lng: e.lng }, tags: e.tags, distanceM: metresBetween(center, { lat: e.lat, lng: e.lng }) }))
-      .filter((p) => p.distanceM <= radiusM && matches(kind, p.tags))
+      .filter((p) => p.distanceM <= radiusM && matches(kind, p.tags, p.type))
       .sort((a, b) => a.distanceM - b.distanceM);
   if (r.ok && Array.isArray(r.data.elements)) {
     const els = r.data.elements
