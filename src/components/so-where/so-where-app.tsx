@@ -15,6 +15,7 @@ import { FollowUps } from "./follow-ups";
 import { SendPlanDialog } from "./send-plan-dialog";
 import { Mark } from "./mark";
 import { VerdictChip } from "./verdict-chip";
+import { WeatherIcon, weatherKind } from "./fact-icon";
 import { fmtAsOf, fmtWhen, gmapsDirections } from "./format";
 import { usePlan } from "./use-plan";
 import type { MapPadding } from "./plan-map";
@@ -74,12 +75,16 @@ function LiveStrip({ facts }: { facts: Fact[] }) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 12 }}
             transition={{ delay: 0.9 + i * 0.1, duration: 0.3 }}
-            className="flex items-center gap-2 rounded-full bg-surface py-1.5 pl-2.5 pr-3 text-[12.5px] shadow-[var(--sw-shadow-float)]"
+            className="flex items-center gap-2 rounded-full bg-surface/95 py-1.5 pl-2 pr-3 text-[12.5px] shadow-e3 ring-1 ring-line/70 backdrop-blur"
           >
-            <span className="relative flex size-2.5" aria-hidden>
-              <span className={cn("absolute inset-0 animate-ping rounded-full opacity-50 [animation-duration:2.4s] motion-reduce:hidden", f.verdict === "forecast" ? "bg-fc" : "bg-ok")} />
-              <span className={cn("relative size-2.5 rounded-full", f.verdict === "forecast" ? "bg-fc" : "bg-ok")} />
-            </span>
+            {weatherKind(f) ? (
+              <WeatherIcon fact={f} />
+            ) : (
+              <span className="relative ml-0.5 flex size-2.5" aria-hidden>
+                <span className={cn("absolute inset-0 animate-ping rounded-full opacity-50 [animation-duration:2.4s] motion-reduce:hidden", f.verdict === "forecast" ? "bg-fc" : "bg-ok")} />
+                <span className={cn("relative size-2.5 rounded-full", f.verdict === "forecast" ? "bg-fc" : "bg-ok")} />
+              </span>
+            )}
             <span className="max-w-[190px] truncate sm:max-w-[300px] font-medium text-ink" title={f.value}>{f.value}</span>
             <span className="num shrink-0 whitespace-nowrap font-mono text-[11px] text-ink-3">
               {f.source.split(" · ")[0]}
@@ -108,7 +113,7 @@ function Filters({ f }: { f: PlanResultWithAgent["filters"] }) {
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 + i * 0.04 }}
-          className={cn("inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-medium", it.on ? "bg-sunk text-ink" : "border border-line text-ink-3")}
+          className={cn("inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-medium", it.on ? "bg-sky-wash text-sky-ink ring-1 ring-sky/20" : "border border-dashed border-control text-ink-3")}
         >
           {it.on ? <Check className="size-3.5" strokeWidth={2.6} aria-hidden /> : null}
           {it.label}
@@ -127,17 +132,24 @@ const LEGEND = [
 
 function HowWeAnswer() {
   return (
-    <section aria-label="How we answer" className="mt-6 border-t border-rule pt-4">
+    <section aria-label="How we answer" className="mt-6 rounded-[16px] bg-tint p-4 shadow-e1 ring-1 ring-line/60">
       <h2 className="text-[13px] font-semibold text-ink">Every fact gets a verdict</h2>
-      <ul className="mt-2.5 flex flex-col gap-2">
+      <ul className="mt-2 flex flex-col gap-0.5">
         {LEGEND.map((l, i) => (
-          <li key={l.v} className="grid grid-cols-[104px_1fr] items-center gap-3">
+          <motion.li
+            key={l.v}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            whileHover={{ x: 3 }}
+            transition={{ type: "spring", stiffness: 420, damping: 30, delay: 0.12 + i * 0.07 }}
+            className="group -mx-2 grid grid-cols-[104px_1fr] items-center gap-3 rounded-[10px] px-2 py-1 transition-colors duration-200 hover:bg-raised"
+          >
             <VerdictChip verdict={l.v} delay={0.1 + i * 0.06} />
-            <span className="text-[13px] leading-5 text-ink-2">{l.text}</span>
-          </li>
+            <span className="text-[13px] leading-5 text-ink-2 transition-colors duration-200 group-hover:text-ink">{l.text}</span>
+          </motion.li>
         ))}
       </ul>
-      <p className="mt-4 text-[12.5px] leading-[18px] text-ink-3">
+      <p className="mt-3 border-t border-rule pt-3 text-[12.5px] leading-[18px] text-ink-3">
         Their location is rounded to about 500 m and never stored. Nothing is sent for you: you get a draft to copy.
       </p>
     </section>
@@ -147,8 +159,9 @@ function HowWeAnswer() {
 function Blind({ result }: { result: PlanResultWithAgent }) {
   const words = result.headline.split(" ");
   return (
-    <div className="sw-blind relative overflow-hidden rounded-[16px] bg-ink px-4 pb-4 pt-3 text-white [perspective:600px]">
-      <p className="num font-mono text-[11.5px] font-medium uppercase tracking-[0.08em] text-hi">
+    <div className="sw-blind relative overflow-hidden rounded-[16px] bg-tint py-3 pb-4 pl-5 pr-4 text-ink shadow-e2 ring-1 ring-line/70 [perspective:600px]">
+      <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 bg-signal" />
+      <p className="num font-mono text-[11.5px] font-semibold uppercase tracking-[0.08em] text-signal-ink">
         {fmtWhen(result.when)} · {INTENT_LABEL[result.intent] ?? result.intent}
       </p>
       <h2 className="relative mt-1.5 text-[24px] font-bold leading-[1.15] tracking-[-0.02em] text-balance">
@@ -176,6 +189,48 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
   const [sendOpen, setSendOpen] = useState(false);
   const [padding, setPadding] = useState<MapPadding>({ top: 90, right: 80, bottom: 90, left: 500 });
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const typeTimer = useRef<number | null>(null);
+  const pulseTimer = useRef<number | null>(null);
+  const [typing, setTyping] = useState(false);
+
+  // Glow while text is going in (typed by hand or by a suggestion chip).
+  const pulse = useCallback(() => {
+    setTyping(true);
+    if (pulseTimer.current) window.clearTimeout(pulseTimer.current);
+    pulseTimer.current = window.setTimeout(() => setTyping(false), 700);
+  }, []);
+
+  const stopTyping = useCallback(() => {
+    if (typeTimer.current) window.clearInterval(typeTimer.current);
+    typeTimer.current = null;
+  }, []);
+
+  // Suggestion chips type their ask into the box (instant with reduced motion).
+  const typeIn = useCallback(
+    (text: string) => {
+      stopTyping();
+      inputRef.current?.focus();
+      if (reduced) {
+        setQuery(text);
+        return;
+      }
+      let i = 0;
+      const step = Math.max(2, Math.ceil(text.length / 38));
+      setQuery("");
+      typeTimer.current = window.setInterval(() => {
+        i = Math.min(text.length, i + step);
+        setQuery(text.slice(0, i));
+        pulse();
+        if (i >= text.length) stopTyping();
+      }, 16);
+    },
+    [reduced, stopTyping, pulse]
+  );
+
+  useEffect(() => () => {
+    stopTyping();
+    if (pulseTimer.current) window.clearTimeout(pulseTimer.current);
+  }, [stopTyping]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
 
@@ -216,11 +271,12 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
 
   const ask = useCallback(
     (q: string) => {
+      stopTyping();
       const text = q.trim();
       if (!text) return;
       submit(text, undefined, you ?? undefined);
     },
-    [submit, you]
+    [submit, you, stopTyping]
   );
 
   const locate = useCallback(() => {
@@ -286,7 +342,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
           </div>
           {state.example ? (
             <div className="pointer-events-none absolute bottom-4 left-[476px] z-10 hidden lg:block">
-              <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-likely-bg px-2.5 text-[12px] font-semibold text-likely shadow-[var(--sw-shadow-float)]">
+              <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-likely-bg px-2.5 text-[12px] font-semibold text-likely shadow-e3 ring-1 ring-likely/15">
                 <FlaskConical className="size-3.5" aria-hidden /> Example<span className="max-sm:hidden"> data</span> · not live
               </span>
             </div>
@@ -294,7 +350,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
         </div>
 
         {/* Plan panel */}
-        <aside className="relative z-10 flex flex-col bg-surface lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:w-[444px] lg:rounded-[20px] lg:border lg:border-line lg:shadow-[var(--sw-shadow-float)]">
+        <aside className="relative z-10 -mt-5 flex flex-col rounded-t-[22px] bg-surface shadow-[0_-12px_30px_-14px_rgba(74,52,30,0.22)] lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:mt-0 lg:w-[444px] lg:rounded-[22px] lg:shadow-e4 lg:ring-1 lg:ring-line/60">
           <div ref={scrollRef} className="flex-1 px-4 pb-6 pt-4 lg:overflow-y-auto lg:px-5 lg:pt-5">
             <Header example={state.example} testedN={testedN} className="mb-5 hidden lg:flex" />
 
@@ -318,26 +374,25 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                 {CHIPS.map((c) => {
                   const on = activeChip === c.id;
                   return (
-                    <motion.button
+                    <button
                       key={c.id}
                       type="button"
-                      whileTap={{ scale: 0.95 }}
+                      disabled={status === "running"}
                       onClick={() => {
                         setActiveChip(c.id);
-                        setQuery(c.ask);
-                        inputRef.current?.focus();
+                        typeIn(c.ask);
                       }}
                       aria-pressed={on}
-                      className={cn("relative inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors duration-200 max-lg:min-h-11", on ? "text-white" : "bg-raised text-ink-2 hover:bg-sunk hover:text-ink")}
+                      className="sw-chip min-h-9 px-3 text-[13px] font-medium max-lg:min-h-11"
                     >
-                      {on ? <motion.span layoutId="chip-on" className="absolute inset-0 rounded-full bg-ink" transition={{ type: "spring", stiffness: 500, damping: 36 }} /> : null}
-                      <c.Icon className="relative size-4" aria-hidden />
-                      <span className="relative">{c.label}</span>
-                    </motion.button>
+                      {on ? <motion.span layoutId="chip-on" className="absolute inset-0 -z-10 rounded-full bg-sky-soft" transition={{ type: "spring", stiffness: 500, damping: 36 }} /> : null}
+                      <c.Icon className={cn("size-4 transition-colors", on ? "text-sky" : "text-ink-3")} aria-hidden />
+                      <span>{c.label}</span>
+                    </button>
                   );
                 })}
               </div>
-              <div className="flex items-end gap-2 rounded-[14px] border border-line bg-raised p-1.5 pl-3.5 transition-colors focus-within:border-ink">
+              <motion.div layout="size" className={cn("sw-field flex items-end gap-2 p-1.5 pl-3.5", typing && "is-typing")}>
                 <label htmlFor="ask" className="sr-only">Your ask</label>
                 <textarea
                   id="ask"
@@ -345,8 +400,10 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                   value={query}
                   rows={2}
                   onChange={(e) => {
+                    stopTyping();
                     setQuery(e.target.value);
                     setActiveChip(null);
+                    pulse();
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -355,27 +412,34 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                     }
                   }}
                   placeholder="Date Thursday at 7, I'm at Old Street, she's around Clapham…"
-                  className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink placeholder:text-ink-3 focus:outline-none"
+                  className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink caret-sky transition-[height] duration-200 placeholder:text-ink-3 focus:outline-none"
                 />
-                <motion.button type="submit" whileTap={{ scale: 0.94 }} disabled={!query.trim() || status === "running"} aria-label="Plan it" className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-[10px] bg-ink text-white transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-35">
+                <motion.button
+                  type="submit"
+                  disabled={!query.trim() || status === "running"}
+                  aria-busy={status === "running"}
+                  aria-label="Plan it"
+                  animate={{ scale: query.trim() || status === "running" ? 1 : 0.9 }}
+                  whileHover={query.trim() && status !== "running" ? { scale: 1.06 } : undefined}
+                  whileTap={{ scale: 0.92 }}
+                  transition={{ type: "spring", stiffness: 520, damping: 26 }}
+                  className="sw-btn sw-btn-primary size-11 shrink-0 rounded-[12px] transition-[box-shadow,background-color,color] disabled:aria-busy:bg-signal-strong disabled:aria-busy:text-white"
+                >
                   {status === "running" ? <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden /> : <ArrowRight className="size-5" aria-hidden />}
                 </motion.button>
-              </div>
+              </motion.div>
               <div className="mt-2 flex items-center gap-2">
-                <motion.button
+                <button
                   type="button"
-                  whileTap={{ scale: 0.95 }}
                   onClick={locate}
                   aria-pressed={!!you}
-                  className={cn(
-                    "inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold transition-colors max-lg:min-h-11",
-                    you ? "bg-hi text-ink" : "bg-raised text-ink-2 hover:bg-sunk hover:text-ink"
-                  )}
+                  aria-busy={locating === "busy"}
+                  className={cn("sw-chip min-h-9 shrink-0 px-3 text-[12.5px] font-semibold max-lg:min-h-11", you && "bg-sky-soft")}
                 >
-                  {locating === "busy" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <LocateFixed className="size-3.5" aria-hidden />}
+                  {locating === "busy" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <LocateFixed className={cn("size-3.5", you ? "text-sky" : "text-ink-3")} aria-hidden />}
                   {you ? "Using your location · ~100 m" : "Use my location"}
                   {you ? <X className="size-3.5" aria-label="Stop using location" /> : null}
-                </motion.button>
+                </button>
                 <span className="text-[11.5px] leading-4 text-ink-3">{locating === "denied" ? "Location blocked: name a station instead." : you ? "Sent with your ask only, never stored." : "Skips the “where are you?” question."}</span>
               </div>
             </form>
@@ -411,9 +475,9 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                         ) : (
                           <motion.div key="list" className="flex flex-col gap-3" exit={{ opacity: 0 }}>
                             {result.cards.slice(0, 3).map((c, i) => (
-                              <PlanCard key={c.id} card={c} index={i} selected={c.id === selected?.id} hovered={c.id === hoverId} onOpen={() => openDetail(c.id)} onHover={(on) => setHoverId(on ? c.id : null)} />
+                              <PlanCard key={c.id} card={c} index={i} when={result.when} selected={c.id === selected?.id} hovered={c.id === hoverId} onOpen={() => openDetail(c.id)} onHover={(on) => setHoverId(on ? c.id : null)} />
                             ))}
-                            {!result.cards.length ? <p className="rounded-[14px] border border-line p-4 text-[14px] text-ink-2">Nothing matched. Try a wider area or a different time.</p> : null}
+                            {!result.cards.length ? <p className="rounded-[14px] bg-tint p-4 text-[14px] text-ink-2 shadow-e1">Nothing matched. Try a wider area or a different time.</p> : null}
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -423,7 +487,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                   <FollowUps intent={result.intent} onRefine={refine} disabled={false} />
 
                   {result.unknowns.length && !detail ? (
-                    <section aria-label="Couldn't check" className="rounded-[14px] border border-dashed border-control p-3.5">
+                    <section aria-label="Couldn't check" className="rounded-[14px] border border-dashed border-control bg-raised/60 p-3.5">
                       <h3 className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">Couldn&apos;t check</h3>
                       <ul className="mt-1.5 flex flex-col gap-1">
                         {result.unknowns.map((u) => (
@@ -446,9 +510,10 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
               ) : null}
 
               {status === "running" && !state.steps.length ? (
-                <div className="flex flex-col gap-2" aria-hidden>
-                  <div className="h-11 rounded-[14px] bg-sunk" />
-                  <div className="h-24 rounded-[14px] bg-sunk" />
+                <div className="flex flex-col gap-2.5" aria-hidden>
+                  <div className="sw-skel h-11" />
+                  <div className="sw-skel h-24" />
+                  <div className="sw-skel h-24 opacity-70" />
                 </div>
               ) : null}
             </div>
@@ -462,17 +527,17 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 24, opacity: 0 }}
                 transition={{ delay: 0.3, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className="sticky bottom-0 flex gap-2 border-t border-line bg-surface px-4 py-3 lg:rounded-b-[20px] lg:px-5"
+                className="sticky bottom-0 flex gap-2 border-t border-rule bg-surface/95 px-4 py-3 shadow-[0_-10px_24px_-18px_rgba(74,52,30,0.35)] backdrop-blur lg:rounded-b-[22px] lg:px-5"
               >
-                <motion.button type="button" whileTap={{ scale: 0.97 }} onClick={() => setSendOpen(true)} className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[10px] bg-ink px-4 text-[15px] font-semibold text-white transition-opacity hover:opacity-90">
+                <button type="button" onClick={() => setSendOpen(true)} className="sw-btn sw-btn-primary min-h-11 flex-1 whitespace-nowrap rounded-[12px] px-4 text-[15px] font-semibold">
                   <Send className="size-4" aria-hidden /> Send plan
-                </motion.button>
+                </button>
                 {selected ? (
-                  <a href={gmapsDirections(selected.location.lat, selected.location.lng)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-[10px] border border-line px-3.5 text-[15px] font-medium text-ink transition-colors hover:border-ink">
+                  <a href={gmapsDirections(selected.location.lat, selected.location.lng)} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3.5 text-[15px] font-medium">
                     <Navigation className="size-4" aria-hidden /> <span className="max-sm:sr-only">Directions</span>
                   </a>
                 ) : null}
-                <button type="button" onClick={change} className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-[10px] px-3 text-[15px] font-medium text-ink-2 transition-colors hover:bg-raised hover:text-ink">
+                <button type="button" onClick={change} className="sw-btn sw-btn-ghost min-h-11 gap-1.5 rounded-[12px] px-3 text-[15px] font-medium">
                   <PencilLine className="size-4" aria-hidden /> Change
                 </button>
               </motion.div>

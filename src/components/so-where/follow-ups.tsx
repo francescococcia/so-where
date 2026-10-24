@@ -23,9 +23,9 @@ const NEAR = [
 export function FollowUps({ intent, onRefine, disabled }: { intent: Intent; onRefine: (extra: string) => void; disabled?: boolean }) {
   const items = intent === "near_me" ? NEAR : MEET;
   return (
-    <section aria-label="Refine the plan" className="rounded-[16px] bg-raised p-3">
+    <section aria-label="Refine the plan" className="rounded-[16px] bg-sky-wash p-3 ring-1 ring-sky/15">
       <p className="flex items-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">
-        <Sparkles className="size-3.5 text-signal" aria-hidden /> Steer the agent
+        <Sparkles className="size-3.5 text-sky" aria-hidden /> <span className="text-sky-ink">Steer the agent</span>
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {items.map((it, i) => (
@@ -39,9 +39,9 @@ export function FollowUps({ intent, onRefine, disabled }: { intent: Intent; onRe
             whileHover={{ y: -2 }}
             whileTap={{ scale: 0.93 }}
             onClick={() => onRefine(it.ask)}
-            className="group inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full bg-surface px-3 text-[13px] font-semibold text-ink shadow-[0_1px_0_var(--sw-control)] ring-1 ring-line transition-colors hover:bg-ink hover:text-white hover:ring-ink max-lg:min-h-11"
+            className="sw-chip group min-h-9 px-3 text-[13px] font-semibold text-ink hover:bg-signal-soft hover:text-signal-ink max-lg:min-h-11 transition-[box-shadow,background-color,color]"
           >
-            <it.Icon className="size-3.5 text-signal transition-colors group-hover:text-hi" aria-hidden />
+            <it.Icon className="size-3.5 text-signal transition-transform duration-200 group-hover:scale-110 group-active:scale-90" aria-hidden />
             {it.label}
           </motion.button>
         ))}

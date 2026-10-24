@@ -6,6 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { LatLng, Leg, PlanResultWithAgent } from "@/lib/plan-types";
 import hubsDoc from "@/data/hubs.json";
 import { SO_WHERE_STYLE } from "./map-style";
+import { legStretches, type MapStretch } from "./journey";
 
 /** Idle view: the South Bank, tilted, so the 3D city is the first thing you see. */
 const LONDON: [number, number] = [-0.1135, 51.5065];
@@ -44,6 +45,23 @@ function circle(center: LatLng, radiusM: number, steps = 72): GeoJSON.Feature {
 const line = (coords: [number, number][]): GeoJSON.Feature => ({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords } });
 const EMPTY_LINE = line([]);
 
+/** Draw the first `t` (0–1) of a person's journey, stretch by stretch, keeping each stretch's colour. */
+function stretchFeatures(st: MapStretch[], t: number): GeoJSON.Feature[] {
+  if (t <= 0) return [];
+  const n = st.reduce((a, s) => a + s.coords.length - 1, 0) || 1;
+  let budget = t * n;
+  const out: GeoJSON.Feature[] = [];
+  for (const s of st) {
+    const segs = s.coords.length - 1;
+    if (budget <= 0) break;
+    const f = Math.min(1, budget / segs);
+    budget -= segs;
+    const c = f >= 1 ? s.coords : partial(s.coords, f);
+    if (c.length >= 2) out.push({ type: "Feature", properties: { kind: s.kind, color: s.color, label: s.label }, geometry: { type: "LineString", coordinates: c } });
+  }
+  return out;
+}
+
 /** Part of a polyline, measured by length, for the draw-in. */
 function partial(coords: [number, number][], t: number) {
   if (t >= 1 || coords.length < 2) return coords;
@@ -75,7 +93,7 @@ const DASHES: number[][] = [
   [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5],
 ];
 
-const COLOR = { you: "#15171c", them: "#e1251b" } as const;
+const COLOR = { you: "#1478a3", them: "#e1251b" } as const; // you = sky (secondary), them = bus red
 
 function addLayers(map: MLMap) {
   const before = map.getLayer("water-name") ? "water-name" : undefined;
@@ -91,17 +109,24 @@ function addLayers(map: MLMap) {
   // Candidate hubs the agent compares.
   map.addSource("hubs", { type: "geojson", data: FC(HUBS.map((h, i) => ({ type: "Feature", properties: { i, name: h.name }, geometry: { type: "Point", coordinates: [h.lng, h.lat] } }))) });
   map.addLayer({ id: "hubs-glow", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 18, "circle-color": "#e1251b", "circle-opacity": 0.0, "circle-blur": 0.8, "circle-pitch-alignment": "map" } });
-  map.addLayer({ id: "hubs-dot", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#ffffff", "circle-stroke-color": "#15171c", "circle-stroke-width": 2, "circle-opacity": 0.9 } });
+  map.addLayer({ id: "hubs-dot", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#ffffff", "circle-stroke-color": "#1478a3", "circle-stroke-width": 2, "circle-opacity": 0.9 } });
   map.addLayer({ id: "hubs-lit", type: "circle", source: "hubs", layout: { visibility: "none" }, filter: ["==", ["get", "i"], -1], paint: { "circle-radius": 8, "circle-color": "#e1251b", "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } });
   map.addLayer({ id: "hubs-label", type: "symbol", source: "hubs", layout: { visibility: "none", "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-offset": [0, 1.2], "text-anchor": "top" }, paint: { "text-color": "#15171c", "text-halo-color": "#fff", "text-halo-width": 1.6 } });
 
+  // Per-person halo underneath (so you can still tell whose route is whose)…
   for (const who of ["them", "you"] as const) {
     map.addSource(`route-${who}`, { type: "geojson", data: EMPTY_LINE });
-    map.addLayer({ id: `route-${who}-glow`, type: "line", source: `route-${who}`, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": COLOR[who], "line-width": 16, "line-blur": 10, "line-opacity": 0.22 } });
-    map.addLayer({ id: `route-${who}-case`, type: "line", source: `route-${who}`, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 9 } });
-    map.addLayer({ id: `route-${who}`, type: "line", source: `route-${who}`, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": COLOR[who], "line-width": 5 } });
-    map.addLayer({ id: `route-${who}-flow`, type: "line", source: `route-${who}`, layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": who === "you" ? "#ffd23f" : "#ffffff", "line-width": 2.2, "line-dasharray": DASHES[0] } });
+    map.addLayer({ id: `route-${who}-glow`, type: "line", source: `route-${who}`, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": COLOR[who], "line-width": 18, "line-blur": 10, "line-opacity": 0.16 } });
+    map.addLayer({ id: `route-${who}-halo`, type: "line", source: `route-${who}`, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": COLOR[who], "line-width": 10.5, "line-opacity": 0.55 } });
+    map.addLayer({ id: `route-${who}-case`, type: "line", source: `route-${who}`, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 7.5 } });
   }
+  // …and each stretch on top in its own colour: TfL line colours, dashed bus red, dotted grey walking.
+  map.addSource("route-legs", { type: "geojson", data: FC() });
+  map.addLayer({ id: "legs-walk", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "walk"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4, "line-dasharray": [0.1, 1.9] } });
+  map.addLayer({ id: "legs-bus", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "bus"], layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4.5, "line-dasharray": [2.2, 1.2] } });
+  map.addLayer({ id: "legs-rail", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "rail"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4.5 } });
+  map.addLayer({ id: "legs-flow", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "rail"], layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 1.6, "line-opacity": 0.85, "line-dasharray": DASHES[0] } });
+  map.addLayer({ id: "legs-label", type: "symbol", source: "route-legs", filter: ["all", ["==", ["get", "kind"], "bus"], ["!=", ["get", "label"], ""]], layout: { "symbol-placement": "line-center", "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-keep-upright": true }, paint: { "text-color": "#ffffff", "text-halo-color": "#DC241F", "text-halo-width": 2.4 } });
 }
 
 function el(html: string, className?: string) {
@@ -190,7 +215,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
         if (dashT > 60) {
           dashT = 0;
           dashI = (dashI + 1) % DASHES.length;
-          for (const who of ["you", "them"]) if (map.getLayer(`route-${who}-flow`)) map.setPaintProperty(`route-${who}-flow`, "line-dasharray", DASHES[dashI]);
+          if (map.getLayer("legs-flow")) map.setPaintProperty("legs-flow", "line-dasharray", DASHES[dashI]);
         }
         // idle orbit: only when nobody's touching the map and no camera move is running
         const idle = now - userBusy.current > 7000 && !flying.current && !map.isMoving();
@@ -248,6 +273,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     if (!result) {
       (map.getSource("route-you") as GeoJSONSource).setData(EMPTY_LINE);
       (map.getSource("route-them") as GeoJSONSource).setData(EMPTY_LINE);
+      (map.getSource("route-legs") as GeoJSONSource | undefined)?.setData(FC());
       return;
     }
 
@@ -357,10 +383,13 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     if (draw.current) cancelAnimationFrame(draw.current);
     const card = result?.cards.find((c) => c.id === selectedId) ?? result?.cards[0];
     const legs: Record<"you" | "them", Leg | undefined> = { you: card?.legs.find((l) => l.who === "you"), them: card?.legs.find((l) => l.who === "them") };
-    const full = { you: (legs.you?.path ?? []).map(ll), them: (legs.them?.path ?? []).map(ll) };
+    const st = { you: legs.you ? legStretches(legs.you) : [], them: legs.them ? legStretches(legs.them) : [] };
+    const full = { you: st.you.flatMap((s) => s.coords), them: st.them.flatMap((s) => s.coords) };
     const set = (t: number) => {
-      (map.getSource("route-you") as GeoJSONSource | undefined)?.setData(line(partial(full.you, easeInOut(Math.min(1, t)))));
-      (map.getSource("route-them") as GeoJSONSource | undefined)?.setData(line(partial(full.them, easeInOut(Math.min(1, Math.max(0, t - 0.12) / 0.88)))));
+      const tt = { you: easeInOut(Math.min(1, t)), them: easeInOut(Math.min(1, Math.max(0, t - 0.12) / 0.88)) };
+      (map.getSource("route-you") as GeoJSONSource | undefined)?.setData(line(partial(full.you, tt.you)));
+      (map.getSource("route-them") as GeoJSONSource | undefined)?.setData(line(partial(full.them, tt.them)));
+      (map.getSource("route-legs") as GeoJSONSource | undefined)?.setData(FC([...stretchFeatures(st.you, tt.you), ...stretchFeatures(st.them, tt.them)]));
     };
     if (reduced) {
       set(1);

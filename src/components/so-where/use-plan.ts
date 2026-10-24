@@ -106,7 +106,8 @@ export function usePlan() {
           }));
         } else if (msg.type === "clarify" && msg.clarify) {
           gotTerminal = true;
-          setState((s) => ({ ...s, status: "clarify", clarify: msg.clarify as Clarify, elapsedMs: performance.now() - t0 }));
+          // The server returns the cumulative query on clarify; keep it so the next answer goes back as previous:{query, answer}.
+          setState((s) => ({ ...s, status: "clarify", query: typeof msg.query === "string" ? msg.query : s.query, clarify: msg.clarify as Clarify, elapsedMs: performance.now() - t0 }));
         }
       };
 

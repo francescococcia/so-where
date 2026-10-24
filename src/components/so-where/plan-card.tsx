@@ -1,15 +1,17 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ArrowUpRight, Footprints } from "lucide-react";
+import { ArrowUpRight, Banknote, Clock } from "lucide-react";
 import type { Fact, PlanCard as Card, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { CountUp, useTilt } from "./motion-bits";
+import { JourneySentence } from "./journey";
+import { costAnswer, openAnswer } from "./answers";
+import { WeatherIcon, weatherKind } from "./fact-icon";
 
 export const WHO = { you: "You", them: "Them" } as const;
 export const ROUTE = { you: "var(--sw-route-you)", them: "var(--sw-route-them)" } as const;
 const V_DOT: Record<Verdict, string> = { confirmed: "bg-ok", likely: "bg-[#c99a00]", forecast: "bg-fc", unknown: "bg-control" };
-const V_TXT: Record<Verdict, string> = { confirmed: "text-ok", likely: "text-likely", forecast: "text-fc", unknown: "text-unknown" };
 
 export function splitSubtitle(s: string) {
   const [type, ...rest] = s.split(" · ");
@@ -50,12 +52,14 @@ export function MiniBars({ card, big = false, delay = 0 }: { card: Card; big?: b
 export function PlanCard({
   card,
   index,
+  when,
   selected,
   hovered,
   onOpen,
   onHover,
 }: {
   card: Card;
+  when: string;
   index: number;
   selected: boolean;
   hovered: boolean;
@@ -64,8 +68,14 @@ export function PlanCard({
 }) {
   const tilt = useTilt(4);
   const { type, address } = splitSubtitle(card.subtitle);
-  const facts = keyFacts(card);
-  const walk = card.legs.length === 1 ? card.legs[0] : null;
+  const wx = card.facts.find((f) => weatherKind(f));
+  const open = openAnswer(card, when);
+  const cost = costAnswer(card);
+  const answers: { key: string; icon: typeof Clock; text: string; tone: string; v?: Verdict; wx?: Fact }[] = [
+    { key: "open", icon: Clock, text: open.text, tone: open.state === true ? "text-ok" : open.state === false ? "text-signal-ink" : "text-unknown", v: open.fact?.verdict },
+    ...(cost.fact && !/not listed/i.test(cost.text) ? [{ key: "cost", icon: Banknote, text: cost.text, tone: "text-sky-ink", v: cost.fact.verdict }] : []),
+    ...(wx ? [{ key: "wx", icon: Clock, text: wx.value, tone: "", v: wx.verdict, wx }] : []),
+  ];
   const tally = (["confirmed", "likely", "forecast", "unknown"] as Verdict[]).map((v) => [v, card.facts.filter((f) => f.verdict === v).length] as const).filter(([, n]) => n);
 
   return (
@@ -75,6 +85,7 @@ export function PlanCard({
       animate={{ opacity: 1, y: 0, rotateX: 0 }}
       transition={{ type: "spring", stiffness: 260, damping: 26, delay: 0.25 + 0.09 * index }}
       whileHover={{ y: -3 }}
+      whileTap={{ scale: 0.985, y: -1 }}
       style={tilt.style}
       onPointerMove={tilt.onPointerMove}
       onPointerLeave={() => {
@@ -84,13 +95,14 @@ export function PlanCard({
       onPointerEnter={() => onHover(true)}
       className={cn(
         "sw-card group relative overflow-hidden rounded-[18px] bg-surface [transform-style:preserve-3d]",
-        selected ? "ring-2 ring-ink" : hovered ? "ring-2 ring-signal/60" : "ring-1 ring-line"
+        selected ? "is-on" : "ring-1 ring-line/70",
+        hovered && "is-hover"
       )}
     >
-      <button type="button" onClick={onOpen} onFocus={() => onHover(true)} onBlur={() => onHover(false)} aria-label={`Open details for ${card.name}`} className="block w-full cursor-pointer text-left">
+      <button type="button" onClick={onOpen} onFocus={() => onHover(true)} onBlur={() => onHover(false)} aria-label={`Open details for ${card.name}`} className="block w-full cursor-pointer rounded-[18px] text-left focus-visible:outline-offset-[-2px]">
         {/* ticket stub */}
         <div className="grid grid-cols-[64px_1fr]">
-          <motion.div layoutId={`rank-${card.id}`} className={cn("relative flex flex-col items-center justify-between py-3.5 font-mono", index === 0 ? "bg-signal text-white" : "bg-ink text-white")}>
+          <motion.div layoutId={`rank-${card.id}`} className={cn("relative flex flex-col items-center justify-between py-3.5 font-mono", index === 0 ? "bg-signal-strong text-white" : "bg-sky-soft text-sky-ink")}>
             <span className="text-[10px] font-semibold uppercase tracking-[0.16em] opacity-70">No.</span>
             <span className="num text-[30px] font-bold leading-none tracking-[-0.04em]">{String(index + 1).padStart(2, "0")}</span>
             <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] opacity-70">{index === 0 ? "Best" : card.kind}</span>
@@ -107,38 +119,38 @@ export function PlanCard({
               <ArrowUpRight className="mt-1 size-5 shrink-0 text-ink-3 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-ink" aria-hidden />
             </div>
 
-            <div className="mt-3">
-              {walk ? (
-                <div className="flex items-center gap-2 text-[13px] text-ink-2">
-                  <Footprints className="size-4 text-ink" aria-hidden />
-                  <span className="num font-mono text-[15px] font-semibold text-ink"><CountUp value={walk.minutes} delay={0.3 + index * 0.09} /> min</span>
-                  <span className="truncate text-ink-3">{walk.summary}</span>
-                </div>
-              ) : (
-                <MiniBars card={card} delay={0.25 + index * 0.09} />
-              )}
-            </div>
+            <ul className="mt-2.5 flex flex-col gap-1.5">
+              {card.legs.map((l, k) => (
+                <li key={l.who + k} className="grid grid-cols-[auto_1fr] gap-x-2 text-[13px] text-ink-2">
+                  <span className="mt-[7px] size-2 rounded-full" style={{ background: ROUTE[l.who] }} aria-hidden />
+                  <span>
+                    {card.legs.length > 1 ? <span className="font-semibold text-ink">{WHO[l.who]}: </span> : null}
+                    <JourneySentence leg={l} small />
+                  </span>
+                </li>
+              ))}
+            </ul>
 
-            <ul className="mt-3 flex flex-col gap-1">
-              {facts.map((f) => (
-                <li key={f.label} className="flex items-center gap-2 text-[12.5px] leading-5">
-                  <span className={cn("size-1.5 shrink-0 rounded-full", V_DOT[f.verdict])} aria-hidden />
-                  <span className="shrink-0 text-ink-3">{f.label}</span>
-                  <span className="min-w-0 truncate font-medium text-ink">{f.value}</span>
-                  <span className={cn("ml-auto shrink-0 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]", V_TXT[f.verdict])}>{f.verdict}</span>
+            <ul className="mt-2.5 flex flex-col gap-1">
+              {answers.map((a) => (
+                <li key={a.key} className={cn("flex items-center gap-2 text-[13px] leading-5 text-ink", a.wx && "-mx-1.5 rounded-[8px] bg-raised px-1.5 py-0.5")}>
+                  {a.wx ? <WeatherIcon fact={a.wx} className="-ml-0.5 size-[18px]" /> : <a.icon className={cn("size-3.5 shrink-0", a.tone)} aria-hidden />}
+                  <span className="min-w-0 truncate font-medium">{a.text}</span>
+                  {a.v ? <span title={a.v} className={cn("ml-auto size-1.5 shrink-0 rounded-full", V_DOT[a.v])} aria-label={a.v} /> : null}
                 </li>
               ))}
             </ul>
 
             <div className="mt-3 flex items-center gap-2 border-t border-dashed border-line pt-2.5">
-              <span className="flex items-center gap-1" aria-label="Verdict tally">
+              <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ink-3" aria-label="Verdict tally">
                 {tally.map(([v, n]) => (
-                  <span key={v} title={`${n} ${v}`} className={cn("num inline-flex h-5 items-center gap-1 rounded-full px-1.5 font-mono text-[10.5px] font-semibold", { confirmed: "bg-ok-bg text-ok", likely: "bg-likely-bg text-likely", forecast: "bg-fc-bg text-fc", unknown: "bg-unknown-bg text-unknown" }[v])}>
-                    {n} {v.slice(0, 4)}
+                  <span key={v} title={`${n} ${v}`} className="num inline-flex items-center gap-1 whitespace-nowrap font-mono">
+                    <span aria-hidden className={cn("size-1.5 rounded-full", V_DOT[v])} />{n}
                   </span>
                 ))}
+                <span className="whitespace-nowrap">checks</span>
               </span>
-              <span className="ml-auto text-[12px] font-semibold text-ink transition-colors group-hover:text-signal-ink">All details</span>
+              <span className="ml-auto inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold text-ink transition-colors duration-200 group-hover:bg-signal-soft group-hover:text-signal-ink">All details</span>
             </div>
           </div>
         </div>

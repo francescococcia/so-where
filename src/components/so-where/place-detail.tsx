@@ -1,79 +1,67 @@
 "use client";
 
-import { motion } from "motion/react";
-import { Accessibility, ArrowLeft, ArrowUpRight, Banknote, Clock, CloudSun, ExternalLink, Footprints, Globe, HelpCircle, Map as MapIcon, Navigation, Phone, Send, TrainFront } from "lucide-react";
+import { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { Accessibility, ArrowLeft, ArrowUpRight, Banknote, ChevronDown, Clock, CloudSun, ExternalLink, Globe, HelpCircle, ListChecks, Map as MapIcon, Navigation, Route, Send, TrainFront } from "lucide-react";
 import type { Fact, PlanCard as Card, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { VerdictChip } from "./verdict-chip";
-import { fmtAsOf, fmtTime, fmtWhen, gmapsDirections } from "./format";
-import { CountUp, lineColour } from "./motion-bits";
-import { MiniBars, ROUTE, WHO, splitSubtitle } from "./plan-card";
+import { fmtAsOf, fmtWhen, gmapsDirections } from "./format";
+import { WeatherIcon, weatherKind } from "./fact-icon";
+import { ROUTE, splitSubtitle } from "./plan-card";
+import { JourneySentence } from "./journey";
+import { costAnswer, findFact, openAnswer, priceFact, shortUnknown } from "./answers";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 const item = (i: number) => ({ initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.4, delay: 0.18 + i * 0.05, ease } });
 
-function find(card: Card, re: RegExp) {
-  return card.facts.find((f) => re.test(f.label));
-}
-
-/** "12:00–00:00" → is `when` inside it (London time)? Returns null when we can't tell. */
-function openAt(hours: string | undefined, whenIso: string): boolean | null {
-  if (!hours) return null;
-  const m = hours.match(/(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})/);
-  if (!m) return null;
-  const t = fmtTime(whenIso).split(":").map(Number);
-  if (t.length < 2 || t.some(Number.isNaN)) return null;
-  const now = t[0] * 60 + t[1];
-  const a = +m[1] * 60 + +m[2];
-  let b = +m[3] * 60 + +m[4];
-  if (b <= a) b += 24 * 60;
-  return (now >= a && now < b) || (now + 1440 >= a && now + 1440 < b);
-}
-
-function walkEstimate(card: Card) {
-  for (const l of card.legs) {
-    const m = l.summary.match(/~?(\d+)\s*min walk/i);
-    if (m) return { who: l.who, min: +m[1], est: /estimate/i.test(l.summary) };
-  }
-  return null;
-}
-
-function Row({ icon: Icon, label, fact, fallback, i }: { icon: typeof Clock; label: string; fact?: Fact; fallback?: string; i: number }) {
+/** A checked fact. The source sits in a small chip that shows on hover, focus or tap, not on every row. */
+function Row({ icon: Icon, label, fact, fallback }: { icon: typeof Clock; label: string; fact?: Fact; fallback?: string }) {
+  const [show, setShow] = useState(false);
   const v: Verdict = fact?.verdict ?? "unknown";
   return (
-    <motion.div {...item(i)} className="grid grid-cols-[28px_1fr_auto] items-start gap-x-2.5 py-2.5">
-      <span className="grid size-7 place-items-center rounded-full bg-raised text-ink"><Icon className="size-3.5" aria-hidden /></span>
-      <div className="min-w-0">
-        <p className="text-[11.5px] font-medium text-ink-3">{fact?.label ?? label}</p>
-        <p className="text-[14.5px] font-medium leading-5 text-ink">{fact?.value ?? fallback ?? "Not in our sources"}</p>
-        <p className="num mt-0.5 font-mono text-[10.5px] text-ink-3">
-          {fact ? fact.source : "—"}
-          {fact?.asOf ? ` · checked ${fmtAsOf(fact.asOf)}` : ""}
-        </p>
-      </div>
-      <VerdictChip verdict={v} delay={0.25 + i * 0.05} />
-    </motion.div>
+    <li>
+      <button
+        type="button"
+        onClick={() => setShow((x) => !x)}
+        aria-expanded={fact ? show : undefined}
+        disabled={!fact}
+        className="group/row -mx-2 grid w-[calc(100%+1rem)] cursor-pointer grid-cols-[24px_1fr_auto] items-center gap-x-2.5 rounded-[12px] px-2 py-2 text-left transition-colors duration-200 hover:bg-raised focus-visible:bg-raised disabled:cursor-default"
+      >
+        {fact && weatherKind(fact) ? (
+          <WeatherIcon fact={fact} className="size-6 [&>svg]:size-3.5" />
+        ) : (
+          <span className="grid size-6 place-items-center rounded-full bg-sky-wash text-sky-ink"><Icon className="size-3.5" aria-hidden /></span>
+        )}
+        <span className="min-w-0">
+          <span className="block text-[14px] leading-5 text-ink"><span className="text-ink-3">{fact?.label ?? label}: </span>{fact?.value ?? fallback ?? "not listed"}</span>
+          {fact ? (
+            <span className={cn("num mt-1 h-5 items-center rounded-full bg-sky-wash px-2 font-mono text-[10.5px] text-sky-ink", show ? "inline-flex" : "hidden group-hover/row:inline-flex group-focus-visible/row:inline-flex")}>
+              {fact.source}
+              {fact.asOf ? ` · ${fmtAsOf(fact.asOf)}` : ""}
+            </span>
+          ) : null}
+        </span>
+        <VerdictChip verdict={v} size="sm" />
+      </button>
+    </li>
   );
 }
 
-function Segments({ summary }: { summary: string }) {
-  const parts = summary.split(/\s*·\s*|,\s*then\s*|\s+then\s+/i).filter(Boolean);
+function Answer({ icon: Icon, q, children, tone = "plain", fact, i }: { icon: typeof Clock; q: string; children: React.ReactNode; tone?: "ok" | "warn" | "plain" | "unknown"; fact?: Fact; i: number }) {
   return (
-    <span className="flex flex-wrap items-center gap-1">
-      {parts.map((p, i) => {
-        const c = lineColour(p);
-        const walk = /walk/i.test(p);
-        return (
-          <span key={i} className="inline-flex items-center gap-1">
-            {i ? <span className="text-ink-3" aria-hidden>›</span> : null}
-            <span className={cn("inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[12px] font-semibold", c ? "text-white" : "bg-raised text-ink-2")} style={c ? { background: c, color: c === "#FFD300" || c === "#F3A9BB" || c === "#95CDBA" ? "#15171c" : "#fff" } : undefined}>
-              {walk ? <Footprints className="size-3" aria-hidden /> : c ? <TrainFront className="size-3" aria-hidden /> : null}
-              {p}
-            </span>
-          </span>
-        );
-      })}
-    </span>
+    <motion.div {...item(i)} className="grid grid-cols-[40px_1fr] items-start gap-3 py-3">
+      <span className={cn("grid size-10 place-items-center rounded-[12px] shadow-e1", { ok: "bg-ok-bg text-ok", warn: "bg-signal-soft text-signal-ink", plain: "bg-sky-soft text-sky-ink", unknown: "bg-unknown-bg text-unknown" }[tone])}>
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <p className="flex items-center gap-2 text-[12.5px] font-semibold text-ink-3">
+          {q}
+          {fact ? <VerdictChip verdict={fact.verdict} size="sm" title={`${fact.source}${fact.asOf ? ` · checked ${fmtAsOf(fact.asOf)}` : ""}`} /> : null}
+        </p>
+        <div className="mt-0.5 text-[17px] font-semibold leading-[1.35] tracking-[-0.01em] text-ink">{children}</div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -93,17 +81,19 @@ export function PlaceDetail({
   onSend: () => void;
 }) {
   const { type, address } = splitSubtitle(card.subtitle);
-  const hours = find(card, /^open/i);
-  const isOpen = openAt(hours?.value, result.when);
-  const lines = find(card, /train|lines?$|status/i);
-  const travel = find(card, /^travel/i);
-  const weather = find(card, /weather/i);
-  const price = find(card, /price|entry|fee|£/i);
-  const access = find(card, /step-free|wheelchair|access/i);
-  const signup = find(card, /sign-up|when/i);
+  const hours = findFact(card, /^open/i);
+  const open = openAnswer(card, result.when);
+  const cost = costAnswer(card);
+  const lines = findFact(card, /train|lines?$|status/i);
+  const travel = findFact(card, /^travel/i);
+  const weather = card.facts.find((f) => weatherKind(f)) ?? findFact(card, /weather/i);
+  const price = priceFact(card);
+  const access = findFact(card, /step-free|wheelchair|access/i);
+  const signup = findFact(card, /sign-up|when/i);
   const used = new Set([hours, lines, travel, weather, price, access, signup].filter(Boolean));
   const other = card.facts.filter((f) => !used.has(f));
-  const walk = walkEstimate(card);
+  const nChecks = card.facts.length + result.unknowns.length;
+  const [checks, setChecks] = useState(false);
   const { lat, lng } = card.location;
   const osm = `https://www.openstreetmap.org/?mlat=${lat.toFixed(5)}&mlon=${lng.toFixed(5)}#map=18/${lat.toFixed(5)}/${lng.toFixed(5)}`;
   const citymapper = `https://citymapper.com/directions?endcoord=${lat.toFixed(5)}%2C${lng.toFixed(5)}&endname=${encodeURIComponent(card.name)}`;
@@ -113,134 +103,138 @@ export function PlaceDetail({
     <motion.section
       layoutId={`place-${card.id}`}
       transition={{ type: "spring", stiffness: 300, damping: 32 }}
-      className="relative overflow-hidden rounded-[20px] bg-surface ring-2 ring-ink"
+      className="relative overflow-hidden rounded-[20px] bg-surface shadow-e3 ring-1 ring-line/70"
       aria-label={`${card.name} details`}
     >
       {/* Blind header */}
-      <div className="relative overflow-hidden bg-ink px-4 pb-4 pt-3 text-white">
+      <div className="relative overflow-hidden border-b border-rule bg-gradient-to-b from-tint to-surface px-4 pb-4 pt-3 text-ink">
+        <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-signal" />
         <div className="sw-blind-grain pointer-events-none absolute inset-0 opacity-60" aria-hidden />
         <div className="relative flex items-center gap-2">
-          <button type="button" onClick={onClose} className="-ml-1.5 inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-full px-2 text-[12.5px] font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white">
+          <button type="button" onClick={onClose} className="sw-btn sw-btn-ghost -ml-1.5 min-h-9 gap-1 rounded-full px-2.5 text-[12.5px] font-semibold">
             <ArrowLeft className="size-4" aria-hidden /> All picks
           </button>
-          {example ? <span className="ml-auto rounded-full bg-hi px-2 py-0.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-ink">Example data</span> : null}
+          {example ? <span className="ml-auto rounded-full bg-likely-bg px-2 py-0.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-likely">Example data</span> : null}
         </div>
         <div className="relative mt-2 flex items-end gap-3">
-          <motion.div layoutId={`rank-${card.id}`} className={cn("grid size-14 shrink-0 place-items-center rounded-[12px] font-mono text-[28px] font-bold tracking-[-0.04em]", index === 0 ? "bg-signal" : "bg-white/10")}>
+          <motion.div layoutId={`rank-${card.id}`} className={cn("grid size-14 shrink-0 place-items-center rounded-[12px] font-mono text-[28px] font-bold tracking-[-0.04em]", index === 0 ? "bg-signal-strong text-white shadow-red" : "bg-sky-soft text-sky-ink shadow-e1")}>
             {String(index + 1).padStart(2, "0")}
           </motion.div>
           <div className="min-w-0">
-            <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-hi">{type}{card.kind === "event" ? " · event" : ""}</p>
-            <motion.h2 layoutId={`name-${card.id}`} className="text-[24px] font-bold leading-[1.08] tracking-[-0.025em]">{card.name}</motion.h2>
+            <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-signal-ink">{type}{card.kind === "event" ? " · event" : ""}</p>
+            <motion.h2 layoutId={`name-${card.id}`} className="text-[24px] font-bold leading-[1.08] tracking-[-0.025em] text-ink">{card.name}</motion.h2>
           </div>
         </div>
-        {address ? <motion.p {...item(0)} className="relative mt-2 text-[13px] text-white/75">{address}</motion.p> : null}
-        <motion.p {...item(1)} className="num relative mt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-white/60">For {fmtWhen(result.when)}</motion.p>
+        {address ? <motion.p {...item(0)} className="relative mt-2 text-[13px] text-ink-2">{address}</motion.p> : null}
+        <motion.p {...item(1)} className="num relative mt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-3">For {fmtWhen(result.when)}</motion.p>
       </div>
 
       <div className="px-4 pb-4">
-        {/* Open-at-time banner */}
-        <motion.div {...item(i++)} className={cn("-mx-4 flex items-center gap-2 px-4 py-2.5 text-[13.5px] font-semibold", isOpen === true ? "bg-ok-bg text-ok" : isOpen === false ? "bg-signal-soft text-signal-ink" : "bg-unknown-bg text-unknown")}>
-          <Clock className="size-4" aria-hidden />
-          {isOpen === true ? `Open at ${fmtTime(result.when)}` : isOpen === false ? `Probably closed at ${fmtTime(result.when)}` : `Can't tell if it's open at ${fmtTime(result.when)}`}
-          <span className="ml-auto font-mono text-[10.5px] uppercase tracking-[0.08em] opacity-80">{hours ? hours.verdict : "unknown"}</span>
-        </motion.div>
-
-        {card.why ? <motion.p {...item(i++)} className="mt-3 text-[15px] font-medium leading-[22px] text-ink">“{card.why}”</motion.p> : null}
-
-        {/* Journeys */}
-        <motion.h3 {...item(i++)} className="mt-4 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">Getting there</motion.h3>
-        <motion.div {...item(i++)} className="mt-2 rounded-[14px] bg-raised p-3">
-          {card.legs.length > 1 ? <MiniBars card={card} big delay={0.2} /> : null}
-          <ol className={cn("flex flex-col gap-3", card.legs.length > 1 && "mt-3 border-t border-line pt-3")}>
-            {card.legs.map((l, k) => (
-              <li key={l.who + k} className="grid grid-cols-[auto_1fr] gap-x-3">
-                <span className="mt-0.5 flex flex-col items-center">
-                  <span className="size-3 rounded-full ring-2 ring-white" style={{ background: ROUTE[l.who] }} />
-                  <span className="mt-1 w-0.5 flex-1 rounded-full" style={{ background: ROUTE[l.who], opacity: 0.35 }} />
-                </span>
-                <div className="min-w-0">
-                  <p className="flex items-baseline gap-2">
-                    <span className="text-[13px] font-semibold text-ink">{WHO[l.who]}</span>
-                    <span className="num font-mono text-[20px] font-bold leading-none tracking-[-0.02em] text-ink"><CountUp value={l.minutes} delay={0.3 + k * 0.1} /></span>
-                    <span className="text-[12px] text-ink-3">min{l.who === "them" ? " · from their rounded area" : ""}</span>
-                  </p>
-                  <div className="mt-1.5"><Segments summary={l.summary} /></div>
-                </div>
-              </li>
-            ))}
-          </ol>
-          {walk ? (
-            <p className="mt-3 flex items-center gap-1.5 border-t border-line pt-2.5 text-[12.5px] text-ink-2">
-              <Footprints className="size-3.5" aria-hidden /> Last stretch on foot: ~{walk.min} min{walk.est ? " (our estimate, not TfL)" : ""}
-            </p>
-          ) : null}
-        </motion.div>
-
-        {/* Facts */}
-        <motion.h3 {...item(i++)} className="mt-4 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">What we checked</motion.h3>
-        <div className="mt-1 divide-y divide-rule">
-          <Row icon={Clock} label="Opening hours" fact={hours} fallback="Hours not in our sources" i={i++} />
-          {signup ? <Row icon={Clock} label="Sign-up" fact={signup} i={i++} /> : null}
-          <Row icon={TrainFront} label="Line status" fact={lines ?? travel} fallback="Not checked" i={i++} />
-          {lines && travel ? <Row icon={Navigation} label="Travel" fact={travel} i={i++} /> : null}
-          <Row icon={Banknote} label="Price / entry" fact={price} fallback="No prices in our sources" i={i++} />
-          <Row icon={Accessibility} label="Wheelchair / step-free" fact={access} fallback="Not tagged in OSM" i={i++} />
-          <Row icon={CloudSun} label="Weather" fact={weather} fallback="No forecast" i={i++} />
-          {other.map((f) => (
-            <Row key={f.label} icon={HelpCircle} label={f.label} fact={f} i={i++} />
-          ))}
-          <motion.div {...item(i++)} className="grid grid-cols-[28px_1fr] items-start gap-x-2.5 py-2.5">
-            <span className="grid size-7 place-items-center rounded-full bg-raised text-ink"><Globe className="size-3.5" aria-hidden /></span>
-            <div className="min-w-0 text-[13.5px]">
-              {card.url ? (
-                <a href={card.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-ink underline decoration-hi decoration-2 underline-offset-4 hover:decoration-signal">
-                  {card.url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "").slice(0, 42)} <ArrowUpRight className="size-3.5" aria-hidden />
-                </a>
-              ) : (
-                <span className="text-ink-2">No website in our sources</span>
-              )}
-              <p className="mt-0.5 flex items-center gap-1 text-[12.5px] text-ink-3"><Phone className="size-3" aria-hidden /> Phone: not in our sources</p>
-            </div>
-          </motion.div>
-        </div>
-
-        {result.unknowns.length ? (
-          <motion.section {...item(i++)} aria-label="Couldn't check" className="mt-3 rounded-[14px] border border-dashed border-control p-3">
-            <h3 className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">Couldn&apos;t check</h3>
-            <ul className="mt-1.5 flex flex-col gap-1">
-              {result.unknowns.map((u) => (
-                <li key={u} className="flex items-start gap-2 text-[13px] leading-5 text-ink-2">
-                  <HelpCircle className="mt-0.5 size-3.5 shrink-0 text-unknown" aria-hidden /> {u}
+        {/* Three plain answers */}
+        <div className="divide-y divide-rule">
+          <Answer i={i++} icon={Clock} q="Open?" tone={open.state === true ? "ok" : open.state === false ? "warn" : "unknown"} fact={open.fact}>
+            {open.text}
+            {open.sub ? <p className="text-[13px] font-medium text-ink-3">{open.sub}</p> : null}
+          </Answer>
+          <Answer i={i++} icon={Route} q="How to get there?">
+            <ul className="flex flex-col gap-2">
+              {card.legs.map((l, k) => (
+                <li key={l.who + k} className="grid grid-cols-[auto_1fr] gap-x-2 text-[15px] font-medium text-ink-2">
+                  <span className="mt-[9px] size-2.5 rounded-full ring-2 ring-white" style={{ background: ROUTE[l.who] }} aria-hidden />
+                  <span>
+                    <span className="font-semibold text-ink">{l.who === "you" ? "You" : "Them"}: </span>
+                    <JourneySentence leg={l} />
+                    {l.who === "them" && result.them ? <span className="block text-[12px] font-normal text-ink-3">from around {result.them.area} (rounded)</span> : null}
+                  </span>
                 </li>
               ))}
             </ul>
-          </motion.section>
+          </Answer>
+          <Answer i={i++} icon={Banknote} q="Cost?" tone={cost.fact && !/not listed/i.test(cost.text) ? "plain" : "unknown"} fact={cost.fact}>
+            {cost.text}
+            {/not listed/i.test(cost.text) ? <p className="text-[13px] font-medium text-ink-3">Check before you go</p> : null}
+          </Answer>
+        </div>
+
+        {weather ? (
+          <motion.p {...item(i++)} className="mt-1 flex items-center gap-2 rounded-[12px] bg-raised px-2.5 py-2 text-[14px] text-ink">
+            <WeatherIcon fact={weather} className="size-7 [&>svg]:size-4" />
+            <span className="min-w-0">{weather.value}</span>
+          </motion.p>
         ) : null}
 
-        <motion.div {...item(i++)} className="mt-3">
-          <h3 className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">Sources</h3>
-          <ul className="mt-1.5 flex flex-wrap gap-1.5">
-            {result.sources.map((s) => (
-              <li key={s.name} className="num inline-flex h-6 items-center gap-1 rounded-full bg-raised px-2 font-mono text-[10.5px] text-ink-2">
-                {s.name} <span className="text-ink-3">{fmtAsOf(s.asOf)}</span>
-              </li>
-            ))}
-          </ul>
+        {card.why ? <motion.p {...item(i++)} className="mt-3 text-[14.5px] leading-[21px] text-ink-2">“{card.why}”</motion.p> : null}
+
+        {/* Everything else, closed by default */}
+        <motion.div {...item(i++)} className="mt-3 overflow-hidden rounded-[14px] bg-raised ring-1 ring-line/70">
+          <button type="button" onClick={() => setChecks((o) => !o)} aria-expanded={checks} className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3.5 text-left text-[14px] font-semibold text-ink transition-colors duration-200 hover:bg-sky-wash active:bg-sky-soft">
+            <ListChecks className="size-4 text-sky-ink" aria-hidden />
+            {checks ? "Hide the checks" : `Show the checks (${nChecks})`}
+            <ChevronDown className={cn("ml-auto size-4 text-ink-3 transition-transform duration-200", checks && "rotate-180")} aria-hidden />
+          </button>
+          <AnimatePresence initial={false}>
+            {checks ? (
+              <motion.div key="checks" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease }} className="overflow-hidden">
+                <div className="border-t border-line bg-surface px-3.5 pb-3 pt-1">
+                  <ul className="flex flex-col">
+                    <Row icon={Clock} label="Opening hours" fact={hours} fallback="not listed" />
+                    {signup ? <Row icon={Clock} label="Sign-up" fact={signup} /> : null}
+                    <Row icon={TrainFront} label="Trains" fact={lines ?? travel} fallback="not checked" />
+                    {lines && travel ? <Row icon={Navigation} label="Travel" fact={travel} /> : null}
+                    <Row icon={Banknote} label="Price" fact={price} fallback="not listed" />
+                    <Row icon={Accessibility} label="Step-free" fact={access} fallback="not tagged" />
+                    {weather ? <Row icon={CloudSun} label="Weather" fact={weather} /> : null}
+                    {other.map((f) => (
+                      <Row key={f.label} icon={HelpCircle} label={f.label} fact={f} />
+                    ))}
+                  </ul>
+                  {card.url ? (
+                    <a href={card.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-[13.5px] font-semibold text-ink underline decoration-hi decoration-2 underline-offset-4 hover:decoration-signal">
+                      <Globe className="size-3.5" aria-hidden /> {card.url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "").slice(0, 42)} <ArrowUpRight className="size-3.5" aria-hidden />
+                    </a>
+                  ) : null}
+
+                  {result.unknowns.length ? (
+                    <div className="mt-3">
+                      <h3 className="text-[12.5px] font-semibold text-ink-3">Not known</h3>
+                      <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                        {[...new Set(result.unknowns.map(shortUnknown))].map((u) => (
+                          <li key={u} className="inline-flex h-7 items-center gap-1 rounded-full bg-unknown-bg px-2.5 text-[12.5px] text-unknown">
+                            <HelpCircle className="size-3" aria-hidden /> {u}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-3">
+                    <h3 className="text-[12.5px] font-semibold text-ink-3">Sources</h3>
+                    <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                      {result.sources.map((s) => (
+                        <li key={s.name} className="num inline-flex h-6 items-center gap-1 rounded-full bg-raised px-2 font-mono text-[10.5px] text-ink-2">
+                          {s.name} <span className="text-ink-3">{fmtAsOf(s.asOf)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </motion.div>
 
         {/* Actions */}
         <motion.div {...item(i++)} className="mt-4 grid grid-cols-2 gap-2">
-          <motion.button type="button" whileTap={{ scale: 0.97 }} onClick={onSend} className="col-span-2 inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-signal px-4 text-[15px] font-semibold text-white shadow-[0_6px_0_#8f170f] transition-transform hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_#8f170f]">
+          <button type="button" onClick={onSend} className="sw-btn sw-btn-primary col-span-2 min-h-12 rounded-[12px] px-4 text-[15px] font-semibold">
             <Send className="size-4" aria-hidden /> Send plan (opens a draft)
-          </motion.button>
-          <a href={citymapper} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[12px] border border-line px-3 text-[13.5px] font-semibold text-ink transition-colors hover:border-ink">
+          </button>
+          <a href={citymapper} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3 text-[13.5px] font-semibold">
             <Navigation className="size-4" aria-hidden /> Citymapper
           </a>
-          <a href={gmapsDirections(lat, lng)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[12px] border border-line px-3 text-[13.5px] font-semibold text-ink transition-colors hover:border-ink">
+          <a href={gmapsDirections(lat, lng)} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3 text-[13.5px] font-semibold">
             <ExternalLink className="size-4" aria-hidden /> Transit directions
           </a>
-          <a href={osm} target="_blank" rel="noopener noreferrer" className="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[12px] bg-raised px-3 text-[13.5px] font-semibold text-ink transition-colors hover:bg-sunk">
+          <a href={osm} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-ghost col-span-2 min-h-11 gap-1.5 rounded-[12px] bg-raised px-3 text-[13.5px] font-semibold">
             <MapIcon className="size-4" aria-hidden /> Open in OpenStreetMap
           </a>
         </motion.div>

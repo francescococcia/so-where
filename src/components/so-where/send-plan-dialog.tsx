@@ -34,7 +34,7 @@ export function SendPlanDialog({ open, onOpenChange, draft }: { open: boolean; o
         {open ? (
           <Dialog.Portal forceMount>
             <Dialog.Overlay asChild forceMount>
-              <motion.div className="fixed inset-0 z-[90] bg-ink/40" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+              <motion.div className="fixed inset-0 z-[90] bg-[rgba(74,52,30,0.22)] backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
             </Dialog.Overlay>
             <Dialog.Content forceMount aria-describedby="sw-draft-note" className="fixed inset-0 z-[91] flex items-end justify-center p-4 sm:items-center" onPointerDown={(e) => { if (e.target === e.currentTarget) onOpenChange(false); }}>
               <motion.div
@@ -42,11 +42,11 @@ export function SendPlanDialog({ open, onOpenChange, draft }: { open: boolean; o
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 12, scale: 0.98 }}
                 transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                className="w-full max-w-[460px] rounded-[20px] bg-surface p-5 shadow-[var(--sw-shadow-float)]"
+                className="w-full max-w-[460px] rounded-[22px] bg-surface p-5 shadow-e4 ring-1 ring-line/60"
               >
                 <div className="flex items-start justify-between gap-4">
                   <Dialog.Title className="text-[20px] font-semibold tracking-[-0.01em]">Send plan</Dialog.Title>
-                  <Dialog.Close className="-m-2 grid size-11 cursor-pointer place-items-center rounded-full text-ink-2 hover:bg-raised hover:text-ink" aria-label="Close">
+                  <Dialog.Close className="sw-btn sw-btn-ghost -m-2 size-11 rounded-full" aria-label="Close">
                     <X className="size-5" aria-hidden />
                   </Dialog.Close>
                 </div>
@@ -60,11 +60,11 @@ export function SendPlanDialog({ open, onOpenChange, draft }: { open: boolean; o
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   rows={5}
-                  className="mt-4 w-full resize-none rounded-[14px] border border-line bg-raised p-3.5 text-[16px] leading-6 text-ink focus:border-ink focus:outline-none"
+                  className="sw-field mt-4 w-full resize-none p-3.5 text-[16px] leading-6 text-ink caret-sky focus:bg-surface focus:shadow-[0_0_0_1.5px_var(--sw-sky),var(--sw-shadow-focus)] focus:outline-none"
                 />
                 <div className="mt-4 flex justify-end gap-2">
-                  <Dialog.Close className="min-h-11 cursor-pointer rounded-[10px] px-4 text-[15px] font-medium text-ink-2 hover:text-ink">Close</Dialog.Close>
-                  <motion.button type="button" onClick={copy} whileTap={{ scale: 0.97 }} className="inline-flex min-h-11 min-w-[132px] cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-ink px-4 text-[15px] font-semibold text-white">
+                  <Dialog.Close className="sw-btn sw-btn-ghost min-h-11 rounded-[12px] px-4 text-[15px] font-medium">Close</Dialog.Close>
+                  <motion.button type="button" onClick={copy} whileTap={{ scale: 0.96 }} className="sw-btn sw-btn-primary min-h-11 min-w-[132px] rounded-[12px] px-4 text-[15px] font-semibold transition-[box-shadow,background-color,color]">
                     <AnimatePresence mode="popLayout" initial={false}>
                       {copied ? (
                         <motion.span key="ok" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="inline-flex items-center gap-2">
