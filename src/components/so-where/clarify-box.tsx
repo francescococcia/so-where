@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { ArrowRight, MessageCircleQuestion } from "lucide-react";
+import { ArrowRight, LocateFixed, MessageCircleQuestion } from "lucide-react";
 import type { Clarify } from "@/lib/plan-types";
 
-export function ClarifyBox({ clarify, onAnswer }: { clarify: Clarify; onAnswer: (answer: string) => void }) {
+export function ClarifyBox({ clarify, onAnswer, onLocate }: { clarify: Clarify; onAnswer: (answer: string) => void; onLocate?: () => void }) {
   const [text, setText] = useState("");
   const send = (a: string) => a.trim() && onAnswer(a.trim());
   return (
@@ -14,12 +14,17 @@ export function ClarifyBox({ clarify, onAnswer }: { clarify: Clarify; onAnswer: 
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       aria-label="One question first"
-      className="rounded-[14px] border border-line bg-surface p-4"
+      className="rounded-[16px] bg-surface p-4 ring-2 ring-ink"
     >
       <div className="flex items-start gap-2.5">
         <MessageCircleQuestion className="mt-0.5 size-5 shrink-0 text-ink" aria-hidden />
         <h2 className="text-[17px] font-semibold leading-6 tracking-[-0.01em]">{clarify.question}</h2>
       </div>
+      {onLocate ? (
+        <motion.button type="button" whileTap={{ scale: 0.96 }} onClick={onLocate} className="mt-3 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-hi px-4 text-[14px] font-semibold text-ink">
+          <LocateFixed className="size-4" aria-hidden /> Use my location, then ask again
+        </motion.button>
+      ) : null}
       {clarify.suggestions?.length ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {clarify.suggestions.map((s, i) => (

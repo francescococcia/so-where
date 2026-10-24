@@ -7,23 +7,28 @@ import type { AgentStep } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { fmtSeconds } from "./format";
 
-function StepIcon({ status }: { status: AgentStep["status"] }) {
+const ease = [0.22, 1, 0.36, 1] as const;
+
+function Node({ status }: { status: AgentStep["status"] }) {
   return (
-    <span className="relative grid size-5 shrink-0 place-items-center" aria-hidden>
+    <span className="relative z-[1] grid size-6 shrink-0 place-items-center" aria-hidden>
       <AnimatePresence mode="popLayout" initial={false}>
         {status === "running" ? (
-          <motion.span key="run" className="block size-4 rounded-full border-2 border-control border-t-ink" animate={{ rotate: 360 }} exit={{ opacity: 0, scale: 0.5 }} transition={{ rotate: { repeat: Infinity, duration: 0.8, ease: "linear" } }} />
+          <motion.span key="run" className="relative grid size-6 place-items-center rounded-full bg-ink" exit={{ opacity: 0, scale: 0.4 }}>
+            <span className="absolute inset-0 animate-ping rounded-full bg-signal/50 motion-reduce:hidden" />
+            <motion.span className="block size-3.5 rounded-full border-2 border-white/30 border-t-hi" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.7, ease: "linear" }} />
+          </motion.span>
         ) : status === "done" ? (
-          <motion.span key="done" initial={{ scale: 0.3, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 600, damping: 22 }} className="grid size-5 place-items-center rounded-full bg-ok-bg text-ok">
-            <Check className="size-3" strokeWidth={3} />
+          <motion.span key="done" initial={{ scale: 0.2, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 600, damping: 20 }} className="grid size-6 place-items-center rounded-full bg-ok text-white">
+            <Check className="size-3.5" strokeWidth={3} />
           </motion.span>
         ) : status === "failed" ? (
-          <motion.span key="fail" initial={{ scale: 0.3, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 600, damping: 22 }} className="grid size-5 place-items-center rounded-full bg-signal-soft text-signal-ink">
-            <X className="size-3" strokeWidth={3} />
+          <motion.span key="fail" initial={{ scale: 0.2 }} animate={{ scale: [1.3, 1] }} transition={{ duration: 0.35 }} className="grid size-6 place-items-center rounded-full bg-signal text-white">
+            <X className="size-3.5" strokeWidth={3} />
           </motion.span>
         ) : (
-          <motion.span key="skip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid size-5 place-items-center rounded-full bg-unknown-bg text-unknown">
-            <Minus className="size-3" strokeWidth={3} />
+          <motion.span key="skip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid size-6 place-items-center rounded-full bg-sunk text-unknown">
+            <Minus className="size-3.5" strokeWidth={3} />
           </motion.span>
         )}
       </AnimatePresence>
@@ -31,26 +36,33 @@ function StepIcon({ status }: { status: AgentStep["status"] }) {
   );
 }
 
-function Rows({ steps }: { steps: AgentStep[] }) {
+function Timeline({ steps }: { steps: AgentStep[] }) {
+  const doneN = steps.filter((s) => s.status !== "running").length;
+  const pct = steps.length ? doneN / steps.length : 0;
   return (
-    <ol className="flex flex-col">
+    <ol className="relative flex flex-col">
+      {/* rail */}
+      <span className="absolute bottom-3 left-[11px] top-3 w-0.5 rounded-full bg-line" aria-hidden />
+      <motion.span className="absolute left-[11px] top-3 w-0.5 origin-top rounded-full bg-ink" style={{ height: "calc(100% - 24px)" }} initial={{ scaleY: 0 }} animate={{ scaleY: pct }} transition={{ duration: 0.5, ease }} aria-hidden />
       <AnimatePresence initial={false}>
         {steps.map((s) => (
-          <motion.li
-            key={s.id}
-            layout="position"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            className="flex items-start gap-2.5 py-1.5"
-          >
-            <StepIcon status={s.status} />
-            <div className="min-w-0 flex-1">
+          <motion.li key={s.id} layout="position" initial={{ opacity: 0, x: -14, filter: "blur(4px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} transition={{ duration: 0.35, ease }} className="flex items-start gap-3 py-1.5">
+            <Node status={s.status} />
+            <div className="min-w-0 flex-1 pt-0.5">
               <div className="flex items-baseline justify-between gap-3">
-                <span className={cn("text-[13.5px] font-medium leading-5", s.status === "running" ? "text-ink" : "text-ink-2")}>{s.label}</span>
-                {s.source && s.source !== "—" ? <span className="shrink-0 font-mono text-[11px] text-ink-3">{s.source}</span> : null}
+                <span className={cn("text-[13.5px] font-semibold leading-5", s.status === "running" ? "sw-shimmer text-ink" : s.status === "failed" ? "text-signal-ink" : "text-ink")}>{s.label}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {s.source && s.source !== "—" ? <span className="rounded bg-sunk px-1.5 py-px font-mono text-[10px] font-medium text-ink-2">{s.source}</span> : null}
+                  {s.ms != null && s.status !== "running" ? <span className="num font-mono text-[10px] text-ink-3">{s.ms} ms</span> : null}
+                </span>
               </div>
-              {s.detail ? <p className="text-[12.5px] leading-[18px] text-ink-3">{s.detail}</p> : null}
+              <AnimatePresence initial={false}>
+                {s.detail ? (
+                  <motion.p key={s.detail} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} transition={{ duration: 0.3, ease }} className="overflow-hidden text-[12.5px] leading-[18px] text-ink-3">
+                    {s.detail}
+                  </motion.p>
+                ) : null}
+              </AnimatePresence>
             </div>
           </motion.li>
         ))}
@@ -59,7 +71,18 @@ function Rows({ steps }: { steps: AgentStep[] }) {
   );
 }
 
-/** Live rows while the planner runs; a one-line summary once it's done. */
+function Ticker({ running }: { running: boolean }) {
+  const [t0] = useState(() => performance.now());
+  const [ms, setMs] = useState(0);
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setMs(performance.now() - t0), 100);
+    return () => clearInterval(id);
+  }, [running, t0]);
+  return <span className="num font-mono">{(ms / 1000).toFixed(1)} s</span>;
+}
+
+/** The agent at work: a live timeline while it runs, a compact replayable strip once done. */
 export function AgentSteps({ steps, finished, elapsedMs }: { steps: AgentStep[]; finished: boolean; elapsedMs: number }) {
   const [open, setOpen] = useState(!finished);
   useEffect(() => setOpen(!finished), [finished]);
@@ -70,34 +93,40 @@ export function AgentSteps({ steps, finished, elapsedMs }: { steps: AgentStep[];
   const ms = elapsedMs || steps.reduce((a, s) => a + (s.ms ?? 0), 0);
 
   return (
-    <section aria-label="What the planner checked" aria-live="polite" className="rounded-[14px] border border-line bg-raised">
+    <motion.section layout aria-label="What the planner checked" aria-live="polite" className={cn("overflow-hidden rounded-[16px]", finished ? "bg-raised" : "bg-surface ring-2 ring-ink")}>
       {finished ? (
-        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3.5 text-left text-[13px] text-ink-2 transition-colors hover:text-ink">
-          <span className="grid size-5 place-items-center rounded-full bg-ok-bg text-ok"><Check className="size-3" strokeWidth={3} /></span>
-          <span className="num font-medium">
-            {checks} checks · {fmtSeconds(ms)}
-            {failed ? <span className="text-ink-3"> · {failed} couldn&apos;t</span> : null}
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-11 w-full cursor-pointer items-center gap-2.5 px-3.5 text-left text-[13px] text-ink-2 transition-colors hover:text-ink">
+          <span className="flex items-center gap-[3px]" aria-hidden>
+            {steps.map((s, k) => (
+              <motion.span key={s.id} initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ delay: k * 0.04 }} className={cn("h-3.5 w-1.5 rounded-full", s.status === "done" ? "bg-ok" : s.status === "failed" ? "bg-signal" : "bg-control")} />
+            ))}
           </span>
-          <ChevronDown className={cn("ml-auto size-4 transition-transform duration-200", open && "rotate-180")} aria-hidden />
+          <span className="num font-semibold text-ink">
+            {checks} checks · {fmtSeconds(ms)}
+            {failed ? <span className="font-medium text-ink-3"> · {failed} couldn&apos;t</span> : null}
+          </span>
+          <span className="ml-auto text-[12px] font-medium text-ink-3">{open ? "Hide" : "How we got here"}</span>
+          <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} aria-hidden />
         </button>
       ) : (
-        <div className="flex items-center gap-2 px-3.5 pt-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+        <div className="flex items-center gap-2 bg-ink px-3.5 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-white">
           <span className="relative flex size-2">
-            <span className="absolute inset-0 animate-ping rounded-full bg-signal opacity-60 motion-reduce:hidden" />
-            <span className="relative size-2 rounded-full bg-signal" />
+            <span className="absolute inset-0 animate-ping rounded-full bg-hi opacity-70 motion-reduce:hidden" />
+            <span className="relative size-2 rounded-full bg-hi" />
           </span>
-          Checking
+          Agent working
+          <span className="ml-auto text-white/70"><Ticker running={!finished} /></span>
         </div>
       )}
       <AnimatePresence initial={false}>
         {open ? (
-          <motion.div key="rows" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
-            <div className="px-3.5 pb-2.5 pt-1">
-              <Rows steps={steps} />
+          <motion.div key="rows" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease }} className="overflow-hidden">
+            <div className="px-3.5 pb-3 pt-2">
+              <Timeline steps={steps} />
             </div>
           </motion.div>
         ) : null}
       </AnimatePresence>
-    </section>
+    </motion.section>
   );
 }

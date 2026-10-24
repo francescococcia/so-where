@@ -2,14 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, CalendarDays, Check, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Navigation, PencilLine, Send } from "lucide-react";
+import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
+import { ArrowRight, CalendarDays, Check, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, LocateFixed, Loader2, Navigation, PencilLine, Send, X } from "lucide-react";
 import type { Fact, PlanResultWithAgent } from "@/lib/plan-types";
 import type { FixtureId } from "@/lib/plan-fixture";
 import { cn } from "@/lib/utils";
 import { AgentSteps } from "./agent-steps";
 import { ClarifyBox } from "./clarify-box";
 import { PlanCard } from "./plan-card";
+import { PlaceDetail } from "./place-detail";
+import { FollowUps } from "./follow-ups";
 import { SendPlanDialog } from "./send-plan-dialog";
 import { Mark } from "./mark";
 import { VerdictChip } from "./verdict-chip";
@@ -34,19 +36,19 @@ const INTENT_LABEL = { meet_halfway: "Meet halfway", near_me: "Near you" } as co
 function Header({ example, testedN, className }: { example: boolean; testedN: number | null; className?: string }) {
   return (
     <header className={cn("flex items-center gap-2.5", className)}>
-      <Mark />
-      <span className="text-[19px] font-bold tracking-[-0.02em] text-ink">So where?</span>
-      <span className="text-[13px] text-ink-3">London</span>
-      <span className="ml-auto flex items-center gap-1.5">
+      <span className="shrink-0"><Mark /></span>
+      <span className="shrink-0 whitespace-nowrap text-[19px] font-bold tracking-[-0.02em] text-ink">So where?</span>
+      <span className="hidden text-[13px] text-ink-3 2xl:inline">London</span>
+      <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
         {testedN != null ? (
           <span className="num inline-flex h-6 items-center gap-1 rounded-full bg-ok-bg px-2 text-[12px] font-semibold text-ok" title="From evals/last-run.json">
-            <Check className="size-3.5" strokeWidth={2.6} aria-hidden /> Tested on {testedN} asks
+            <Check className="size-3.5" strokeWidth={2.6} aria-hidden /> <span className="max-sm:hidden">Tested on</span> {testedN} asks
           </span>
         ) : null}
         <AnimatePresence>
           {example ? (
             <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="inline-flex h-6 items-center gap-1 rounded-full bg-likely-bg px-2 text-[12px] font-semibold text-likely">
-              <FlaskConical className="size-3.5" aria-hidden /> Example data
+              <FlaskConical className="size-3.5" aria-hidden /> Example<span className="max-sm:hidden"> data</span>
             </motion.span>
           ) : null}
         </AnimatePresence>
@@ -78,8 +80,8 @@ function LiveStrip({ facts }: { facts: Fact[] }) {
               <span className={cn("absolute inset-0 animate-ping rounded-full opacity-50 [animation-duration:2.4s] motion-reduce:hidden", f.verdict === "forecast" ? "bg-fc" : "bg-ok")} />
               <span className={cn("relative size-2.5 rounded-full", f.verdict === "forecast" ? "bg-fc" : "bg-ok")} />
             </span>
-            <span className="font-medium text-ink">{f.value}</span>
-            <span className="num font-mono text-[11px] text-ink-3">
+            <span className="max-w-[190px] truncate sm:max-w-[300px] font-medium text-ink" title={f.value}>{f.value}</span>
+            <span className="num shrink-0 whitespace-nowrap font-mono text-[11px] text-ink-3">
               {f.source.split(" · ")[0]}
               {f.asOf ? ` ${fmtAsOf(f.asOf)}` : ""}
             </span>
@@ -145,13 +147,13 @@ function HowWeAnswer() {
 function Blind({ result }: { result: PlanResultWithAgent }) {
   const words = result.headline.split(" ");
   return (
-    <div className="rounded-[14px] bg-ink px-4 pb-4 pt-3 text-white">
+    <div className="sw-blind relative overflow-hidden rounded-[16px] bg-ink px-4 pb-4 pt-3 text-white [perspective:600px]">
       <p className="num font-mono text-[11.5px] font-medium uppercase tracking-[0.08em] text-hi">
         {fmtWhen(result.when)} · {INTENT_LABEL[result.intent] ?? result.intent}
       </p>
-      <h2 className="mt-1.5 text-[23px] font-bold leading-[1.15] tracking-[-0.02em] text-balance">
+      <h2 className="relative mt-1.5 text-[24px] font-bold leading-[1.15] tracking-[-0.02em] text-balance">
         {words.map((w, i) => (
-          <motion.span key={i + w} className="inline-block" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 + i * 0.03, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
+          <motion.span key={i + w} className="inline-block origin-[50%_0%]" initial={{ opacity: 0, rotateX: -95, y: -4 }} animate={{ opacity: 1, rotateX: 0, y: 0 }} transition={{ delay: 0.08 + i * 0.045, type: "spring", stiffness: 380, damping: 22 }}>
             {w}
             {i < words.length - 1 ? "\u00a0" : ""}
           </motion.span>
@@ -167,6 +169,10 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
   const [query, setQuery] = useState("");
   const [activeChip, setActiveChip] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [you, setYou] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState<"idle" | "busy" | "denied">("idle");
   const [sendOpen, setSendOpen] = useState(false);
   const [padding, setPadding] = useState<MapPadding>({ top: 90, right: 80, bottom: 90, left: 500 });
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -196,7 +202,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
     }
     const onResize = () => {
       const wide = window.innerWidth >= 1024;
-      setPadding(wide ? { top: 110, right: 90, bottom: 90, left: 500 } : { top: 60, right: 40, bottom: 40, left: 40 });
+      setPadding(wide ? { top: 110, right: 90, bottom: 90, left: 500 } : { top: 110, right: 56, bottom: 36, left: 36 });
     };
     onResize();
     window.addEventListener("resize", onResize);
@@ -205,21 +211,56 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
 
   useEffect(() => {
     setSelectedId(result?.cards[0]?.id ?? null);
+    setDetailId(null);
   }, [result]);
 
   const ask = useCallback(
     (q: string) => {
       const text = q.trim();
       if (!text) return;
-      submit(text);
+      submit(text, undefined, you ?? undefined);
     },
-    [submit]
+    [submit, you]
   );
 
-  const select = useCallback((id: string) => {
+  const locate = useCallback(() => {
+    if (you) {
+      setYou(null);
+      return;
+    }
+    if (!("geolocation" in navigator)) return setLocating("denied");
+    setLocating("busy");
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        // Rounded to ~100 m before it leaves this function; sent with the ask, never stored.
+        const r = (n: number) => Math.round(n * 1000) / 1000;
+        setYou({ lat: r(p.coords.latitude), lng: r(p.coords.longitude) });
+        setLocating("idle");
+      },
+      () => setLocating("denied"),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    );
+  }, [you]);
+
+  const refine = useCallback(
+    (extra: string) => {
+      const base = state.query || query;
+      if (!base) return;
+      const next = `${base.replace(/\s*\(refine:.*\)$/i, "")} (refine: ${extra})`;
+      setQuery(next);
+      submit(next, undefined, you ?? undefined);
+      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [state.query, query, submit, you]
+  );
+
+  const openDetail = useCallback((id: string) => {
     setSelectedId(id);
-    requestAnimationFrame(() => cardRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    setDetailId(id);
+    requestAnimationFrame(() => cardRefs.current.get("__results")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }, []);
+
+  const select = useCallback((id: string) => openDetail(id), [openDetail]);
 
   const change = () => {
     scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
@@ -229,6 +270,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
   };
 
   const selected = result?.cards.find((c) => c.id === selectedId) ?? result?.cards[0];
+  const detail = result?.cards.find((c) => c.id === detailId) ?? null;
   const finished = status === "result" || status === "clarify";
 
   return (
@@ -238,14 +280,14 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
 
         {/* Map: on top on phones, full-bleed behind the panel on desktop */}
         <div className="relative h-[46svh] min-h-[300px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto">
-          <PlanMap result={result} selectedId={selectedId} onSelect={select} padding={padding} reduced={reduced} />
+          <PlanMap result={result} selectedId={selectedId} hoverId={hoverId} focusId={detailId} scanning={status === "running"} onSelect={select} onHover={setHoverId} padding={padding} reduced={reduced} />
           <div className="pointer-events-none absolute right-3 top-3 z-10 lg:right-4 lg:top-4">
             <LiveStrip facts={liveFacts(result, selectedId)} />
           </div>
           {state.example ? (
             <div className="pointer-events-none absolute bottom-4 left-[476px] z-10 hidden lg:block">
               <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-likely-bg px-2.5 text-[12px] font-semibold text-likely shadow-[var(--sw-shadow-float)]">
-                <FlaskConical className="size-3.5" aria-hidden /> Example data · not live
+                <FlaskConical className="size-3.5" aria-hidden /> Example<span className="max-sm:hidden"> data</span> · not live
               </span>
             </div>
           ) : null}
@@ -319,6 +361,23 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                   {status === "running" ? <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden /> : <ArrowRight className="size-5" aria-hidden />}
                 </motion.button>
               </div>
+              <div className="mt-2 flex items-center gap-2">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.95 }}
+                  onClick={locate}
+                  aria-pressed={!!you}
+                  className={cn(
+                    "inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold transition-colors max-lg:min-h-11",
+                    you ? "bg-hi text-ink" : "bg-raised text-ink-2 hover:bg-sunk hover:text-ink"
+                  )}
+                >
+                  {locating === "busy" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <LocateFixed className="size-3.5" aria-hidden />}
+                  {you ? "Using your location · ~100 m" : "Use my location"}
+                  {you ? <X className="size-3.5" aria-label="Stop using location" /> : null}
+                </motion.button>
+                <span className="text-[11.5px] leading-4 text-ink-3">{locating === "denied" ? "Location blocked: name a station instead." : you ? "Sent with your ask only, never stored." : "Skips the “where are you?” question."}</span>
+              </div>
             </form>
 
             {status === "idle" ? <HowWeAnswer /> : null}
@@ -337,25 +396,35 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                 </p>
               ) : null}
 
-              {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={(answer) => submit(answer, { query: state.query, answer })} /> : null}
+              {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={(answer) => submit(answer, { query: state.query, answer }, you ?? undefined)} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
 
               {status === "result" && result ? (
                 <motion.div key={result.headline} className="flex flex-col gap-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                   <Blind result={result} />
                   <Filters f={result.filters} />
 
-                  <div className="flex flex-col gap-2.5">
-                    {result.cards.slice(0, 3).map((c, i) => (
-                      <div key={c.id} ref={(n) => { if (n) cardRefs.current.set(c.id, n); else cardRefs.current.delete(c.id); }} className="scroll-mt-4">
-                        <PlanCard card={c} index={i} selected={c.id === selected?.id} onSelect={() => setSelectedId(c.id)} />
-                      </div>
-                    ))}
-                    {!result.cards.length ? <p className="rounded-[14px] border border-line p-4 text-[14px] text-ink-2">Nothing matched. Try a wider area or a different time.</p> : null}
+                  <div ref={(n) => { if (n) cardRefs.current.set("__results", n); }} className="scroll-mt-20 lg:scroll-mt-4">
+                    <LayoutGroup>
+                      <AnimatePresence mode="popLayout" initial={false}>
+                        {detail ? (
+                          <PlaceDetail key="detail" card={detail} index={result.cards.indexOf(detail)} result={result} example={state.example} onClose={() => setDetailId(null)} onSend={() => setSendOpen(true)} />
+                        ) : (
+                          <motion.div key="list" className="flex flex-col gap-3" exit={{ opacity: 0 }}>
+                            {result.cards.slice(0, 3).map((c, i) => (
+                              <PlanCard key={c.id} card={c} index={i} selected={c.id === selected?.id} hovered={c.id === hoverId} onOpen={() => openDetail(c.id)} onHover={(on) => setHoverId(on ? c.id : null)} />
+                            ))}
+                            {!result.cards.length ? <p className="rounded-[14px] border border-line p-4 text-[14px] text-ink-2">Nothing matched. Try a wider area or a different time.</p> : null}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </LayoutGroup>
                   </div>
 
-                  {result.unknowns.length ? (
-                    <section aria-label="Couldn't check" className="rounded-[14px] bg-raised p-3.5">
-                      <h3 className="text-[13px] font-semibold text-ink">Couldn&apos;t check</h3>
+                  <FollowUps intent={result.intent} onRefine={refine} disabled={false} />
+
+                  {result.unknowns.length && !detail ? (
+                    <section aria-label="Couldn't check" className="rounded-[14px] border border-dashed border-control p-3.5">
+                      <h3 className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">Couldn&apos;t check</h3>
                       <ul className="mt-1.5 flex flex-col gap-1">
                         {result.unknowns.map((u) => (
                           <li key={u} className="flex items-start gap-2 text-[13px] leading-5 text-ink-2">
@@ -371,7 +440,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                     <p className="num font-mono">
                       {result.sources.map((s) => `${s.name} ${fmtAsOf(s.asOf)}`).join(" · ")}
                     </p>
-                    <p className="mt-1">© OpenStreetMap contributors · Powered by TfL Open Data · Weather: Open-Meteo (CC BY 4.0)</p>
+                    <p className="mt-1">Map data © OpenStreetMap contributors · tiles OpenFreeMap · Powered by TfL Open Data · Weather: Open-Meteo (CC BY 4.0)</p>
                   </footer>
                 </motion.div>
               ) : null}

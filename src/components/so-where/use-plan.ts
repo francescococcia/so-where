@@ -69,7 +69,8 @@ export function usePlan() {
     setState((s) => ({ ...s, status: "result", steps: fx.steps, result: { ...fx, query: query || fx.query }, clarify: null, elapsedMs: total }));
   }, [replay]);
 
-  const submit = useCallback(async (query: string, previous?: Previous) => {
+  /** `you` is the device location, already rounded to ~100 m by the caller; it is only sent, never stored here. */
+  const submit = useCallback(async (query: string, previous?: Previous, you?: { lat: number; lng: number }) => {
     ctrl.current?.abort();
     const ac = new AbortController();
     ctrl.current = ac;
@@ -81,7 +82,7 @@ export function usePlan() {
       const res = await fetch("/api/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
-        body: JSON.stringify(previous ? { query: previous.query, answer: previous.answer, previous } : { query }),
+        body: JSON.stringify({ ...(previous ? { query: previous.query, answer: previous.answer, previous } : { query }), ...(you ? { you } : {}) }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) throw new Error(`/api/plan answered ${res.status}`);

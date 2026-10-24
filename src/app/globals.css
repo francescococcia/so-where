@@ -83,6 +83,7 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
 a { color: inherit; text-decoration: none; }
 ::selection { background: var(--sw-hi); color: var(--sw-ink); }
 :focus-visible { outline: 2px solid var(--sw-ink); outline-offset: 2px; }
+textarea:focus-visible { outline: none; }
 .num { font-variant-numeric: tabular-nums; }
 
 /* ---------- map markers (DOM, outside React) ---------- */
@@ -123,3 +124,55 @@ a { color: inherit; text-decoration: none; }
 .sw-pin .sw-tag { position: absolute; left: 30px; bottom: 14px; display: none; }
 .sw-pin.is-on .sw-tag, .sw-pin:hover .sw-tag { display: block; }
 .sw-area-tag { border: 1.5px dashed rgba(184, 29, 20, .55); }
+
+/* ================= ui2: louder map + motion ================= */
+@keyframes sw-sweep { to { transform: rotate(360deg) } }
+@keyframes sw-shimmer { 0% { background-position: 120% 0 } 100% { background-position: -120% 0 } }
+@keyframes sw-halo { 0% { transform: scale(.6); opacity: .7 } 100% { transform: scale(3.2); opacity: 0 } }
+
+.sw-map .maplibregl-canvas { outline: none; }
+.maplibregl-ctrl-attrib.maplibregl-ctrl { font: 500 11px/1.4 var(--font-geist-mono), monospace !important; background: rgba(21,23,28,.86) !important; color: #fff !important; border-radius: 8px 0 0 0; padding: 3px 8px !important; }
+.maplibregl-ctrl-attrib a { color: #ffd23f !important; }
+.maplibregl-ctrl-group button { width: 34px !important; height: 34px !important; }
+
+/* pins: enamel sign on a stem */
+.sw-pin-body { display: flex; flex-direction: column; align-items: center; }
+.sw-pin-head { width: 34px; height: 34px; border-radius: 10px; transform: none; background: var(--sw-signal); border: 2.5px solid #fff; box-shadow: 0 6px 14px rgba(21,23,28,.28), 0 0 0 1px rgba(21,23,28,.15); }
+.sw-pin-head span { transform: none; font-size: 14px; }
+.sw-pin-stem { display: block; width: 3px; height: 14px; background: var(--sw-ink); border-radius: 0 0 2px 2px; }
+.sw-pin.is-on .sw-pin-head { background: var(--sw-ink); box-shadow: 0 0 0 4px var(--sw-hi), 0 10px 22px rgba(21,23,28,.35); }
+.sw-pin.is-hover .sw-pin-body { transform: translateY(-5px) scale(1.14); }
+.sw-pin.is-hover .sw-pin-head { box-shadow: 0 0 0 4px rgba(225,37,27,.25), 0 10px 22px rgba(21,23,28,.35); }
+.sw-pin.is-dim { opacity: .55; }
+.sw-pin { transition: opacity .2s ease; }
+.sw-pin .sw-tag { left: 38px; bottom: 26px; }
+.sw-pin.is-hover .sw-tag { display: block; }
+
+.sw-mid { width: 30px; height: 30px; }
+.sw-mid i { inset: 0; background: transparent; border: 2px solid var(--sw-hi); animation: sw-halo 2.6s var(--sw-ease-out) infinite; }
+.sw-mid i + i { animation-delay: 1.3s; }
+.sw-mid b { background: var(--sw-hi); border: 3px solid var(--sw-ink); box-shadow: 0 6px 16px rgba(21,23,28,.3); }
+.sw-mid-tag { background: var(--sw-ink); color: #fff; }
+.sw-mid-tag em { display: block; font: 700 10px/1.2 var(--font-geist-mono), monospace; text-transform: uppercase; letter-spacing: .12em; color: var(--sw-hi); font-style: normal; }
+.sw-mid-tag small { color: rgba(255,255,255,.7); }
+
+/* agent scanning: radar sweep over the map */
+.sw-scan { background: radial-gradient(circle at 62% 50%, transparent 0 18%, rgba(238,237,232,.0) 18%, rgba(21,23,28,.10) 70%); }
+.sw-scan::before { content: ""; position: absolute; left: 62%; top: 50%; width: 140vmax; height: 140vmax; margin: -70vmax 0 0 -70vmax; background: conic-gradient(from 0deg, rgba(225,37,27,.0) 0deg, rgba(225,37,27,.16) 40deg, rgba(225,37,27,0) 41deg); animation: sw-sweep 2.8s linear infinite; }
+@media (max-width: 1023px) { .sw-scan::before { left: 50%; } }
+
+/* timeline shimmer on the running step */
+.sw-shimmer { background: linear-gradient(90deg, var(--sw-ink) 0 40%, var(--sw-signal) 50%, var(--sw-ink) 60% 100%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent !important; animation: sw-shimmer 1.6s linear infinite; }
+
+/* ticket perforation */
+.sw-perf { background: radial-gradient(circle at 5px 6px, var(--sw-surface) 3px, transparent 3.5px) 0 0 / 10px 12px repeat-y; }
+.sw-card { box-shadow: 0 1px 0 var(--sw-control); will-change: transform; }
+.sw-card:hover { box-shadow: 0 2px 0 var(--sw-control), 0 18px 36px -18px rgba(21,23,28,.35); }
+
+/* bus-blind headline: faint roller lines */
+.sw-blind::after, .sw-blind-grain { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(180deg, rgba(255,255,255,.035) 0 1px, transparent 1px 4px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sw-scan::before, .sw-mid i, .sw-shimmer { animation: none !important; }
+  .sw-shimmer { color: var(--sw-ink) !important; background: none; }
+}
