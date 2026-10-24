@@ -149,14 +149,16 @@ function SegText({ seg, small }: { seg: Segment; small?: boolean }) {
 }
 
 /** One plain sentence: "6 min walk" or "18 min: [Jubilee line] from London Bridge to Waterloo, then 4 min walk". */
-export function JourneySentence({ leg, small, className }: { leg: Leg; small?: boolean; className?: string }) {
+const ACTIVE_SEG = "bg-signal-soft shadow-[0_0_0_3px_var(--color-signal-soft)]";
+
+export function JourneySentence({ leg, small, className, active }: { leg: Leg; small?: boolean; className?: string; active?: number | null }) {
   const segs = segmentsOf(leg);
   const onlyWalk = segs.length === 1 && segs[0].mode === "walk";
   if (onlyWalk) {
     const s = segs[0];
     return (
       <span className={className}>
-        <span className="inline-flex items-baseline gap-1">
+        <span className={cn("inline-flex items-baseline gap-1 rounded-[6px] transition-[background-color,box-shadow] duration-300", active === 0 && ACTIVE_SEG)}>
           <Footprints className={cn("self-center", small ? "size-3.5" : "size-4")} aria-hidden />
           <b className="num font-semibold text-ink">{leg.minutes} min walk</b>
           {s.to ? <> to {s.to}</> : null}
@@ -171,7 +173,9 @@ export function JourneySentence({ leg, small, className }: { leg: Leg; small?: b
       {segs.map((s, i) => (
         <span key={i}>
           {i ? (s.join === "or" ? ", or " : ", then ") : null}
-          <SegText seg={s} small={small} />
+          <span className={cn("rounded-[6px] transition-[background-color,box-shadow] duration-300", active === i && ACTIVE_SEG)} data-active={active === i || undefined}>
+            <SegText seg={s} small={small} />
+          </span>
         </span>
       ))}
     </span>
@@ -186,41 +190,115 @@ const isLL = (p: unknown): p is LL => !!p && typeof (p as LL).lat === "number" &
 export const BUS_RED = "#DC241F";
 export const WALK_GREY = "#7d8087";
 
-export type MapStretch = { coords: [number, number][]; kind: "rail" | "bus" | "walk"; color: string; label: string };
+/** One coloured piece of a leg on the map. `seg` indexes segmentsOf(leg) so the map can highlight the journey row. */
+export type MapStretch = { coords: [number, number][]; kind: "rail" | "bus" | "walk"; color: string; label: string; mode: Mode; seg: number };
 
-function styleOf(seg: Segment): Omit<MapStretch, "coords"> {
-  if (seg.mode === "walk") return { kind: "walk", color: WALK_GREY, label: "" };
-  if (seg.mode === "bus") return { kind: "bus", color: BUS_RED, label: (seg.line ?? "").replace(/^bus\s+/i, "") };
-  return { kind: "rail", color: lineHex(seg) ?? "#4a4d55", label: "" };
+function styleOf(seg: Segment): Omit<MapStretch, "coords" | "seg"> {
+  if (seg.mode === "walk") return { kind: "walk", color: WALK_GREY, label: "", mode: "walk" };
+  if (seg.mode === "bus") return { kind: "bus", color: BUS_RED, label: (seg.line ?? "").replace(/^bus\s+/i, ""), mode: "bus" };
+  return { kind: "rail", color: lineHex(seg) ?? "#4a4d55", label: "", mode: seg.mode };
+}
+
+/** Cumulative planar length (metres-ish) along [lng,lat] coords. */
+export function cumLen(c: [number, number][]): number[] {
+  const out = [0];
+  for (let i = 1; i < c.length; i++) {
+    const k = Math.cos(((c[i][1] + c[i - 1][1]) / 2) * (Math.PI / 180));
+    out.push(out[i - 1] + Math.hypot((c[i][0] - c[i - 1][0]) * k, c[i][1] - c[i - 1][1]) * 111_320);
+  }
+  return out;
+}
+
+/** Point at fraction f (0..1) of a polyline, given its cumulative lengths. */
+export function pointAt(c: [number, number][], cum: number[], f: number): [number, number] {
+  const total = cum[cum.length - 1];
+  if (!total || c.length < 2) return c[0];
+  const d = Math.min(Math.max(f, 0), 1) * total;
+  let i = 1;
+  while (i < cum.length - 1 && cum[i] < d) i++;
+  const span = cum[i] - cum[i - 1] || 1;
+  const t = (d - cum[i - 1]) / span;
+  return [c[i - 1][0] + (c[i][0] - c[i - 1][0]) * t, c[i - 1][1] + (c[i][1] - c[i - 1][1]) * t];
+}
+
+/** Sub-polyline between fractions a..b. */
+function slicePath(c: [number, number][], cum: number[], a: number, b: number): [number, number][] {
+  const total = cum[cum.length - 1] || 1;
+  const out: [number, number][] = [pointAt(c, cum, a)];
+  for (let i = 1; i < c.length - 1; i++) if (cum[i] / total > a && cum[i] / total < b) out.push(c[i]);
+  out.push(pointAt(c, cum, b));
+  return out;
+}
+
+/**
+ * When the server only sends one leg path (fixtures, older plans), cut it into the "then" chain of segments by
+ * rough distance: walking ~80 m/min, transit ~6x that. Unknown minutes: 4 min per walk, the rest shared by transit.
+ */
+function splitBySegments(path: [number, number][], segs: Segment[], minutes: number): MapStretch[] | null {
+  const chain: Segment[] = [];
+  for (const sg of segs) {
+    if (chain.length && sg.join === "or") break;
+    chain.push(sg);
+  }
+  if (chain.length < 2) return null;
+  const known = chain.reduce((n, sg) => n + (sg.minutes ?? (sg.mode === "walk" ? 4 : 0)), 0);
+  const unknownT = chain.filter((sg) => sg.minutes == null && sg.mode !== "walk").length;
+  const share = unknownT ? Math.max(2, (minutes - known) / unknownT) : 0;
+  const w = chain.map((sg) => (sg.minutes ?? (sg.mode === "walk" ? 4 : share)) * (sg.mode === "walk" ? 1 : 6));
+  const W = w.reduce((a, b) => a + b, 0);
+  if (!W) return null;
+  const cum = cumLen(path);
+  let acc = 0;
+  return chain.map((sg, i) => {
+    const a = acc / W;
+    acc += w[i];
+    return { coords: slicePath(path, cum, a, acc / W), ...styleOf(sg), seg: i };
+  });
 }
 
 /**
  * Stretches for the map. Uses per-segment geometry when the server sends it (path, or straight lines between
- * stop coordinates); otherwise the whole leg path in the colour of its main transit line.
+ * stop coordinates; walks without geometry are bridged between neighbours); otherwise the leg path cut by segment.
  */
 export function legStretches(leg: Leg): MapStretch[] {
   const l = leg as Leg & { segments?: unknown; parts?: unknown; steps?: unknown };
   const raw = (l.segments ?? l.parts ?? l.steps) as Record<string, unknown>[] | undefined;
   const segs = segmentsOf(leg);
   const toXY = (p: LL): [number, number] => [p.lng, p.lat];
+  const path = (leg.path ?? []).filter(isLL).map(toXY);
   if (Array.isArray(raw) && raw.length) {
-    const out: MapStretch[] = [];
-    raw.forEach((r, i) => {
-      const seg = segs[i] ?? { mode: "tube" as Mode };
-      let pts: LL[] = [];
-      if (Array.isArray(r?.path) && (r.path as unknown[]).every(isLL)) pts = r.path as LL[];
-      else if (Array.isArray(r?.stops) && (r.stops as unknown[]).some(isLL)) pts = (r.stops as unknown[]).filter(isLL);
+    const pts: ([number, number][] | null)[] = raw.map((r) => {
+      let p: LL[] = [];
+      if (Array.isArray(r?.path) && (r.path as unknown[]).length && (r.path as unknown[]).every(isLL)) p = r.path as LL[];
+      else if (Array.isArray(r?.stops) && (r.stops as unknown[]).some(isLL)) p = (r.stops as unknown[]).filter(isLL);
       else {
         const a = isLL(r?.from) ? r.from : isLL(r?.fromCoord) ? r.fromCoord : null;
         const b = isLL(r?.to) ? r.to : isLL(r?.toCoord) ? r.toCoord : null;
-        if (a && b) pts = [a as LL, b as LL];
+        if (a && b) p = [a as LL, b as LL];
       }
-      if (pts.length >= 2) out.push({ coords: pts.map(toXY), ...styleOf(seg) });
+      return p.length >= 2 ? p.map(toXY) : null;
     });
-    if (out.length) return out;
+    if (pts.some(Boolean)) {
+      const out: MapStretch[] = [];
+      pts.forEach((p, i) => {
+        const seg = segs[i] ?? { mode: "tube" as Mode };
+        let c = p;
+        if (!c) {
+          // Bridge a geometry-less segment (usually a walk) between its neighbours / the leg ends.
+          const prev = pts.slice(0, i).reverse().find(Boolean);
+          const next = pts.slice(i + 1).find(Boolean);
+          const a = prev ? prev[prev.length - 1] : path[0];
+          const b = next ? next[0] : path[path.length - 1];
+          if (a && b && (a[0] !== b[0] || a[1] !== b[1])) c = [a, b];
+        }
+        if (c) out.push({ coords: c, ...styleOf(seg), seg: i });
+      });
+      if (out.length) return out;
+    }
   }
-  const path = (leg.path ?? []).map(toXY);
   if (path.length < 2) return [];
-  const main = segs.find((s) => s.mode !== "walk") ?? segs[0];
-  return [{ coords: path, ...styleOf(main) }];
+  const split = splitBySegments(path, segs, leg.minutes ?? 0);
+  if (split) return split;
+  const mi = Math.max(0, segs.findIndex((s) => s.mode !== "walk"));
+  return [{ coords: path, ...styleOf(segs[mi] ?? segs[0]), seg: mi }];
 }

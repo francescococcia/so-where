@@ -3,15 +3,16 @@
 import { useEffect, useState } from "react";
 import { animate, AnimatePresence, motion, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from "motion/react";
 import { Accessibility, ArrowUpRight, Banknote, ChevronDown, Clock, CloudSun, Globe, HelpCircle, Map as MapIcon, Navigation, Send, Sparkles, TrainFront, X } from "lucide-react";
-import type { Fact, PlanCard as Card, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
+import type { Fact, PlanCard as Card, Leg, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { VerdictChip } from "./verdict-chip";
 import { fmtAsOf, fmtTime, gmapsDirections } from "./format";
 import { WeatherIcon, weatherKind } from "./fact-icon";
 import { ROUTE, splitSubtitle } from "./plan-card";
 import { JourneySentence } from "./journey";
+import { useActiveSeg } from "./vehicles";
 import { PhotoHero, RatingSlot, placeMeta, whyHere } from "./place-photo";
-import { costAnswer, findFact, kindLabel, noTime, openAnswer, priceFact, shortUnknown } from "./answers";
+import { TONE_CLASS, costAnswer, findFact, kindLabel, noTime, openAnswer, priceFact, shortUnknown } from "./answers";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 const item = (i: number) => ({ initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35, delay: 0.08 + i * 0.04, ease } });
@@ -57,6 +58,21 @@ function Tile({ label, value, dot, tone, i }: { label: string; value: string; do
   );
 }
 
+/** One person's journey; the segment the map vehicle is on gets a soft highlight. */
+function JourneyRow({ cardId, leg, area }: { cardId: string; leg: Leg; area?: string }) {
+  const active = useActiveSeg(cardId, leg.who);
+  return (
+    <li className="grid grid-cols-[auto_1fr] gap-x-2.5 text-[14px] text-ink-2">
+      <span className={cn("mt-[7px] size-2.5 rounded-full ring-2 ring-white transition-transform duration-300", active != null && "scale-125")} style={{ background: ROUTE[leg.who] }} aria-hidden />
+      <span>
+        <span className="font-semibold text-ink">{leg.who === "you" ? "You" : "Them"} </span>
+        <JourneySentence leg={leg} active={active} />
+        {area ? <span className="block text-[12px] text-ink-3">from ~{area}</span> : null}
+      </span>
+    </li>
+  );
+}
+
 /** Lumap-style place detail: header, two actions, stat tiles, journeys, then the checks (closed). */
 export function PlaceDetail({ card, result, example, onClose, onSend }: { card: Card; result: PlanResultWithAgent; example: boolean; onClose: () => void; onSend: () => void }) {
   const { type, address } = splitSubtitle(card.subtitle);
@@ -82,7 +98,15 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
   const citymapper = `https://citymapper.com/directions?endcoord=${lat.toFixed(5)}%2C${lng.toFixed(5)}&endname=${encodeURIComponent(card.name)}`;
   const tiles: { label: string; value: string; dot?: string; tone?: string }[] = [
     ...card.legs.map((l) => ({ label: l.who === "you" ? "You" : "Them", value: `${l.minutes} min`, dot: ROUTE[l.who] })),
-    ...(open.state === true ? [{ label: "Open at", value: fmtTime(result.when), tone: "text-ok" }] : open.state === false ? [{ label: "Closed at", value: fmtTime(result.when), tone: "text-amber-ink" }] : []),
+    ...(() => {
+      const until = open.text.match(/^Open until (.+)$/)?.[1]?.replace(/^midnight$/, "Midnight");
+      const soon = open.text.match(/^Closes soon(?: · (.+))?$/);
+      if (soon) return [{ label: "Closes soon", value: soon[1] ?? fmtTime(result.when), tone: TONE_CLASS.soon }];
+      if (until) return [{ label: "Open until", value: until, tone: TONE_CLASS.ok }];
+      if (open.state === true) return [{ label: "Open at", value: fmtTime(result.when), tone: TONE_CLASS.ok }];
+      if (open.state === false) return [{ label: "Closed at", value: fmtTime(result.when), tone: TONE_CLASS.closed }];
+      return card.kind === "venue" ? [{ label: "Hours", value: "Not listed", tone: TONE_CLASS.unknown }] : [];
+    })(),
     ...(cost.fact && !/not listed/i.test(cost.text) ? [{ label: "Cost", value: cost.text }] : []),
   ];
 
@@ -120,7 +144,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
 
       {/* Stat tiles */}
       {tiles.length ? (
-        <div className={cn("grid gap-2", tiles.length >= 3 ? "grid-cols-3" : "grid-cols-2")}>
+        <div className={cn("grid gap-2", tiles.length >= 4 ? "grid-cols-2 sm:grid-cols-4" : tiles.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
           {tiles.map((t, k) => <Tile key={t.label + k} {...t} i={k + 1} />)}
         </div>
       ) : null}
@@ -128,14 +152,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
       {/* Journeys */}
       <motion.ul {...item(4)} className="flex flex-col gap-2.5">
         {card.legs.map((l, k) => (
-          <li key={l.who + k} className="grid grid-cols-[auto_1fr] gap-x-2.5 text-[14px] text-ink-2">
-            <span className="mt-[7px] size-2.5 rounded-full ring-2 ring-white" style={{ background: ROUTE[l.who] }} aria-hidden />
-            <span>
-              <span className="font-semibold text-ink">{l.who === "you" ? "You" : "Them"} </span>
-              <JourneySentence leg={l} />
-              {l.who === "them" && result.them ? <span className="block text-[12px] text-ink-3">from ~{result.them.area}</span> : null}
-            </span>
-          </li>
+          <JourneyRow key={l.who + k} cardId={card.id} leg={l} area={l.who === "them" ? result.them?.area : undefined} />
         ))}
       </motion.ul>
 

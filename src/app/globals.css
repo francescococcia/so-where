@@ -440,3 +440,23 @@ button.sw-map-chip:focus-visible { outline: 2px solid var(--sw-signal-strong); o
 .sw-photo-skel { background: linear-gradient(100deg, var(--sw-sunk) 30%, #f8f4ee 50%, var(--sw-sunk) 70%); background-size: 220% 100%; animation: sw-photo-skel 1.3s ease-in-out infinite; }
 @keyframes sw-photo-skel { from { background-position: 120% 0; } to { background-position: -120% 0; } }
 @media (prefers-reduced-motion: reduce) { .sw-photo-skel { animation: none; } }
+
+/* ---------- Journey vehicles (ui8): bus badge, line roundel, walking feet ---------- */
+.sw-veh { pointer-events: none; z-index: 3; --who: var(--sw-route-you); transition: opacity 0.3s var(--sw-ease-out); }
+.sw-veh--them { --who: var(--sw-route-them); }
+.sw-veh.is-hidden { opacity: 0; }
+.sw-veh-b {
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  height: 26px; min-width: 26px; padding: 0 5px; border-radius: 999px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--who), 0 4px 10px rgba(21, 23, 28, 0.28);
+  transition: transform 0.35s var(--sw-ease-out), opacity 0.35s var(--sw-ease-out), background-color 0.2s, border-radius 0.2s;
+}
+.sw-veh-b svg { width: 15px; height: 15px; flex: none; }
+.sw-veh-b.is-bus { background: #dc241f; color: #fff; border-radius: 8px; padding: 0 6px 0 5px; }
+.sw-veh-b.is-bus b { font: 700 11.5px/1 var(--font-sans, system-ui); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.sw-veh-b.is-rail { background: var(--veh, #4a4d55); color: var(--veh-ink, #fff); width: 26px; padding: 0; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 0 2px #fff, 0 0 0 3.5px var(--who), 0 4px 10px rgba(21, 23, 28, 0.28); }
+.sw-veh-b.is-walk { background: #fff; color: #5c5f66; width: 22px; min-width: 22px; height: 22px; padding: 0; }
+.sw-veh-b.is-walk svg { width: 12px; height: 12px; }
+.sw-veh.is-rest .sw-veh-b { transform: scale(0.8); opacity: 0.5; }
+.sw-veh.is-static { z-index: 2; }
+.sw-veh.is-static .sw-veh-b { transform: scale(0.88); }

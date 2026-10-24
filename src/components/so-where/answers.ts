@@ -37,16 +37,42 @@ export function openAt(hours: string | undefined, whenIso: string): boolean | nu
 export const hoursFact = (card: Card) => findFact(card, /^open/i);
 export const priceFact = (card: Card) => findFact(card, /price|entry|fee|£|cost/i);
 
-/** Plain-English "Open?" answer. */
-export function openAnswer(card: Card, whenIso: string): { text: string; sub?: string; state: boolean | null; fact?: Fact } {
+export type OpenTone = "ok" | "soon" | "closed" | "unknown";
+/** Optional server hours fields (intersection type; plan-types.ts unchanged). Read defensively. */
+type HoursX = { openAtPlan?: boolean | null; closesAt?: string | null; closingSoon?: boolean | null; hoursKnown?: boolean | null };
+
+/** "23:00" from "23:00", "23:00:00" or an ISO datetime; else undefined. */
+function hhmm(v: unknown): string | undefined {
+  if (typeof v !== "string" || !v.trim()) return undefined;
+  if (/T\d{2}:\d{2}/.test(v)) return fmtTime(v) || undefined;
+  return v.match(/\b([01]?\d|2[0-4]):([0-5]\d)\b/)?.[0];
+}
+const untilText = (t: string) => (/^(00|24):00$/.test(t) ? "Open until midnight" : `Open until ${t}`);
+
+/** Plain-English "Open?" answer. Prefers the server's openAtPlan/closesAt/closingSoon/hoursKnown when present. */
+export function openAnswer(card: Card, whenIso: string): { text: string; sub?: string; state: boolean | null; tone: OpenTone; fact?: Fact } {
   const raw = hoursFact(card);
   const h = raw && !noTime(raw.value) ? raw : undefined;
-  const s = openAt(h?.value, whenIso);
   const at = fmtTime(whenIso);
-  if (s === true) return { text: `Open at ${at}`, sub: h?.value ? `Hours ${h.value}` : undefined, state: s, fact: h };
-  if (s === false) return { text: `Probably closed at ${at}`, sub: h?.value ? `Hours ${h.value}` : undefined, state: s, fact: h };
-  return { text: h?.value && !/not|unknown/i.test(h.value) ? h.value : "Opening hours not listed", state: null, fact: h };
+  const x = card as Card & HoursX;
+  const closes = hhmm(x.closesAt);
+  const sub = h?.value ? `Hours ${h.value}` : undefined;
+  if (x.hoursKnown === false && typeof x.openAtPlan !== "boolean") return { text: "Hours not listed", state: null, tone: "unknown", fact: h };
+  if (x.openAtPlan === true) {
+    if (x.closingSoon) return { text: closes ? `Closes soon · ${closes}` : "Closes soon", sub, state: true, tone: "soon", fact: h };
+    return { text: closes ? untilText(closes) : `Open at ${at}`, sub, state: true, tone: "ok", fact: h };
+  }
+  if (x.openAtPlan === false) return { text: `Closed at ${at}`, sub, state: false, tone: "closed", fact: h };
+  const s = openAt(h?.value, whenIso);
+  if (s === true) {
+    const end = h?.value.match(/[–-]\s*(\d{1,2}:\d{2})/)?.[1];
+    return { text: end ? untilText(end) : `Open at ${at}`, sub, state: s, tone: "ok", fact: h };
+  }
+  if (s === false) return { text: `Probably closed at ${at}`, sub, state: s, tone: "closed", fact: h };
+  return { text: h?.value && !/not|unknown/i.test(h.value) ? h.value : "Hours not listed", state: null, tone: "unknown", fact: h };
 }
+
+export const TONE_CLASS: Record<OpenTone, string> = { ok: "text-ok", soon: "text-amber-ink", closed: "text-amber-ink", unknown: "text-unknown" };
 
 /** Plain-English "Cost?" answer. */
 export function costAnswer(card: Card): { text: string; fact?: Fact } {

@@ -273,10 +273,11 @@ function Trail({ turns }: { turns: Turn[] }) {
             className={cn("flex", t.role === "user" ? "justify-end" : "justify-start")}
           >
             {t.role === "user" ? (
-              <span className="max-w-[85%] rounded-[16px] rounded-br-[6px] bg-[linear-gradient(180deg,#fff1e4,#ffe3cc)] px-3 py-1.5 text-[13.5px] font-medium leading-5 text-[#4a2408] shadow-e1 ring-1 ring-[#ff9a3c]/25">{t.text}</span>
+              <span className="max-w-[85%] rounded-[16px] rounded-br-[6px] bg-[linear-gradient(180deg,#fff1e4,#ffe3cc)] px-3 py-1.5 text-[13.5px] font-medium leading-5 text-[#4a2408] shadow-e1 ring-1 ring-[#ff9a3c]/25 whitespace-pre-line">{t.text}</span>
             ) : (
               <span className="flex max-w-[90%] items-start gap-1.5 rounded-[16px] rounded-bl-[6px] bg-white/85 px-3 py-1.5 text-[13.5px] leading-5 text-ink-2 shadow-e1 ring-1 ring-white/80">
-                <Sparkles className="mt-[3px] size-3.5 shrink-0 text-signal" aria-hidden /> {t.text}
+                <Sparkles className="mt-[3px] size-3.5 shrink-0 text-signal" aria-hidden />
+                <span className="min-w-0 whitespace-pre-line [overflow-wrap:anywhere]">{t.text.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim()}</span>
               </span>
             )}
           </motion.li>

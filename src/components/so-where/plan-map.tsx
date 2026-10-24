@@ -7,6 +7,7 @@ import type { LatLng, Leg, PlanResultWithAgent } from "@/lib/plan-types";
 import hubsDoc from "@/data/hubs.json";
 import { SO_WHERE_STYLE } from "./map-style";
 import { legStretches, type MapStretch } from "./journey";
+import { badge, buildTrack, clearActiveSeg, midpoints, sampleTrack, setActiveSeg, type Track, type Who } from "./vehicles";
 
 /** Idle view: the South Bank, tilted, so the 3D city is the first thing you see. */
 const LONDON: [number, number] = [-0.1135, 51.5065];
@@ -127,10 +128,9 @@ function addLayers(map: MLMap) {
   map.addLayer({ id: "legs-bus", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "bus"], layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4.5, "line-dasharray": [2.2, 1.2] } });
   map.addLayer({ id: "legs-rail", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "rail"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4.5 } });
   map.addLayer({ id: "legs-flow", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "rail"], layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 1.6, "line-opacity": 0.85, "line-dasharray": DASHES[0] } });
-  // A small traveller dot per person, gliding along their route once it's drawn.
+  // Footstep dots trailing the walking badge (the vehicles themselves are HTML markers, see vehicles.ts).
   map.addSource("route-dots", { type: "geojson", data: FC() });
-  map.addLayer({ id: "dots-glow", type: "circle", source: "route-dots", paint: { "circle-radius": 10, "circle-color": ["get", "color"], "circle-opacity": 0.22, "circle-blur": 0.4, "circle-pitch-alignment": "map" } });
-  map.addLayer({ id: "dots-core", type: "circle", source: "route-dots", paint: { "circle-radius": 4.5, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2, "circle-pitch-alignment": "map" } });
+  map.addLayer({ id: "dots-core", type: "circle", source: "route-dots", paint: { "circle-radius": ["get", "r"], "circle-color": "#7d8087", "circle-opacity": ["get", "o"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5, "circle-stroke-opacity": ["get", "o"], "circle-pitch-alignment": "map" } });
   map.addLayer({ id: "legs-label", type: "symbol", source: "route-legs", filter: ["all", ["==", ["get", "kind"], "bus"], ["!=", ["get", "label"], ""]], layout: { "symbol-placement": "line-center", "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-keep-upright": true }, paint: { "text-color": "#ffffff", "text-halo-color": "#DC241F", "text-halo-width": 2.4 } });
 }
 
@@ -169,8 +169,12 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
   reducedRef.current = reduced;
   const scanRef = useRef(scanning);
   scanRef.current = scanning;
-  const trail = useRef<{ you: [number, number][]; them: [number, number][] } | null>(null);
   const drawn = useRef(false);
+  type Veh = { m: Marker; el: HTMLElement; b: HTMLElement; part: number; rest: boolean };
+  const tracks = useRef<{ card: string | null; you: Track | null; them: Track | null }>({ card: null, you: null, them: null });
+  const veh = useRef<{ you: Veh | null; them: Veh | null }>({ you: null, them: null });
+  const statics = useRef<Marker[]>([]);
+  const vehClock = useRef(0);
 
   useEffect(() => {
     if (!box.current) return;
@@ -225,19 +229,36 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
           dashI = (dashI + 1) % DASHES.length;
           if (map.getLayer("legs-flow")) map.setPaintProperty("legs-flow", "line-dasharray", DASHES[dashI]);
         }
-        // traveller dots ~30 fps, one lap every ~7 s (them slightly offset)
-        dotT += dt;
-        if (dotT > 33 && trail.current && drawn.current) {
-          dotT = 0;
-          const feats: GeoJSON.Feature[] = [];
-          (["you", "them"] as const).forEach((who, k) => {
-            const c = trail.current![who];
-            if (c.length < 2) return;
-            const ph = ((now / 7000 + k * 0.37) % 1);
-            const at = partial(c, ph);
-            feats.push({ type: "Feature", properties: { color: COLOR[who] }, geometry: { type: "Point", coordinates: at[at.length - 1] } });
+        // journey vehicles: every frame (2 HTML markers), clock only runs once the route is drawn and the tab is visible
+        if (drawn.current && !document.hidden) {
+          vehClock.current += dt;
+          const dots: GeoJSON.Feature[] = [];
+          (["you", "them"] as const).forEach((who) => {
+            const tr = tracks.current[who];
+            const v = veh.current[who];
+            if (!tr || !v) return;
+            const smp = sampleTrack(tr, vehClock.current);
+            v.m.setLngLat(smp.at);
+            if (smp.part !== v.part) {
+              v.part = smp.part;
+              const bd = badge(tr.parts[smp.part].st);
+              v.b.className = `sw-veh-b ${bd.cls}`;
+              v.b.setAttribute("style", bd.style);
+              v.b.innerHTML = bd.html;
+            }
+            if (smp.resting !== v.rest) {
+              v.rest = smp.resting;
+              v.el.classList.toggle("is-rest", smp.resting);
+            }
+            v.el.classList.remove("is-hidden");
+            setActiveSeg(tracks.current.card, who, smp.resting ? null : tr.parts[smp.part].st.seg);
+            smp.trail.forEach((c, k) => dots.push({ type: "Feature", properties: { r: 2.6 - k * 0.5, o: 0.85 - k * 0.25 }, geometry: { type: "Point", coordinates: c } }));
           });
-          (map.getSource("route-dots") as GeoJSONSource | undefined)?.setData(FC(feats));
+          dotT += dt;
+          if (dotT > 33) {
+            dotT = 0;
+            (map.getSource("route-dots") as GeoJSONSource | undefined)?.setData(FC(dots));
+          }
         }
         // idle orbit: only when nobody's touching the map and no camera move is running
         const idle = now - userBusy.current > 7000 && !flying.current && !map.isMoving();
@@ -256,7 +277,10 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearActiveSeg();
+    };
   }, [ready]);
 
   // Scanning mode: hubs visible, camera pulls back over central London.
@@ -407,9 +431,40 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     const legs: Record<"you" | "them", Leg | undefined> = { you: card?.legs.find((l) => l.who === "you"), them: card?.legs.find((l) => l.who === "them") };
     const st = { you: legs.you ? legStretches(legs.you) : [], them: legs.them ? legStretches(legs.them) : [] };
     const full = { you: st.you.flatMap((s) => s.coords), them: st.them.flatMap((s) => s.coords) };
-    trail.current = full;
     drawn.current = false;
     (map.getSource("route-dots") as GeoJSONSource | undefined)?.setData(FC());
+    // Vehicles: rebuild tracks + markers for this card.
+    (["you", "them"] as Who[]).forEach((who) => veh.current[who]?.m.remove());
+    veh.current = { you: null, them: null };
+    statics.current.forEach((m) => m.remove());
+    statics.current = [];
+    clearActiveSeg();
+    vehClock.current = 0;
+    tracks.current = { card: card?.id ?? null, you: buildTrack(st.you), them: buildTrack(st.them) };
+    (["you", "them"] as Who[]).forEach((who) => {
+      const tr = tracks.current[who];
+      if (!tr) return;
+      if (reduced) {
+        // Reduced motion: a static badge at the middle of each stretch, no travel.
+        midpoints(tr).forEach(({ at, st: s }) => {
+          const bd = badge(s);
+          const el = document.createElement("div");
+          el.className = `sw-veh sw-veh--${who} is-static`;
+          el.setAttribute("aria-hidden", "true");
+          el.innerHTML = `<span class="sw-veh-b ${bd.cls}" style="${bd.style}">${bd.html}</span>`;
+          statics.current.push(new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(at).addTo(map));
+        });
+        return;
+      }
+      const el = document.createElement("div");
+      el.className = `sw-veh sw-veh--${who} is-hidden`;
+      el.setAttribute("aria-hidden", "true");
+      const b = document.createElement("span");
+      b.className = "sw-veh-b";
+      el.appendChild(b);
+      const m = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(tr.parts[0].st.coords[0]).addTo(map);
+      veh.current[who] = { m, el, b, part: -1, rest: false };
+    });
     const set = (t: number) => {
       const tt = { you: easeInOut(Math.min(1, t)), them: easeInOut(Math.min(1, Math.max(0, t - 0.12) / 0.88)) };
       (map.getSource("route-you") as GeoJSONSource | undefined)?.setData(line(partial(full.you, tt.you)));
@@ -418,7 +473,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     };
     if (reduced) {
       set(1);
-      return; // no traveller dots with reduced motion
+      return; // static badges only with reduced motion
     }
     set(0);
     const delay = 700;
