@@ -16,8 +16,13 @@ import type { AgentStep, Clarify, Fact, LatLng, Leg, PlanCard, PlanResultWithAge
 import { fairPoint, journey, lineStatus, searchPlace, trimPathStart, trimSegmentsStart, type Journey, type LegSegment, type LineStatus, type Place } from "@/lib/tfl";
 import { forecastAt, type Forecast } from "@/lib/weather";
 import { weatherDecision, weatherFitFact, weatherMode, weatherRank, type WeatherMode } from "@/lib/venue-weather";
+import { applyRefinements, clock12, joinRefine, pickHub, prefRank, refineReply, seatingWish, splitRefine, type Pref, type RefinedAsk, type Refinement } from "@/lib/refine";
+import { meetDraft, nearDraft } from "@/lib/draft-message";
 
-export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string } };
+export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string }; refine?: string };
+/** Result plus the follow-up chat fields (plan-types.ts stays unchanged): `reply` is one plain sentence about
+ * what a refinement changed; `query` (already on PlanResult) is the accumulated ask to send back next turn. */
+export type PlanResultRefined = PlanResultWithAgent & { reply?: string };
 export type StepSink = (step: AgentStep) => void;
 
 const MAX_CARDS = 3;
@@ -148,13 +153,15 @@ function weatherFact(w: Forecast | { error: string } | null, at: Date): Fact {
   return fact("Weather", `${londonLabel(at)}: ${w.value}`, "forecast", "Open-Meteo", w.fetchedAt);
 }
 
-function venuePick(res: OsmResult, at: Date, wm?: WeatherMode) {
+function venuePick(res: OsmResult, at: Date, wm?: WeatherMode, prefs?: Pref[]) {
   const rank = { confirmed: 0, likely: 1, forecast: 2, unknown: 3 } as const;
   const rows = res.places.map((p) => ({ p, h: hoursAt(p.tags, at, p.location) }));
   const closed = rows.filter((r) => r.h.state === "closed").length;
   // Weather fit first (indoor when wet, terrace when warm; OSM seating tags), then hours confidence, then distance.
   const wr = (p: OsmPlace) => (wm ? weatherRank(p.tags, wm) : 0);
-  const keep = rows.filter((r) => r.h.state !== "closed").sort((a, b) => wr(a.p) - wr(b.p) || rank[a.h.verdict] - rank[b.h.verdict] || a.p.distanceM - b.p.distanceM);
+  // Follow-up wishes (cheaper / quieter / terrace / indoor) come first when the user asked for them.
+  const pr = (p: OsmPlace) => prefRank(p.tags, prefs);
+  const keep = rows.filter((r) => r.h.state !== "closed").sort((a, b) => pr(a.p) - pr(b.p) || wr(a.p) - wr(b.p) || rank[a.h.verdict] - rank[b.h.verdict] || a.p.distanceM - b.p.distanceM);
   return { picks: keep.slice(0, MAX_CARDS), total: rows.length, closed };
 }
 
@@ -170,6 +177,12 @@ function stepFree(tags: Record<string, string>, asOf: string, src: string): Fact
   if (w === "limited") return fact("Step-free", "Wheelchair access: limited (OSM tag)", "likely", src, asOf);
   if (w === "no") return fact("Step-free", "Wheelchair access: no (OSM tag)", "likely", src, asOf);
   return fact("Step-free", "Not tagged in OSM", "unknown", src);
+}
+
+/** Seating fact when the user asked for a terrace / indoors in a follow-up. */
+function seatFact(tags: Record<string, string>, prefs: Pref[] | undefined, osm: OsmResult): Fact[] {
+  const w = seatingWish(tags, prefs);
+  return w ? [fact(w.label, w.value, w.ok || /^No\b/.test(w.value) ? "likely" : "unknown", osm.source, osm.asOf)] : [];
 }
 
 function emptyResult(query: string, when: Date, you: LatLng | undefined, steps: AgentStep[], unknowns: string[]): PlanResultWithAgent {
@@ -188,7 +201,36 @@ function emptyResult(query: string, when: Date, you: LatLng | undefined, steps: 
   };
 }
 
-export async function runPlan(req: PlanRequest, emit?: StepSink, now = new Date()): Promise<PlanResultWithAgent> {
+type RefineRun = { refinement: Refinement; prefs: Pref[]; hubWhy?: string; hubName?: string };
+const REFINE_RUNS = new WeakMap<AgentStep[], RefineRun>(); // steps array → refinement info for the reply
+
+/** runPlan + follow-up `reply` when the ask carries refinements (mode "refine", or an accumulated query). */
+export async function runPlan(req: PlanRequest, emit?: StepSink, now = new Date()): Promise<PlanResultRefined> {
+  const r: PlanResultRefined = await runPlanCore(req, emit, now);
+  const rr = REFINE_RUNS.get(r.steps);
+  if (!rr) return r;
+  const p = londonParts(new Date(r.when));
+  const top = r.cards[0];
+  const seat = top?.facts.find((f) => f.label === "Outdoor seating" || f.label === "Indoor seating");
+  let reply = refineReply({
+    refinement: rr.refinement,
+    prefs: rr.prefs,
+    whenLabel: { day: londonDayShort(new Date(r.when)), clock: clock12(p.hh, p.mm), dateChanged: false },
+    category: r.filters.category,
+    who: r.headline.match(/, (her|him|them|[A-Z][a-z]+) \d+\.$/)?.[1] ?? "them",
+    top: top ? { name: top.name, seating: seat ? { ok: seat.verdict !== "unknown" && !/^No\b|Not tagged/.test(seat.value) } : null } : undefined,
+    hubName: rr.hubName,
+    hubWhy: rr.hubWhy,
+    clarify: r.clarify?.question,
+    maxMinutes: r.filters.maxMinutes,
+    intent: r.intent,
+  });
+  if (r.them && reply.toLowerCase().includes(r.them.area.toLowerCase())) reply = reply.split(r.them.area).join("their side");
+  r.reply = reply;
+  return r;
+}
+
+async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()): Promise<PlanResultWithAgent> {
   const { steps, begin } = stepper(emit);
   const today = londonToday(now);
   const unknowns: string[] = [];
@@ -197,20 +239,29 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = new Date(
 
   // 1. Parse
   const endParse = begin("parse", "Reading your ask", "rules");
-  const merged = req.previous?.query ? await mergeAnswer(req.previous.query, req.previous.answer || req.query, today, reqYou) : null;
-  const text = merged?.text ?? String(req.query ?? "").slice(0, 500);
-  let ask = merged?.ask ?? parsePlanAsk(text, today);
+  // Follow-up chat: {mode:"refine", query: <refinement>, previous:{query}} → "<previous>; refine: <refinement>".
+  const refineText = req.refine !== undefined && req.previous?.query ? joinRefine(req.previous.query, req.refine) : null;
+  const merged = !refineText && req.previous?.query ? await mergeAnswer(req.previous.query, req.previous.answer || req.query, today, reqYou) : null;
+  const text = (refineText ?? merged?.text ?? String(req.query ?? "")).slice(0, 1500);
+  const split = splitRefine(text);
+  let ask = split.refinements.length ? parsePlanAsk(split.base, today) : (merged?.ask ?? parsePlanAsk(text, today));
   let parseSource = "rules";
   if (process.env.GEMINI_API_KEY && (!ask.intent || (ask.intent === "meet_halfway" && (!ask.themPlace || !ask.youPlace)) || !ask.category)) {
-    const g = await geminiFill(text, ask, today);
+    const g = await geminiFill(split.base, ask, today);
     if (g.used && g.filled.length) {
       ask = g.ask;
       parseSource = "rules + Gemini";
     }
   }
+  const rf = split.refinements.length ? applyRefinements(ask, split.refinements, today) : null;
+  if (rf) {
+    ask = rf.ask;
+    REFINE_RUNS.set(steps, { refinement: rf.refinement, prefs: rf.refinement.prefs });
+  }
   endParse("done", `${ask.intent ?? "no intent"} · ${ask.signals.join(" · ") || "nothing recognised"} (${parseSource})`);
 
-  const when = planTime(ask, req.when, now, unknowns);
+  const planned = planTime(ask, req.when, now, unknowns);
+  const when = rf?.refinement.shiftMin ? new Date(planned.getTime() + rf.refinement.shiftMin * 60_000) : planned;
   const base = emptyResult(text, when, reqYou, steps, unknowns);
   base.filters = {
     ...(ask.walkIn ? { walkIn: true } : {}),
@@ -310,7 +361,11 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   const endCompare = begin("compare", "Comparing central hubs by TfL journey time", "TfL Journey Planner");
   const fp = await fairPoint(ctx.you, { ...ctx.them.location, id: ctx.them.id ?? undefined }, when);
   const history = await tieBreakByHistory(fp.ranked);
-  const best = fp.ranked[0];
+  const prefs = (ask as RefinedAsk).prefs;
+  const hp = pickHub(fp.ranked, prefs);
+  const best = hp.hub;
+  const rr = REFINE_RUNS.get(ctx.base.steps);
+  if (rr && best) Object.assign(rr, { hubWhy: hp.why, hubName: best.hub.name });
   if (best) addSource(sources, "TfL Journey Planner", best.a.fetchedAt);
   endCompare(best ? "done" : "failed", best
     ? `${fp.compared} hubs compared (${fp.calls} journeys${fp.failed ? `; no TfL time for ${fp.failedHubs.join(", ")}` : ""}) · ${best.hub.name} fairest: you ${best.a.minutes} min, ${who} ${best.b.minutes} min${fp.ranked[1] ? ` · next ${fp.ranked[1].hub.name} (${fp.ranked[1].a.minutes}/${fp.ranked[1].b.minutes})` : ""}${history ? ` · ${history}` : ""}`
@@ -344,7 +399,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   ]);
   // Venues are ranked once the forecast is in, so the weather can decide indoor vs terrace.
   const wm = weatherMode(wx, londonClock(when.toISOString()));
-  const osm = { r: osmR, pk: venuePick(osmR, when, wm) };
+  const osm = { r: osmR, pk: venuePick(osmR, when, wm, prefs) };
   endVenues(osm.pk.picks.length ? "done" : "failed", `${osmR.via ? `${osmR.via} · ${osmR.places.length} within 500 m` : `${osmR.places.length} found within 500 m (${osmR.source}${osmR.live ? "" : ", live call " + (osmR.note?.match(/Overpass (\w+)/)?.[1] ?? "failed")})`} · ${osm.pk.closed} closed at ${londonClock(when.toISOString())} · ${osm.pk.picks.length} kept · ${weatherDecision(wm, osm.pk.picks.map((x) => x.p))}`, osmR.stepSource);
   addSource(sources, osm.r.source, osm.r.asOf);
   if (!osm.r.live && osm.r.note) unknowns.push(osm.r.note + ".");
@@ -385,6 +440,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
         ...lf,
         wf,
         ...fitFact(p.tags, wm, osm.r, wx),
+        ...seatFact(p.tags, prefs, osm.r),
         fact("Price", ask.budgetGBP ? `Not listed, can't check £${ask.budgetGBP}` : "Not listed", "unknown", "OSM (no price tag)"),
         stepFree(p.tags, osm.r.asOf, osm.r.source),
       ],
@@ -393,18 +449,11 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
     };
   });
   if (!result.cards.length) unknowns.push(`No open ${kind}s found within 500 m of ${best.hub.name} in OSM.`);
-  result.headline = `${best.hub.name} is the fair middle: you ${best.a.minutes} min, ${who} ${best.b.minutes}.`;
-  const top = result.cards[0];
-  const lineText = lf[0]?.value.replace(/ · now, as of .*/, "");
-  result.draftMessage = top
-    ? [
-        `${londonLabel(when)} at ${top.name}${addressOf(osm.pk.picks[0].p.tags) ? `, ${addressOf(osm.pk.picks[0].p.tags)}` : ""} (near ${best.hub.name} station)?`,
-        `TfL says about ${best.b.minutes} min for you and ${best.a.minutes} for me.`,
-        lineText ? `${lineText} right now.` : "",
-        !("error" in wx) ? `Forecast: ${wx.value}.` : "",
-        osmUrl(osm.pk.picks[0].p),
-      ].filter(Boolean).join(" ")
-    : `Shall we meet near ${best.hub.name} station, ${londonLabel(when)}? TfL says about ${best.b.minutes} min for you and ${best.a.minutes} for me.`;
+  const hubWhy = hp.why === "closer_you" ? "is closer to you" : hp.why === "closer_them" ? `is closer to ${who}` : hp.why === "different" ? "is the next fairest middle" : "is the fair middle";
+  result.headline = `${best.hub.name} ${hubWhy}: you ${best.a.minutes} min, ${who} ${best.b.minutes}.`;
+  const top = osm.pk.picks[0]?.p;
+  // Short, friendly, paste-ready: no line status or forecast; their journey time only, never their area.
+  result.draftMessage = meetDraft({ venue: top?.tags.name, address: (top && addressOf(top.tags)) || undefined, hub: best.hub.name, when, category: ask.category, themMinutes: best.b.minutes, url: top ? (top.tags.website ?? top.tags["contact:website"] ?? osmUrl(top)) : undefined });
   return finish(ctx, result);
 }
 
@@ -429,7 +478,7 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   if (venueKind) {
     osm = await findVenues(venueKind, ctx.you, 1200);
     wm = weatherMode(await wxP, t);
-    const pk = venuePick(osm, when, wm);
+    const pk = venuePick(osm, when, wm, (ask as RefinedAsk).prefs);
     for (const x of pk.picks.concat()) cands.push({ kind: "place", p: x.p, h: x.h, osm });
     endFind(cands.length ? "done" : "failed", `${osm.via ? `${osm.via} · ` : ""}${osm.places.length} ${venueKind}s within 1.2 km (${osm.source}) · ${pk.closed} closed at ${t} · ${weatherDecision(wm, pk.picks.map((x) => x.p))}`, osm.stepSource);
   } else {
@@ -467,10 +516,13 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
 
   const wrC = (c: Cand) => (c.kind === "place" ? weatherRank(c.p.tags, wm) : 0);
   const walkScore = (c: Cand) => (c.kind === "place" ? (c.osm && c.p.tags.fee === "no" ? 0 : 1) : c.e.walkIn.verdict === "unknown" ? 1 : 2);
+  const prefs = (ask as RefinedAsk).prefs;
+  const prC = (c: Cand) => (c.kind === "place" ? prefRank(c.p.tags, prefs) : 0);
   within.sort((a, b) =>
-    ask.walkIn || ask.free ? walkScore(a.c) - walkScore(b.c) || a.j.minutes - b.j.minutes : (a.c.kind === "event" ? 0 : 1) - (b.c.kind === "event" ? 0 : 1) || wrC(a.c) - wrC(b.c) || a.j.minutes - b.j.minutes,
+    prefs?.includes("closer_you") ? a.j.minutes - b.j.minutes :
+    ask.walkIn || ask.free ? walkScore(a.c) - walkScore(b.c) || prC(a.c) - prC(b.c) || a.j.minutes - b.j.minutes : (a.c.kind === "event" ? 0 : 1) - (b.c.kind === "event" ? 0 : 1) || prC(a.c) - prC(b.c) || wrC(a.c) - wrC(b.c) || a.j.minutes - b.j.minutes,
   );
-  const chosen = within.slice(0, MAX_CARDS);
+  const chosen = prefs?.includes("different") && within.length > MAX_CARDS ? within.slice(MAX_CARDS, MAX_CARDS * 2) : within.slice(0, MAX_CARDS);
   const lineIds = [...new Set(chosen.flatMap((x) => x.j.lines.map((l) => l.id)))];
   const endLines = begin("lines", "Checking line status", "TfL");
   const ls = lineIds.length ? await lineStatus(lineIds) : null;
@@ -527,6 +579,7 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
         ...lf,
         wf,
         ...fitFact(p.tags, wm, c.osm, wx),
+        ...seatFact(p.tags, prefs, c.osm),
         stepFree(p.tags, c.osm.asOf, c.osm.source),
       ],
       why: `${j.minutes} min away by TfL${free ? ", free entry" : ""}${c.h.state === "open" ? `, open at ${t}` : ", hours not listed"}.`,
@@ -542,8 +595,6 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   result.headline = n
     ? `${n} ${what}${n > 1 ? "s" : ""} within ${maxMin} min of ${ctx.youName ?? "you"}, ${londonLabel(when)}.`
     : `Nothing open in our data within ${maxMin} min of ${ctx.youName ?? "you"} at ${londonLabel(when)}.`;
-  result.draftMessage = n
-    ? `${londonLabel(when)}: ` + result.cards.map((c) => `${c.name} (${c.legs[0].minutes} min by TfL)${c.url ? ` ${c.url}` : ""}`).join("; ")
-    : "";
+  result.draftMessage = nearDraft({ picks: chosen.map(({ c }, i) => ({ name: result.cards[i].name, event: c.kind === "event", free: c.kind === "place" && c.p.tags.fee === "no", url: result.cards[i].url })), when });
   return finish(ctx, result);
 }

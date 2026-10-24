@@ -1,8 +1,10 @@
 // POST /api/plan {query, you?, when?, previous?} → PlanResultWithAgent (JSON), or NDJSON when
+// Follow-up chat: {mode:"refine", query:"<short refinement>", previous:{query:"<last result.query>"}, you?} → the
+// same result plus `reply` (one sentence) and `query` (accumulated ask to send as previous.query next turn).
 // `Accept: application/x-ndjson`: {"type":"step",...} lines then one {"type":"result"} or {"type":"clarify"}.
 // Request bodies are never logged (they can hold someone's location).
-import { planRunWrite, runPlan, type PlanRequest } from "@/lib/plan";
-import type { AgentStep, PlanResultWithAgent } from "@/lib/plan-types";
+import { planRunWrite, runPlan, type PlanRequest, type PlanResultRefined } from "@/lib/plan";
+import type { AgentStep } from "@/lib/plan-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,11 +20,13 @@ function parseBody(raw: unknown): PlanRequest | null {
   // previous.answer, else query) is the user's reply that fills the missing slot of previous.query.
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
   const answer = str(b.answer) ?? str(prev?.answer) ?? (b.query as string);
+  const refine = b.mode === "refine" && str(prev?.query) ? (b.query as string).slice(0, 300) : undefined;
   return {
+    ...(refine !== undefined ? { refine } : {}),
     query: b.query.slice(0, 500),
     you: you && typeof you === "object" && Number.isFinite(you.lat) && Number.isFinite(you.lng) ? { lat: you.lat, lng: you.lng } : undefined,
     when: typeof b.when === "string" ? b.when : undefined,
-    previous: prev && str(prev.query) ? { query: (prev.query as string).slice(0, 500), answer: answer.slice(0, 200) } : undefined,
+    previous: prev && str(prev.query) ? { query: (prev.query as string).slice(0, 1500), answer: refine !== undefined ? "" : answer.slice(0, 200) } : undefined,
   };
 }
 
@@ -52,10 +56,10 @@ export async function POST(req: Request) {
     async start(controller) {
       const send = (o: unknown) => controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
       try {
-        const r: PlanResultWithAgent = await runPlan(plan, (step: AgentStep) => send({ type: "step", step }));
+        const r: PlanResultRefined = await runPlan(plan, (step: AgentStep) => send({ type: "step", step }));
         // `query` is the accumulated ask (earlier answers appended as "; them: X"): resend it as
         // previous.query with the next answer so a second clarify never loses the first answer.
-        if (r.clarify) send({ type: "clarify", clarify: r.clarify, query: r.query });
+        if (r.clarify) send({ type: "clarify", clarify: r.clarify, query: r.query, ...(r.reply ? { reply: r.reply } : {}) });
         else send({ type: "result", result: r });
         await planRunWrite(r); // result already sent; keep the function alive until plan_runs is written
       } catch {

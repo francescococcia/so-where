@@ -51,6 +51,14 @@
     {"id": "legs-segments-halfway", "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
       "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "segments": true} },
     {"id": "no-phone-booth-museum", "query": "Free things to do near me tomorrow afternoon", "you": {"lat": 51.5294, "lng": -0.1258},
-      "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "noObjects": true} }
+      "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "noObjects": true} },
+    {"id": "refine-8pm-quieter", "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham", "refines": ["make it 8pm somewhere quieter"],
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "weekday": "Fri", "time": "20:00", "category": "pub", "replyMatch": ["8pm", "quieter"]} },
+    {"id": "refine-chain-cheaper", "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham", "refines": ["make it 8pm", "cheaper"],
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "weekday": "Fri", "time": "20:00", "replyMatch": ["cheaper"]} },
+    {"id": "refine-near-me-terrace", "query": "pubs near me tonight", "you": {"lat": 51.5256, "lng": -0.0877}, "refines": ["with a terrace"],
+      "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "category": "pub", "seating": "Outdoor seating", "replyMatch": ["outdoor seating"]} },
+    {"id": "refine-closer-to-me", "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham", "refines": ["closer to me, I don't mind them travelling a bit more"],
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Clapham", "time": "19:00", "youCloser": true, "replyMatch": ["closer to you"]} }
   ]
 }

@@ -6,17 +6,20 @@ import type { PlanResultWithAgent } from "@/lib/plan-types";
 import { londonClock, londonDayShort } from "@/lib/london-time";
 import { setForecastOverride } from "@/lib/weather";
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
-// exactly like the UI, and the same clarify must never come back twice. `weather`: injected forecast (no Open-Meteo call).
+// exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
+// {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
-type Case = { id: string; query: string; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; weather?: Wx; expect: Expect };
+type Case = { id: string; query: string; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; weather?: Wx; expect: Expect };
+type Refined = PlanResultWithAgent & { reply?: string };
+const youMin = (r: PlanResultWithAgent) => r.cards[0]?.legs.find((l) => l.who === "you")?.minutes ?? null;
 
 const { cases } = JSON.parse(readFileSync("evals/plan-evals.json", "utf8")) as { cases: Case[] };
 
 async function post(body: Record<string, unknown>) {
   const res = await POST(new Request("http://local/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
-  return { status: res.status, body: (await res.json()) as PlanResultWithAgent };
+  return { status: res.status, body: (await res.json()) as Refined };
 }
 
 async function call(c: Case) {
@@ -35,13 +38,18 @@ async function call(c: Case) {
       r = await post({ query: a, you: c.you, answer: a, previous: { query: r.body.query, answer: a } });
     }
     if (r.status === 200 && r.body.clarify && c.answers) asked.push(`${r.body.clarify.missing}: ${r.body.clarify.question}`);
-    return { ...r, asked, ms: Date.now() - t0 };
+    const base = c.refines ? { youMin: youMin(r.body), query: r.body.query } : undefined;
+    for (const q of c.refines ?? []) {
+      if (r.status !== 200) break;
+      r = await post({ query: q, mode: "refine", previous: { query: r.body.query }, you: c.you });
+    }
+    return { ...r, asked, base, ms: Date.now() - t0 };
   } finally {
     setForecastOverride(null);
   }
 }
 
-function check(c: Case, r: PlanResultWithAgent, asked: string[]) {
+function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | null; query: string }) {
   const e = c.expect;
   const out: { name: string; pass: boolean; got?: unknown }[] = [];
   const add = (name: string, pass: boolean, got?: unknown) => out.push({ name, pass, ...(got !== undefined ? { got } : {}) });
@@ -99,6 +107,20 @@ function check(c: Case, r: PlanResultWithAgent, asked: string[]) {
     const good = (v?: string) => (e.weather === "wet" ? /indoor seating \(OSM|covered seating/ : /beer garden \(OSM|terrace/).test(v ?? "");
     add("best weather fit ranked first", !fits.some((f) => good(f?.value)) || good(fits[0]?.value), fits[0]?.value ?? null);
   }
+  if (c.refines) {
+    const last = c.refines[c.refines.length - 1];
+    add("reply is one sentence", !!r.reply && r.reply.length < 240 && !/[.!?]\s+\S/.test(r.reply.replace(/\b(?:St|Mr|Dr)\./g, "")), r.reply ?? null);
+    for (const m of e.replyMatch ?? []) add(`reply matches /${m}/i`, new RegExp(m, "i").test(r.reply ?? ""), r.reply ?? null);
+    add("query accumulates every refinement", !!base && r.query.startsWith(base.query.replace(/\.$/, "")) && c.refines.every((q) => r.query.includes(`refine: ${q}`)) && r.query.endsWith(last), r.query);
+    const area = (e.themArea ?? r.them?.area ?? "").toLowerCase();
+    if (area) add("reply has no 'them' area", !(r.reply ?? "").toLowerCase().includes(area), r.reply ?? null);
+    add("draftMessage short, no TfL status", !!r.draftMessage && r.draftMessage.length <= 280 && !/good service|delay|disruption|closure|suspend|status/i.test(r.draftMessage), r.draftMessage);
+  }
+  if (e.seating) {
+    const f = r.cards[0]?.facts.find((x) => x.label === e.seating);
+    add(`top card has a sourced '${e.seating}' fact`, !!f && f.source.length > 0 && /yes|outdoor|indoor/i.test(f.value), f ?? null);
+  }
+  if (e.youCloser) add("your trip is shorter than the fair plan", base?.youMin != null && youMin(r) != null && youMin(r)! < base.youMin, { before: base?.youMin, after: youMin(r) });
   if (e.walkIn) {
     add("walk-in filter on", r.filters.walkIn === true);
     const rsvp = r.cards.filter((x) => x.facts.some((f) => f.label === "Sign-up" && f.verdict !== "unknown" && /rsvp|registration|register/i.test(f.value)));
@@ -114,10 +136,10 @@ function check(c: Case, r: PlanResultWithAgent, asked: string[]) {
   for (const c of cases) {
     let row;
     try {
-      const { status, body, ms, asked } = await call(c);
-      const checks = status === 200 ? check(c, body, asked) : [{ name: "HTTP 200", pass: false, got: status }];
+      const { status, body, ms, asked, base } = await call(c);
+      const checks = status === 200 ? check(c, body, asked, base) : [{ name: "HTTP 200", pass: false, got: status }];
       const pass = checks.every((x) => x.pass);
-      row = { id: c.id, query: c.query, pass, ms, checks, headline: body.headline, middle: body.middle?.name ?? null, cards: body.cards?.map((x) => x.name) ?? [], clarify: body.clarify ?? null, ...(c.answers ? { asked } : {}), when: body.when, cardFacts: body.cards?.map((x) => ({ name: x.name, weather: x.facts.find((f) => f.label === "Weather fit") ?? null })), unknowns: body.unknowns, steps: body.steps?.map((s) => ({ id: s.id, status: s.status, ms: s.ms, detail: s.detail })) };
+      row = { id: c.id, query: c.query, pass, ms, checks, headline: body.headline, middle: body.middle?.name ?? null, cards: body.cards?.map((x) => x.name) ?? [], clarify: body.clarify ?? null, ...(c.answers ? { asked } : {}), ...(c.refines ? { refines: c.refines, reply: body.reply ?? null, accumulated: body.query } : {}), when: body.when, cardFacts: body.cards?.map((x) => ({ name: x.name, weather: x.facts.find((f) => f.label === "Weather fit") ?? null })), unknowns: body.unknowns, steps: body.steps?.map((s) => ({ id: s.id, status: s.status, ms: s.ms, detail: s.detail })) };
     } catch (err) {
       row = { id: c.id, query: c.query, pass: false, ms: 0, checks: [{ name: "handler ran", pass: false, got: String(err) }] };
     }
