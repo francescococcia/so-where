@@ -13,9 +13,45 @@ export type Refinement = {
   changes: string[]; // what the refinements changed, for the reply ("time", "date", "category", …)
   texts: string[];
   /** Only what the latest refinement (this chat turn) changed / asked for; the reply describes this. */
-  latest: { changes: string[]; prefs: Pref[] };
+  latest: { changes: string[]; prefs: Pref[]; asks: Ask[] };
 };
-export type RefinedAsk = PlanAsk & { prefs?: Pref[] };
+/** Questions about the current pick, answered in the reply ("is it open now?", "when does it close?"). */
+export type Ask = "open";
+export type RefinedAsk = PlanAsk & { prefs?: Pref[]; cuisine?: string; focus?: { id?: string; name?: string; lat: number; lng: number } };
+
+/** Cuisine / diet wishes → OSM `cuisine=*` / `diet:*=yes` tokens, plus a name pattern for untagged places. */
+const CUISINES: { key: string; label: string; re: RegExp; name: RegExp; diet?: boolean }[] = [
+  { key: "italian", label: "Italian", re: /\bital(?:ian|iano|y)\b/i, name: /ital|caff[eè]|pizz|trattoria|osteria|ristorante|pasta|gelat|espresso bar|bar italia/i },
+  { key: "pizza", label: "pizza", re: /\bpizz(?:a|eria)s?\b/i, name: /pizz/i },
+  { key: "vegan", label: "vegan", re: /\bvegan\b/i, name: /vegan|plant/i, diet: true },
+  { key: "vegetarian", label: "vegetarian", re: /\bvegetarian|veggie\b/i, name: /vegetarian|veggie/i, diet: true },
+  { key: "indian", label: "Indian", re: /\bindian|curry\b/i, name: /indian|curry|tandoor|masala/i },
+  { key: "chinese", label: "Chinese", re: /\bchinese|dim sum\b/i, name: /chinese|dim sum|wok/i },
+  { key: "japanese", label: "Japanese", re: /\bjapanese|sushi|ramen\b/i, name: /sushi|ramen|japan|izakaya/i },
+  { key: "thai", label: "Thai", re: /\bthai\b/i, name: /thai/i },
+  { key: "mexican", label: "Mexican", re: /\bmexican|tacos?\b/i, name: /mexic|taco|cantina/i },
+  { key: "french", label: "French", re: /\bfrench\b/i, name: /bistro|brasserie|french/i },
+  { key: "turkish", label: "Turkish", re: /\bturkish|kebab\b/i, name: /turk|kebab|meze/i },
+  { key: "greek", label: "Greek", re: /\bgreek\b/i, name: /greek|souvlaki|taverna/i },
+  { key: "korean", label: "Korean", re: /\bkorean\b/i, name: /korea/i },
+  { key: "vietnamese", label: "Vietnamese", re: /\bvietnamese|pho\b/i, name: /viet|pho\b/i },
+  { key: "spanish", label: "Spanish", re: /\bspanish|tapas\b/i, name: /tapas|spanish/i },
+  { key: "lebanese", label: "Lebanese", re: /\blebanese\b/i, name: /leban|beirut/i },
+];
+export function cuisineOf(text: string): string | undefined {
+  return CUISINES.find((c) => c.re.test(text))?.key;
+}
+export const cuisineLabel = (key: string) => CUISINES.find((c) => c.key === key)?.label ?? key;
+/** Does this OSM place match the cuisine wish? cuisine=* tag, diet:*=yes|only, or (untagged) its name. */
+export function cuisineMatch(tags: Record<string, string>, key: string | undefined): "tag" | "name" | null {
+  if (!key) return null;
+  const c = CUISINES.find((x) => x.key === key);
+  if (!c) return null;
+  if ((tags.cuisine ?? "").toLowerCase().split(/[;,]\s*/).includes(key) || (c.diet && /^(yes|only)$/.test(tags[`diet:${key}`] ?? ""))) return "tag";
+  // Name-only guesses skip chains (a brand tag without the cuisine tag, e.g. Caffè Nero).
+  return !tags.brand && !/\bcaff[eè] nero\b|\bcosta\b|\bstarbucks\b|\bpret\b/i.test(tags.name ?? "") && c.name.test(tags.name ?? "") ? "name" : null;
+}
+const OPEN_Q = /\b(?:is|are)\s+(?:it|they|that|this|these|those|the \w+|[A-Z][\w' ]+?)\s+(?:still\s+)?open\b|\bopen (?:now|tonight|late|then)\b|\bstill open\b|\bwhen (?:does|do|will) .{0,30}\bclose\b|\bclosing time\b|\bopening (?:hours|times)\b|\bwhat time .{0,30}\bclose\b|\b(?:is|are) open\b|\bopen\?/i;
 
 const REFINE_SEP = /;\s*refine:\s*/i;
 const SLOT_TOKEN = /;\s*(?:them|you):\s*[^;]+/gi;
@@ -85,6 +121,7 @@ export function applyRefinements(ask: PlanAsk, refinements: string[], today: str
   const out = ask as RefinedAsk;
   let latestChanges = new Set<string>();
   let latestPrefs = new Set<Pref>();
+  let latestAsks: Ask[] = [];
   for (const raw of refinements) {
     const r = raw.replace(/[’‘]/g, "'").trim();
     const before = { changes: new Set(changes), prefs: new Set(prefs) };
@@ -94,6 +131,7 @@ export function applyRefinements(ask: PlanAsk, refinements: string[], today: str
     const shift = shiftOf(r);
     if (t && !shift) {
       out.time = t;
+      out.timeKind = p.time ? (p.timeKind ?? "clock") : "clock";
       shiftMin = 0;
       changes.add("time");
     }
@@ -152,13 +190,20 @@ export function applyRefinements(ask: PlanAsk, refinements: string[], today: str
       prefs.add("closer_them");
     }
     if (DIFFERENT.test(r)) prefs.add("different");
+    const cu = cuisineOf(r);
+    if (cu) {
+      out.cuisine = cu;
+      if (!out.category) out.category = "restaurant";
+      changes.add("cuisine");
+    }
+    latestAsks = OPEN_Q.test(r) ? ["open"] : [];
     latestChanges = new Set(changes);
     latestPrefs = new Set([...prefs].filter((p) => !before.prefs.has(p) || turnPrefs(r).includes(p)));
     for (const c of before.changes) changes.add(c);
   }
   out.prefs = [...prefs];
   if (refinements.length) out.signals.push(`refined: ${[...changes, ...prefs].join(", ") || "nothing recognised"}`);
-  return { ask: out, refinement: { prefs: [...prefs], shiftMin, changes: [...changes], texts: refinements, latest: { changes: [...latestChanges], prefs: [...prefs].filter((p) => latestPrefs.has(p)) } } };
+  return { ask: out, refinement: { prefs: [...prefs], shiftMin, changes: [...changes], texts: refinements, latest: { changes: [...latestChanges], prefs: [...prefs].filter((p) => latestPrefs.has(p)), asks: latestAsks } } };
 }
 
 /** Preferences a single refinement text asks for (to tell "asked again" from "carried over"). */
@@ -259,7 +304,11 @@ export function refineReply(opts: {
   whenLabel: { day: string; clock: string; dateChanged: boolean };
   category?: string | null;
   who: string;
-  top?: { name: string; seating?: { ok: boolean } | null };
+  top?: { name: string; seating?: { ok: boolean } | null; closesAt?: string | null; hoursKnown?: boolean; openAtPlan?: boolean | null };
+  /** Cards that match the cuisine wish (names), when one was asked this turn. */
+  cuisine?: { key: string; matches: string[] };
+  /** Name of the selected place the search was centred on (refine `focus`). */
+  near?: string;
   hubName?: string;
   hubWhy?: string;
   clarify?: string;
@@ -287,7 +336,25 @@ export function refineReply(opts: {
       else parts.push("put the nearest options first");
     } else parts.push(`picked ${PREF_PHRASE[p]}`);
   }
-  let s = parts.length ? parts.join(" and ") : "I wasn't sure what to change, so here's the plan again";
-  s = s.charAt(0).toUpperCase() + s.slice(1);
-  return top ? `${s}: ${top.name}.` : `${s}, but nothing open came up; try another time or area.`;
+  const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+  // Opening-hours question about the current pick: answered from OSM opening_hours, no replanning wording.
+  const openAns = r.asks.includes("open") && top
+    ? top.hoursKnown === false ? `No hours listed for ${top.name}` : top.openAtPlan === false ? `${top.name} looks closed at ${opts.whenLabel.clock}` : top.closesAt ? `${top.name} is open until ${top.closesAt}` : `${top.name} is open at ${opts.whenLabel.clock}`
+    : null;
+  if (r.changes.includes("cuisine") && opts.cuisine) {
+    const lbl = cuisineLabel(opts.cuisine.key);
+    const m = opts.cuisine.matches.slice(0, 3);
+    const near = opts.near ? ` near ${opts.near}` : "";
+    const c = m.length ? `found ${m.length} ${lbl} option${m.length > 1 ? "s" : ""}${near}: ${m.join(", ")}` : `no ${lbl} places are tagged ${near ? near.trim() : "near there"}, so these are the closest matches`;
+    const rest = parts.length ? `${parts.join(" and ")} and ${c}` : c;
+    return `${cap(rest)}${openAns ? `; ${openAns.charAt(0).toLowerCase() === "n" && openAns.startsWith("No hours") ? "n" + openAns.slice(1) : openAns}` : ""}.`;
+  }
+  if (!parts.length) {
+    if (openAns) return `${openAns}.`;
+    return top
+      ? `Not sure what to change for ${top.name}: try a time ("8pm"), a type ("Italian", "a pub"), "quieter" or "closer to me".`
+      : `Not sure what to change: try a time ("8pm"), a type ("Italian", "a pub"), "quieter" or "closer to me".`;
+  }
+  const s = cap(parts.join(" and "));
+  return top ? `${s}: ${top.name}${openAns ? `; ${openAns.startsWith(top.name) ? `it${openAns.slice(top.name.length)}` : openAns}` : ""}.` : `${s}, but nothing open came up; try another time or area.`;
 }

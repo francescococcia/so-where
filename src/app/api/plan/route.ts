@@ -1,14 +1,23 @@
 // POST /api/plan {query, you?, when?, previous?} → PlanResultWithAgent (JSON), or NDJSON when
 // Follow-up chat: {mode:"refine", query:"<short refinement>", previous:{query:"<last result.query>"}, you?} → the
-// same result plus `reply` (one sentence) and `query` (accumulated ask to send as previous.query next turn).
+// (optional `focus:{id?,name?,lat,lng}` = the selected card: "other … in the area" searches around it, excluding it) →
+// the same result plus `reply` (one sentence) and `query` (accumulated ask to send as previous.query next turn).
 // `Accept: application/x-ndjson`: {"type":"step",...} lines then one {"type":"result"} or {"type":"clarify"}.
 // Request bodies are never logged (they can hold someone's location).
-import { planRunWrite, runPlan, type PlanRequest, type PlanResultRefined } from "@/lib/plan";
+import { planRunWrite, runPlan, type PlanFocus, type PlanRequest, type PlanResultRefined } from "@/lib/plan";
 import type { AgentStep } from "@/lib/plan-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+/** Refine only: {focus:{id?, name?, lat, lng}} = the card the user has selected ("other Italian places in the area"). */
+function focusOf(v: unknown): PlanFocus | null {
+  if (!v || typeof v !== "object") return null;
+  const f = v as Record<string, unknown>;
+  if (typeof f.lat !== "number" || typeof f.lng !== "number" || !Number.isFinite(f.lat) || !Number.isFinite(f.lng)) return null;
+  return { lat: f.lat, lng: f.lng, ...(typeof f.id === "string" ? { id: f.id.slice(0, 80) } : {}), ...(typeof f.name === "string" ? { name: f.name.slice(0, 120) } : {}) };
+}
 
 function parseBody(raw: unknown): PlanRequest | null {
   if (!raw || typeof raw !== "object") return null;
@@ -26,6 +35,7 @@ function parseBody(raw: unknown): PlanRequest | null {
     query: b.query.slice(0, 500),
     you: you && typeof you === "object" && Number.isFinite(you.lat) && Number.isFinite(you.lng) ? { lat: you.lat, lng: you.lng } : undefined,
     when: typeof b.when === "string" ? b.when : undefined,
+    ...(refine !== undefined && focusOf(b.focus) ? { focus: focusOf(b.focus)! } : {}),
     previous: prev && str(prev.query) ? { query: (prev.query as string).slice(0, 1500), answer: refine !== undefined ? "" : answer.slice(0, 200) } : undefined,
   };
 }

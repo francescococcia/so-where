@@ -11,6 +11,8 @@ export function friendlyWhen(when: Date, now = new Date()): string {
   const today = londonToday(now);
   const tomorrow = londonToday(new Date(now.getTime() + 24 * 3600_000));
   if (p.date === today) return `${p.hh >= 17 ? "tonight" : "today"} at ${t}`;
+  // A late-night slot just past midnight is still "tonight" to the person reading it.
+  if (p.date === tomorrow && p.hh < 4 && londonParts(now).hh >= 20) return `tonight at ${t}`;
   if (p.date === tomorrow) return `tomorrow at ${t}`;
   const [, m, d] = p.date.split("-").map(Number);
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

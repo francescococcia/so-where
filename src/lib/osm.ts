@@ -91,11 +91,23 @@ export async function findPlaces(kind: OsmKind, center: LatLng, radiusM: number)
   };
 }
 
-export type HoursCheck = { state: "open" | "closed" | "unknown"; value: string; verdict: Verdict; checkDate?: string };
+export type HoursCheck = {
+  state: "open" | "closed" | "unknown";
+  value: string;
+  verdict: Verdict;
+  checkDate?: string;
+  /** London "HH:MM" the current opening ends (open only; absent when open round the clock). */
+  closesAt?: string;
+  /** Minutes from `at` to closing (open only; absent when open round the clock). */
+  closesInMin?: number;
+};
 
 const fmt = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
-/** Is this OSM place open at `at`? 'confirmed' only when a check_date within 12 months backs the hours. */
+/** Is this OSM place open at `at`? Uses opening_hours.js, so ranges past midnight ("Fr-Sa 12:00-02:00"),
+ *  public holidays ("PH off", England) and "off" rules are honoured. 'confirmed' only when a check_date
+ *  within 12 months backs the hours. When open, the value leads with the stretch that contains `at`
+ *  ("Open until 02:00 (17:00–02:00)") so a reader taking the first range gets the right one. */
 export function hoursAt(tags: Record<string, string>, at: Date, location: LatLng): HoursCheck {
   const raw = tags.opening_hours;
   if (!raw) return { state: "unknown", value: "Hours not in OSM", verdict: "unknown" };
@@ -104,19 +116,32 @@ export function hoursAt(tags: Record<string, string>, at: Date, location: LatLng
   try {
     const oh = new OpeningHours(raw, { lat: location.lat, lon: location.lng, address: { country_code: "gb", state: "England" } } as never);
     const local = londonWallAsLocal(at);
+    if (oh.getUnknown(local)) return { state: "unknown", value: `OSM hours: ${raw}`, verdict: "unknown", checkDate };
     const open = oh.getState(local);
-    const dayStart = new Date(local.getFullYear(), local.getMonth(), local.getDate());
-    const dayEnd = new Date(dayStart.getTime() + 86_400_000);
-    const ranges = oh.getOpenIntervals(dayStart, dayEnd).map(([a, b]) => `${fmt(a)}–${b.getTime() >= dayEnd.getTime() ? "00:00" : fmt(b)}`);
-    const unsure = oh.getUnknown(local);
-    const dayText = ranges.length ? ranges.join(", ") : "closed that day";
-    if (unsure) return { state: "unknown", value: `OSM hours: ${raw}`, verdict: "unknown", checkDate };
-    return {
-      state: open ? "open" : "closed",
-      value: `${open ? "Open" : "Closed"} at ${fmt(local)} (${dayText})${checkDate ? ` · checked ${checkDate}` : ""}`,
-      verdict: fresh ? "confirmed" : "likely",
-      checkDate,
-    };
+    const checked = checkDate ? ` · checked ${checkDate}` : "";
+    const verdict: Verdict = fresh ? "confirmed" : "likely";
+    if (!open) {
+      const dayStart = new Date(local.getFullYear(), local.getMonth(), local.getDate());
+      const ranges = oh.getOpenIntervals(dayStart, new Date(dayStart.getTime() + 86_400_000)).map(([a, b]) => `${fmt(a)}–${fmt(b)}`);
+      return { state: "closed", value: `Closed at ${fmt(local)} (${ranges.length ? ranges.join(", ") : "closed that day"})${checked}`, verdict, checkDate };
+    }
+    // The open stretch containing `at`, merged across midnight (getOpenIntervals splits nothing but
+    // may return back-to-back intervals, e.g. "17:00-24:00" + "00:00-03:00").
+    const iv = oh.getOpenIntervals(new Date(local.getTime() - 2 * 86_400_000), new Date(local.getTime() + 2 * 86_400_000));
+    let a = local;
+    let b = local;
+    for (const [s0, e0] of iv) if (s0 <= local && e0 > local) [a, b] = [s0, e0];
+    for (let moved = true; moved; ) {
+      moved = false;
+      for (const [s0, e0] of iv) {
+        if (Math.abs(s0.getTime() - b.getTime()) < 60_000 && e0 > b) [b, moved] = [e0, true];
+        if (Math.abs(e0.getTime() - a.getTime()) < 60_000 && s0 < a) [a, moved] = [s0, true];
+      }
+    }
+    const roundClock = b.getTime() - a.getTime() >= 3 * 86_400_000 - 120_000; // open across the whole window
+    if (roundClock) return { state: "open", value: `Open 24 hours${checked}`, verdict, checkDate };
+    const closesInMin = Math.round((b.getTime() - local.getTime()) / 60_000);
+    return { state: "open", value: `Open until ${fmt(b)} (${fmt(a)}–${fmt(b)})${checked}`, verdict, checkDate, closesAt: fmt(b), closesInMin };
   } catch {
     return { state: "unknown", value: `OSM hours not machine-readable: "${raw.slice(0, 40)}"`, verdict: "unknown", checkDate };
   }

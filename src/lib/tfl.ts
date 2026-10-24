@@ -108,6 +108,54 @@ function segmentOf(l: JpLeg, first: boolean): LegSegment {
 /** "Jubilee line from Canary Wharf to Waterloo" (falls back to TfL's own summary). */
 const segText = (s: LegSegment, l: JpLeg) => (s.line && s.to ? `${s.line}${s.from ? ` from ${s.from}` : ""} to ${s.to}` : l.instruction?.summary ?? l.mode.name);
 
+const same = (a?: string, b?: string) => !!a && !!b && (stopName(a) ?? a).toLowerCase().trim() === (stopName(b) ?? b).toLowerCase().trim();
+
+/** Readable stretches: back-to-back walks become one ("3 min walk, then 8 min walk" → "11 min walk to X"),
+ *  and a first walk "to <stop>" is unnamed when that stop is where the person already is ("walk to London
+ *  Bridge" for someone at London Bridge). */
+export function tidySegments(segs: LegSegment[], originName?: string): LegSegment[] {
+  const out: LegSegment[] = [];
+  for (const s of segs) {
+    const prev = out[out.length - 1];
+    if (prev && prev.mode === "walking" && s.mode === "walking") {
+      const { to: _to, ...rest } = prev;
+      void _to;
+      out[out.length - 1] = { ...rest, ...(s.to ? { to: s.to } : {}), minutes: prev.minutes + s.minutes, path: [...prev.path, ...s.path], ...(prev.est || s.est ? { est: true } : {}) };
+    } else out.push(s);
+  }
+  // Intra-station walks ("Southeastern to London Bridge, 9 min walk to London Bridge, Bus 43 …"): a walk between
+  // two rides that ends where the previous ride stopped (or a ≤2 min transfer) is a change, not a step.
+  for (let i = out.length - 2; i > 0; i--) {
+    const w = out[i];
+    if (w.mode === "walking" && out[i - 1].mode !== "walking" && out[i + 1].mode !== "walking" && (w.minutes <= 2 || same(w.to, out[i - 1].to) || same(w.to, out[i + 1].from))) out.splice(i, 1);
+  }
+  const first = out[0];
+  if (first?.mode === "walking" && out.length > 1 && same(first.to, originName)) {
+    const { to: _to, ...rest } = first;
+    void _to;
+    out[0] = rest;
+  }
+  return out;
+}
+
+/** Route sanity: minutes of penalty for a journey whose transit legs head away from the destination
+ *  or swing back past the start (e.g. a bus looping back through the origin area). */
+export function backtrackPenalty(legs: { mode: string; path: LatLng[] }[], from: LatLng, to: LatLng): number {
+  let pen = 0;
+  let away = 0; // furthest we've been from the start so far
+  for (const l of legs) {
+    if (!l.path.length) continue;
+    const s = l.path[0];
+    const e = l.path[l.path.length - 1];
+    if (l.mode !== "walking") {
+      if (metresBetween(e, to) - metresBetween(s, to) > 400) pen += 10; // this ride ends farther from the destination
+      if (away > 800 && l.path.some((p) => metresBetween(p, from) < 250)) pen += 10; // came back past the start
+    }
+    for (const p of l.path) away = Math.max(away, metresBetween(p, from));
+  }
+  return pen;
+}
+
 /** Hide the first `m` metres around the start (same radial rule as trimPathStart): the other person's start is never shown precisely. */
 export function trimSegmentsStart(segs: LegSegment[], m: number, dist: (a: LatLng, b: LatLng) => number): LegSegment[] {
   const origin = segs.find((s) => s.path.length)?.path[0];
@@ -154,12 +202,17 @@ export async function journey(from: End, to: End, arriveBy: Date): Promise<Journ
   if (!r.ok) return { error: r.error, ms: r.ms };
   const js = r.data.journeys ?? [];
   if (!js.length) return { error: "no journeys", ms: r.ms };
-  const best = [...js].sort((a, b) => a.duration - b.duration)[0];
+  // Fastest sensible option: a route that rides away from the destination or loops back past the start is penalised.
+  const pen = (j: (typeof js)[number]) => backtrackPenalty(j.legs.map((l) => ({ mode: l.mode.id, path: parsePath(l.path?.lineString) })), from, to);
+  // Prefer fewer changes (+3 min per extra ride) and, on near-ties, TfL's own order.
+  const rides = (j: (typeof js)[number]) => j.legs.filter((l) => l.mode.id !== "walking").length;
+  const best = [...js].map((j, i) => ({ j, k: j.duration + pen(j) + 3 * Math.max(0, rides(j) - 1) + i * 0.5 })).sort((a, b) => a.k - b.k)[0].j;
   const transit = best.legs.filter((l) => l.mode.id !== "walking");
   const lines = transit.flatMap((l) => (l.routeOptions ?? []).map((o) => o.lineIdentifier).filter(Boolean).slice(0, 1)) as { id: string; name: string }[];
-  const segments = best.legs.map((l, i) => segmentOf(l, i === 0));
+  const raw = best.legs.map((l, i) => segmentOf(l, i === 0));
+  const segments = tidySegments(raw);
   const summary = transit.length
-    ? transit.map((l) => segText(segments[best.legs.indexOf(l)], l)).join(", then ") + (transit.length === 1 ? " (direct)" : "")
+    ? transit.map((l) => segText(raw[best.legs.indexOf(l)], l)).join(", then ") + (transit.length === 1 ? " (direct)" : "")
     : "Walk";
   return { minutes: best.duration, summary, lines, path: best.legs.flatMap((l) => parsePath(l.path?.lineString)), segments, fetchedAt: r.fetchedAt, ms: r.ms };
 }

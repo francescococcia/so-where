@@ -252,12 +252,17 @@ export type PlanAsk = {
   themWho: string; // "her" | "him" | "them" | a first name
   date: string | null; // YYYY-MM-DD (London), null when the ask names no day
   time: string | null; // HH:MM (London), null when the ask names no time
+  /** "clock" = the user typed a clock time ("at 7", "8pm"); "word" = a default from a word ("tonight" → 19:00). */
+  timeKind?: "clock" | "word";
   dayPhrase: string | null;
   category: PlanCategory | null;
   budgetGBP: number | null;
   walkIn: boolean;
   free: boolean;
   maxMinutes: number | null;
+  /** A broad area was given ("lives in NE", "south London"): the place is an approximate centroid station. */
+  youApprox?: string;
+  themApprox?: string;
   signals: string[]; // which rules fired, shown in the "parse" step
 };
 
@@ -310,6 +315,33 @@ const WITH_FROM_RE = /\bwith\s+(?:my\s+\w+\s+|([A-Z][a-z]{1,15})\s+)?(?:who'?s\s
 const BETWEEN_RE = /\bbetween\s+([A-Z][^,.;!?]+?)\s+and\s+([A-Z][^,.;!?]+)/;
 const NEAR_PLACE_RE = /\b(?:near|around|in|by)\s+((?:[A-Z][\w'&.-]*)(?:\s+(?:[A-Z&][\w'&.-]*|and\s+Castle))*)/;
 
+/** No other person: "i'm solo", "alone", "just me", "no one", "on my own". */
+export const SOLO_RE = /\b(?:solo|alone|by myself|on my own)\b|\bjust (?:me|myself)\b|\bonly me\b|\bno[- ]?one\b|\bnobody\b/i;
+/** "the centre" / "central London" / "in town": a central London area, not a TfL search. */
+const CENTRE_RE = /\b(?:in|to|into|around|near)\s+(?:the\s+)?(?:city\s+|town\s+)?cent(?:re|er)\b(?!\s+point)|\bcentral\s+london\b|\b(?:in|into)\s+town\b|\b(?:in|to)\s+central\b(?!\s+line)/i;
+const CENTRE_PLACE_RE = /^(?:the\s+)?(?:central(?:\s+london)?|(?:city|town|london)\s+cent(?:re|er)|cent(?:re|er)|town)$/i;
+export const CENTRE_AREA = "Leicester Square";
+/** Broad London areas → an approximate centroid station ("NE" ≈ Walthamstow, "east" ≈ Stratford). Only when
+ *  the direction stands alone ("ne", "north east London", "east, not sure where"), never "East Ham" / "West Hampstead". */
+const COARSE: { re: RegExp; label: string; station: string }[] = [
+  { re: /^(?:ne|n\.e\.?|north[\s-]?east)$/i, label: "north-east London", station: "Walthamstow Central" },
+  { re: /^(?:nw|n\.w\.?|north[\s-]?west)$/i, label: "north-west London", station: "Kilburn" },
+  { re: /^(?:se|s\.e\.?|south[\s-]?east)$/i, label: "south-east London", station: "Lewisham" },
+  { re: /^(?:sw|s\.w\.?|south[\s-]?west)$/i, label: "south-west London", station: "Clapham Junction" },
+  { re: /^(?:n|north)$/i, label: "north London", station: "Finsbury Park" },
+  { re: /^(?:e|east)$/i, label: "east London", station: "Stratford" },
+  { re: /^(?:s|south)$/i, label: "south London", station: "Brixton" },
+  { re: /^(?:w|west)$/i, label: "west London", station: "Hammersmith" },
+];
+const VAGUE_TAIL = /^(?:(?:somewhere|area|side|ish|way|end)\b.*|(?:i|but|not|no|idk|dunno|don'?t|dont|or)\b.*|)$/i;
+export function coarseArea(place: string | null): { label: string; station: string } | null {
+  if (!place) return null;
+  const m = /^(?:the\s+)?([a-z.]+(?:[\s-]+(?:east|west))?)(?:\s+(?:of\s+)?london)?(?:[\s,]+(.*))?$/i.exec(place.trim());
+  if (!m || !VAGUE_TAIL.test((m[2] ?? "").trim())) return null;
+  const c = COARSE.find((x) => x.re.test(m[1].trim()));
+  return c ? { label: c.label, station: c.station } : null;
+}
+
 const NEAR_ME_RE = /\bnear (?:me|here|us)\b|\bnearby\b|\baround (?:me|here)\b|\bclose (?:to|by) (?:me|here)\b|what'?s on|\bwhats on\b|things to do|anything (?:on|happening)|\bwalk[- ]?in\b|\bwalk into\b|\bdrop[- ]in\b|\bjust (?:turn|show) up\b/i;
 const HALFWAY_RE = /half[- ]?way|in the middle|middle ground|meet(?:ing)? (?:in )?between|\bbetween\b|fair(?:est)? (?:spot|place|middle)|\bmeet (?:up )?(?:with )?\w+|\bmeet\b/i;
 const SOCIAL_RE = /\b(?:date|friend|mate|colleague|partner|girlfriend|boyfriend|she|he|they|her|him)\b|\bwith (?:my )?[A-Z]?[a-z]+\b/;
@@ -356,6 +388,11 @@ function timeOf(q: string, category: PlanCategory | null): string | null {
   m = /\b(?:(?:mon|tues?|wed(?:nes)?|thu(?:rs)?|fri|sat(?:ur)?|sun)(?:day)?|tonight|tomorrow)\s+(\d{1,2})(?![:.\d]|\s*(?:min|mins|minutes|people|of us|quid|pounds|th|st|nd|rd))\b/i.exec(q);
   if (m && Number(m[1]) >= 1 && Number(m[1]) <= 23) return `${String(toHH(Number(m[1]))).padStart(2, "0")}:00`;
   if (/\bnoon\b|\bmidday\b/i.test(q)) return "12:00";
+  return null;
+}
+
+/** Time implied by a word, not a clock ("tonight" → 19:00); planTime moves these to now when already past. */
+function wordTimeOf(q: string): string | null {
   if (/\bbreakfast\b/i.test(q)) return "09:00";
   if (/\bmorning\b/i.test(q)) return "10:00";
   if (/\blunch(?:time)?\b/i.test(q)) return "12:30";
@@ -406,6 +443,16 @@ export function parsePlanAsk(raw: string, today = londonToday()): PlanAsk {
     themPlace = cleanPlace(slots.them);
     signals.push("their place from your answer");
   }
+  const themCoarse = coarseArea(themPlace);
+  if (themCoarse) {
+    themPlace = themCoarse.station;
+    signals.push("their area approximate");
+  }
+  const youCoarse = coarseArea(youPlace);
+  if (youCoarse) {
+    youPlace = youCoarse.station;
+    signals.push("your area approximate");
+  }
   const category = categoryOf(q);
   const walkIn = WALKIN_RE.test(q);
   const free = /\bfree\b/i.test(q);
@@ -415,6 +462,17 @@ export function parsePlanAsk(raw: string, today = londonToday()): PlanAsk {
   else if (near) intent = "near_me";
   else if (HALFWAY_RE.test(q) || SOCIAL_RE.test(q)) intent = "meet_halfway";
   else if (category || youPlace) intent = "near_me";
+  if (SOLO_RE.test(q) && !between && !slots.them) {
+    // Just the user: no other person to meet halfway with, so plan near them (or the area they named).
+    intent = "near_me";
+    themPlace = null;
+    signals.push("solo");
+  }
+  if (youPlace && CENTRE_PLACE_RE.test(youPlace)) youPlace = null;
+  if (intent === "near_me" && !youPlace && CENTRE_RE.test(q)) {
+    youPlace = CENTRE_AREA;
+    signals.push(`central London → ${CENTRE_AREA}`);
+  }
   if (intent === "near_me" && !youPlace) {
     const m = NEAR_PLACE_RE.exec(q);
     const p = cleanPlace(m?.[1]);
@@ -422,7 +480,8 @@ export function parsePlanAsk(raw: string, today = londonToday()): PlanAsk {
   }
   if (intent) signals.unshift(`intent ${intent}`);
   const when = resolveWhen(q, today);
-  const time = timeOf(q, category);
+  const clockTime = timeOf(q, category);
+  const time = clockTime ?? wordTimeOf(q);
   const budget = /£\s?(\d{1,4}(?:\.\d{1,2})?)/.exec(q) ?? /\b(\d{1,4})\s?(?:quid|pounds|gbp)\b/i.exec(q);
   const maxM = /\bwithin\s+(\d{1,3})\s*(?:min|mins|minutes)\b/i.exec(q) ?? /\b(\d{1,3})\s*(?:min|mins|minutes)\s+(?:away|from me|walk)\b/i.exec(q);
   if (when) signals.push(`day ${when.from}`);
@@ -438,12 +497,15 @@ export function parsePlanAsk(raw: string, today = londonToday()): PlanAsk {
     themWho: whoOf(q),
     date: when ? when.from : null,
     time,
+    ...(time ? { timeKind: clockTime ? ("clock" as const) : ("word" as const) } : {}),
     dayPhrase: when?.phrase ?? null,
     category,
     budgetGBP: budget ? Number(budget[1]) : null,
     walkIn,
     free,
     maxMinutes: maxM ? Number(maxM[1]) : null,
+    ...(youCoarse ? { youApprox: youCoarse.label } : {}),
+    ...(themCoarse ? { themApprox: themCoarse.label } : {}),
     signals,
   };
 }
