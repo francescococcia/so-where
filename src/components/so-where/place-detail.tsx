@@ -12,9 +12,24 @@ import { CuisineChip, ROUTE, splitSubtitle } from "./plan-card";
 import { JourneySentence } from "./journey";
 import { useActiveSeg } from "./vehicles";
 import { PhotoHero, RatingSlot, placeMeta, whyHere } from "./place-photo";
+import { BestFor, LeaveByChip, SourcePill, leaveByOf } from "./blurb";
+import { blurbOf } from "./use-plan";
 import { TONE_CLASS, costAnswer, cuisineChip, hoursRow, findFact, kindLabel, noTime, openAnswer, priceFact, shortUnknown } from "./answers";
 
 const ease = [0.22, 1, 0.36, 1] as const;
+
+/** "12 min for you · 14 for her · open till 23:00": the fit facts kept under a blurb. */
+function fitLine(result: PlanResultWithAgent, card: Card, openText: string, openNow: boolean | null) {
+  const you = card.legs.find((l) => l.who === "you");
+  const them = card.legs.find((l) => l.who === "them");
+  const who = result.headline.match(/,\s*(her|him|them)\s+\d+/i)?.[1]?.toLowerCase() ?? "them";
+  const till = openNow === true ? openText.match(/^Open (?:(\w{3}) )?until (.+)$/) : null;
+  return [
+    you ? `${you.minutes} min for you` : "",
+    them ? `${them.minutes}${you ? "" : " min"} for ${who}` : "",
+    till ? `open ${till[1] ? `${till[1]} ` : ""}till ${till[2]}` : /^Closes soon · (.+)$/.exec(openText)?.[1] ? `closes ${/^Closes soon · (.+)$/.exec(openText)![1]}` : "",
+  ].filter(Boolean).join(" · ");
+}
 const item = (i: number) => ({ initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35, delay: 0.08 + i * 0.04, ease } });
 
 /** A checked fact; its source shows on hover, focus or tap. */
@@ -80,6 +95,9 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
   const hoursRaw = findFact(card, /^open/i);
   const hours = hoursRaw && !noTime(hoursRaw.value) ? hoursRaw : undefined;
   const open = openAnswer(card, result.when);
+  const blurb = blurbOf(card);
+  const leaveBy = leaveByOf(result);
+  const fit = blurb ? fitLine(result, card, open.text, open.state) : "";
   const cost = costAnswer(card);
   const cuisine = cuisineChip(card);
   const lines = findFact(card, /train|lines?$|status/i);
@@ -100,10 +118,11 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
   const tiles: { label: string; value: string; dot?: string; tone?: string }[] = [
     ...card.legs.map((l) => ({ label: l.who === "you" ? "You" : "Them", value: `${l.minutes} min`, dot: ROUTE[l.who] })),
     ...(() => {
-      const until = open.text.match(/^Open until (.+)$/)?.[1]?.replace(/^midnight$/, "Midnight");
+      const um = open.text.match(/^Open (?:(\w{3}) )?until (.+)$/);
+      const until = um?.[2]?.replace(/^midnight$/, "Midnight");
       const soon = open.text.match(/^Closes soon(?: · (.+))?$/);
       if (soon) return [{ label: "Closes soon", value: soon[1] ?? fmtTime(result.when), tone: TONE_CLASS.soon }];
-      if (until) return [{ label: "Open until", value: until, tone: TONE_CLASS.ok }];
+      if (until) return [{ label: um?.[1] ? `Open ${um[1]} until` : "Open until", value: until, tone: TONE_CLASS.ok }];
       if (open.text === "Open 24 hours") return [{ label: "Open", value: "24 hours", tone: TONE_CLASS.ok }];
       if (open.state === true) return [{ label: "Open at", value: fmtTime(result.when), tone: TONE_CLASS.ok }];
       if (open.state === false) return [{ label: "Closed at", value: fmtTime(result.when), tone: TONE_CLASS.closed }];
@@ -121,6 +140,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
         </motion.div>
         <div>
           <h2 className="text-[24px] font-bold leading-[1.1] tracking-[-0.025em] text-ink">{card.name}</h2>
+          {blurb?.bestFor ? <BestFor text={blurb.bestFor} className="mt-1.5" /> : null}
           <RatingSlot rating={(card as Card & { rating?: { value: number; count: number; source: string } }).rating} />
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13.5px] text-ink-2">
             <span>{[placeMeta(result, card) || label, cost.fact && !/not listed/i.test(cost.text) ? cost.text : ""].filter(Boolean).join(" · ")}</span>
@@ -128,10 +148,24 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
             {example ? <span className="inline-flex h-5 items-center rounded-full bg-likely-bg px-2 text-[11.5px] font-semibold text-likely">Example</span> : null}
           </p>
           {address ? <p className="mt-0.5 text-[12.5px] text-ink-3">{address}</p> : null}
-          <motion.p {...item(0)} className="mt-2.5 flex gap-2 rounded-[12px] bg-signal-soft px-3 py-2 text-[13.5px] leading-5 text-ink">
-            <Sparkles className="mt-[3px] size-3.5 shrink-0 text-signal-ink" aria-hidden />
-            <span><span className="font-semibold text-signal-ink">Why here: </span>{whyHere(result, card)}</span>
-          </motion.p>
+          {leaveBy ? <LeaveByChip lb={leaveBy} className="mt-2.5" /> : null}
+          {blurb ? (
+            <motion.div {...item(0)} className="mt-2.5 flex gap-2 rounded-[12px] bg-signal-soft px-3 py-2.5 text-[13.5px] leading-5 text-ink">
+              <Sparkles className="mt-[3px] size-3.5 shrink-0 text-signal-ink" aria-hidden />
+              <div className="min-w-0">
+                <p>
+                  <span className="font-semibold text-signal-ink">Why here: </span>
+                  {blurb.text} <SourcePill source={blurb.source} className="ml-0.5" />
+                </p>
+                {fit ? <p className="num mt-1 text-[12px] leading-[17px] text-ink-3">{fit}</p> : null}
+              </div>
+            </motion.div>
+          ) : (
+            <motion.p {...item(0)} className="mt-2.5 flex gap-2 rounded-[12px] bg-signal-soft px-3 py-2 text-[13.5px] leading-5 text-ink">
+              <Sparkles className="mt-[3px] size-3.5 shrink-0 text-signal-ink" aria-hidden />
+              <span><span className="font-semibold text-signal-ink">Why here: </span>{whyHere(result, card)}</span>
+            </motion.p>
+          )}
         </div>
       </div>
 

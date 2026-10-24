@@ -25,7 +25,9 @@ function whenText(iso: string) {
 /** "(near London Bridge station)" from the server draft, else nothing. */
 export function nearStation(result: PlanResult, card: PlanCard) {
   const m = result.draftMessage.match(/\(near ([^)]+?)(?: station)?\)/i) ?? card.why.match(/\bfrom ([A-Z][\w' ]+?) station\b/);
-  return m ? m[1].trim() : result.middle?.name ?? "";
+  const v = (m ? m[1].trim() : result.middle?.name ?? "") || "";
+  // A scrubbed placeholder ("[their area]") is never a station name.
+  return /[[\]]/.test(v) ? "" : v;
 }
 
 const BAD = /severe|part closure|suspended|closed|no service/i;

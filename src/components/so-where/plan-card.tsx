@@ -9,13 +9,15 @@ import { CountUp, useTilt } from "./motion-bits";
 import { JourneySentence } from "./journey";
 import { TONE_CLASS, costAnswer, cuisineChip, openAnswer } from "./answers";
 import { WeatherIcon, weatherKind } from "./fact-icon";
+import { BestFor, BlurbShimmer, cardArea, noPlaceholder } from "./blurb";
+import { blurbOf } from "./use-plan";
 
 export const WHO = { you: "You", them: "Them" } as const;
 export const ROUTE = { you: "var(--sw-route-you)", them: "var(--sw-route-them)" } as const;
 const V_DOT: Record<Verdict, string> = { confirmed: "bg-ok", likely: "bg-[#c99a00]", forecast: "bg-fc", unknown: "bg-control" };
 
 export function splitSubtitle(s: string) {
-  const [type, ...rest] = s.split(" · ");
+  const [type, ...rest] = noPlaceholder(s).split(" · ");
   return { type: type ?? "", address: rest.join(" · ") };
 }
 
@@ -58,7 +60,9 @@ export function PlanCard({
   hovered,
   onOpen,
   onHover,
+  blurbPending = false,
 }: {
+  blurbPending?: boolean;
   card: Card;
   when: string;
   index: number;
@@ -69,6 +73,8 @@ export function PlanCard({
 }) {
   const tilt = useTilt(4);
   const { type, address } = splitSubtitle(card.subtitle);
+  const area = cardArea(card);
+  const blurb = blurbOf(card);
   const wx = card.facts.find((f) => weatherKind(f));
   const open = openAnswer(card, when);
   const cost = costAnswer(card);
@@ -119,7 +125,15 @@ export function PlanCard({
                   {cuisine ? <CuisineChip {...cuisine} /> : null}
                 </p>
                 <motion.h3 layoutId={`name-${card.id}`} className="text-[18.5px] font-bold leading-[1.15] tracking-[-0.02em] text-ink">{card.name}</motion.h3>
-                {address ? <p className="mt-0.5 truncate text-[12.5px] text-ink-3">{address}</p> : null}
+                {area || address ? <p className="mt-0.5 truncate text-[12.5px] text-ink-3">{area || address}</p> : null}
+                {blurb ? (
+                  <div className="mt-1.5 flex flex-col items-start gap-1">
+                    {blurb.bestFor ? <BestFor text={blurb.bestFor} /> : null}
+                    <p className="line-clamp-1 text-[13px] leading-5 text-ink-2" title={blurb.text}>{blurb.text}</p>
+                  </div>
+                ) : blurbPending && index < 3 ? (
+                  <BlurbShimmer className="mt-2" />
+                ) : null}
               </div>
               <PhotoThumb card={card} className="size-[60px] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-[1.03]" />
             </div>

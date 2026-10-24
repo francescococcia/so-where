@@ -2,9 +2,9 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { AgentStep, Clarify, PlanResultWithAgent } from "@/lib/plan-types";
-import { FIXTURES, clarifyFixture, pickFixture, type FixtureId } from "@/lib/plan-fixture";
+import { FIXTURES, clarifyFixture, type FixtureId } from "@/lib/plan-fixture";
 
-export type PlanStatus = "idle" | "running" | "result" | "clarify";
+export type PlanStatus = "idle" | "running" | "result" | "clarify" | "error";
 
 export type PlanState = {
   status: PlanStatus;
@@ -22,9 +22,23 @@ export type PlanState = {
   /** why we fell back, shown next to the "example data" tag */
   exampleReason: string | null;
   elapsedMs: number;
+  /** Card blurbs may arrive after the result ({"type":"blurbs"}); true while we wait (max 3 s). */
+  blurbsPending: boolean;
+  /** Bumped on each new result (not on blurb merges), so the UI can tell a new plan from a filled-in one. */
+  resultSeq: number;
+  /** Live ask failed with no result at all: a friendly message (never demo data for a live ask). */
+  error: string | null;
 };
 
-const EMPTY: PlanState = { status: "idle", query: "", ask: "", reply: null, steps: [], result: null, clarify: null, example: false, exampleReason: null, elapsedMs: 0 };
+/** Optional short description on a card (server4, src/lib/blurb.ts). Kept here so plan-types.ts stays unchanged. */
+export type Blurb = { text: string; bestFor?: string; source: { name: string; url: string } };
+export const blurbOf = (c: unknown): Blurb | null => {
+  const b = (c as { blurb?: Blurb } | null)?.blurb;
+  return b && typeof b.text === "string" && b.text.trim() && b.source && typeof b.source.url === "string" ? b : null;
+};
+const BLURB_WAIT_MS = 3000;
+
+const EMPTY: PlanState = { status: "idle", query: "", ask: "", reply: null, steps: [], result: null, clarify: null, example: false, exampleReason: null, elapsedMs: 0, blurbsPending: false, resultSeq: 0, error: null };
 
 type Previous = { query: string; answer: string };
 
@@ -45,6 +59,7 @@ function upsert(steps: AgentStep[], step: AgentStep) {
 export function usePlan() {
   const [state, setState] = useState<PlanState>(EMPTY);
   const ctrl = useRef<AbortController | null>(null);
+  const blurbTimer = useRef<number | null>(null);
 
   /** Replay steps one by one so the live rows still animate. */
   const replay = useCallback(async (steps: AgentStep[], signal: AbortSignal) => {
@@ -71,7 +86,7 @@ export function usePlan() {
     }
     await replay(fx.steps, signal);
     const total = fx.steps.reduce((a, s) => a + (s.ms ?? 0), 0);
-    setState((s) => ({ ...s, status: "result", steps: fx.steps, result: { ...fx, query: query || fx.query }, ask: query || fx.query, clarify: null, elapsedMs: total }));
+    setState((s) => ({ ...s, status: "result", resultSeq: s.resultSeq + 1, steps: fx.steps, result: { ...fx, query: query || fx.query }, ask: query || fx.query, clarify: null, elapsedMs: total }));
   }, [replay]);
 
   /** `you` is the device location, already rounded to ~100 m by the caller; it is only sent, never stored here. */
@@ -80,9 +95,10 @@ export function usePlan() {
     ctrl.current?.abort();
     const ac = new AbortController();
     ctrl.current = ac;
+    if (blurbTimer.current) window.clearTimeout(blurbTimer.current);
     const t0 = performance.now();
     const refine = opts?.refine?.trim() || undefined;
-    setState({ ...EMPTY, status: "running", query: opts?.display ?? previous?.query ?? query, ask: refine ?? previous?.query ?? query });
+    setState((s) => ({ ...EMPTY, resultSeq: s.resultSeq, status: "running", query: opts?.display ?? previous?.query ?? query, ask: refine ?? previous?.query ?? query }));
 
     let gotTerminal = false;
     try {
@@ -107,9 +123,19 @@ export function usePlan() {
           setState((s) => ({ ...s, steps: upsert(s.steps, msg.step as AgentStep) }));
         } else if (msg.type === "result" && msg.result) {
           gotTerminal = true;
-          const result = msg.result as PlanResultWithAgent & { reply?: string };
+          const result = msg.result as PlanResultWithAgent & { reply?: string; leaveBy?: unknown };
+          // leaveBy may ride on the line instead of the result; keep it on the result either way.
+          if (!result.leaveBy && msg.leaveBy) result.leaveBy = msg.leaveBy;
+          // Top-3 cards without a blurb yet: one may follow as {"type":"blurbs"}; shimmer for at most 3 s.
+          const waiting = result.cards.slice(0, 3).some((c) => !blurbOf(c));
+          if (waiting) {
+            if (blurbTimer.current) window.clearTimeout(blurbTimer.current);
+            blurbTimer.current = window.setTimeout(() => setState((s) => (s.blurbsPending ? { ...s, blurbsPending: false } : s)), BLURB_WAIT_MS);
+          }
           setState((s) => ({
             ...s,
+            blurbsPending: waiting,
+            resultSeq: s.resultSeq + 1,
             status: "result",
             result,
             ask: typeof result.query === "string" && result.query ? result.query : s.ask,
@@ -118,6 +144,20 @@ export function usePlan() {
             steps: result.steps?.length ? result.steps : s.steps,
             elapsedMs: performance.now() - t0,
           }));
+        } else if (msg.type === "blurbs" && msg.blurbs && typeof msg.blurbs === "object") {
+          // Late blurbs: merge into the result on screen (so refine's previous.result carries them too).
+          const map = msg.blurbs as Record<string, Blurb>;
+          if (blurbTimer.current) window.clearTimeout(blurbTimer.current);
+          setState((s) => (s.result ? { ...s, blurbsPending: false, result: { ...s.result, cards: s.result.cards.map((c) => (blurbOf({ blurb: map[c.id] }) ? { ...c, blurb: map[c.id] } : c)) } } : s));
+        } else if (msg.type === "error") {
+          // An error after a result/clarify keeps what's on screen; with nothing yet, the catch below shows a friendly error.
+          if (!gotTerminal) throw new Error(typeof msg.error === "string" ? msg.error : "Planning failed");
+          // The server's own fallback ("Sorry, I couldn't plan that…", no cards) then an error: show the friendly error box instead of an empty plan.
+          setState((s) =>
+            s.status === "result" && s.result && !s.result.cards.length
+              ? { ...s, status: "error", blurbsPending: false, error: s.result.headline || "Sorry, I couldn't plan that just now. Try again in a moment, or rephrase it." }
+              : s,
+          );
         } else if (msg.type === "clarify" && msg.clarify) {
           gotTerminal = true;
           // The server returns the cumulative query on clarify; keep it so the next answer goes back as previous:{query, answer}.
@@ -143,19 +183,17 @@ export function usePlan() {
     } catch (err) {
       if ((err as Error)?.name === "AbortError" || ac.signal.aborted) return;
       if (gotTerminal) return;
-      const reason = err instanceof Error ? err.message : "planner unavailable";
-      const ask = refine ?? previous?.query ?? query;
-      const id = pickFixture(ask);
-      // The coffee example has no friend location: show the clarify turn first.
-      const needsClarify = !previous && id === "meet" && !/she'?s|he'?s|they'?re|friend'?s? (?:at|in)|around/i.test(ask);
-      setState((s) => ({ ...s, steps: [] }));
-      try {
-        await playFixture(id, opts?.display ?? ask, reason, ac.signal, { clarify: needsClarify });
-      } catch {
-        /* aborted */
-      }
+      // Live ask, no result at all: say so plainly. Demo data only ever comes from ?demo= links (showFixture).
+      const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+      setState((s) => ({
+        ...s,
+        status: "error",
+        blurbsPending: false,
+        error: offline ? "You look offline. Check your connection and try again." : "Sorry, I couldn't plan that just now. Try again in a moment, or rephrase it.",
+        elapsedMs: performance.now() - t0,
+      }));
     }
-  }, [playFixture]);
+  }, []);
 
   /** Show a fixture straight away (used by ?demo=meet|saturday). */
   const showFixture = useCallback((id: FixtureId) => {

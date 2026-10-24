@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { AgentSteps } from "./agent-steps";
 import { PosterSnap } from "./poster-snap";
 import { ClarifyBox } from "./clarify-box";
+import { LeaveByChip, leaveByOf, type LeaveBy } from "./blurb";
 import { PlanCard } from "./plan-card";
 import { DetailPanel } from "./place-detail";
 import { FollowUps } from "./follow-ups";
@@ -144,7 +145,11 @@ function Blind({ result, photo = false }: { result: PlanResultWithAgent; photo?:
       </p>
       <h2 className="relative mt-1.5 text-[24px] font-bold leading-[1.15] tracking-[-0.02em] text-balance">
         {words.map((w, i) => {
-          const m = /^(\D*)(\d{1,3})(\D*)$/.exec(w);
+          // Only journey minutes count up ("you 11 min, her 14."), never dates ("Fri 23 Oct") or other numbers.
+          const prev = (words[i - 1] ?? "").replace(/[^\w]/g, "");
+          const next = words[i + 1] ?? "";
+          const minutes = /^min/i.test(next) || (/^(you|her|him|them|[A-Z][a-z]+)$/.test(prev) && !/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/.test(prev) && !/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/.test(next));
+          const m = minutes ? /^(\D*)(\d{1,3})(\D*)$/.exec(w) : null;
           return (
             <motion.span key={i + w} className="inline-block origin-[50%_0%]" initial={{ opacity: 0, rotateX: -95, y: -4 }} animate={{ opacity: 1, rotateX: 0, y: 0 }} transition={{ delay: 0.08 + i * 0.045, type: "spring", stiffness: 380, damping: 22 }}>
               {m ? (
@@ -208,7 +213,7 @@ function RouteScan() {
 }
 
 type Toast = { id: number; text: string };
-type Turn = { id: number; role: "user" | "agent"; text: string };
+type Turn = { id: number; role: "user" | "agent"; text: string; leaveBy?: LeaveBy | null };
 
 
 function agentReply(prev: PlanResultWithAgent | null, next: PlanResultWithAgent) {
@@ -300,7 +305,10 @@ function Trail({ turns, typing }: { turns: Turn[]; typing?: boolean }) {
             ) : (
               <span className="flex max-w-[90%] items-start gap-1.5 rounded-[16px] rounded-bl-[6px] bg-white/85 px-3 py-1.5 text-[13.5px] leading-5 text-ink-2 shadow-e1 ring-1 ring-white/80">
                 <Sparkles className="mt-[3px] size-3.5 shrink-0 text-signal" aria-hidden />
-                <span className="min-w-0 whitespace-pre-line [overflow-wrap:anywhere]">{t.text.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim()}</span>
+                <span className="min-w-0 whitespace-pre-line [overflow-wrap:anywhere]">
+                  {t.text.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim()}
+                  {t.leaveBy ? <LeaveByChip lb={t.leaveBy} className="mt-1.5 flex w-fit whitespace-normal" /> : null}
+                </span>
               </span>
             )}
           </motion.li>
@@ -446,22 +454,34 @@ export function SoWhereApp() {
   }, [showFixture, submit]);
 
   useEffect(() => {
+    // The server's own failure fallback (no cards) never replaces a plan on screen; the error effect reports it.
+    if (result && !result.cards.length && /^Sorry, I couldn.t plan/i.test(result.headline)) return;
     setSelectedId(result?.cards[0]?.id ?? null);
     setDetailId(null);
     if (result) {
       if (awaitingReply.current) {
         awaitingReply.current = false;
         const text = state.reply || agentReply(shown, result);
-        setTurns((t) => [...t, { id: Date.now(), role: "agent", text }]);
+        setTurns((t) => [...t, { id: Date.now(), role: "agent", text, leaveBy: leaveByOf(result) }]);
       }
       setShown(result);
       if (refining) say("Picks updated");
     }
     if (status !== "running") setRefining(false);
+    // A new plan only (resultSeq), not late blurbs merged into the same one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.resultSeq]);
+  // Late blurbs fill in the plan on screen without resetting the selection or open detail.
+  useEffect(() => {
+    if (result && status === "result" && result.cards.length) setShown(result);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
   useEffect(() => {
-    if (status === "clarify" || status === "idle") setRefining(false);
+    if (status === "clarify" || status === "idle" || status === "error") setRefining(false);
+    if (status === "error" && awaitingReply.current) {
+      awaitingReply.current = false;
+      setTurns((t) => [...t, { id: Date.now(), role: "agent", text: "Sorry, that didn't go through. The plan above is unchanged; try again." }]);
+    }
     if (status === "clarify" && awaitingReply.current) {
       awaitingReply.current = false;
       if (state.reply) setTurns((t) => [...t, { id: Date.now(), role: "agent", text: state.reply! }]);
@@ -482,6 +502,27 @@ export function SoWhereApp() {
       submit(text, undefined, you ?? undefined);
     },
     [submit, you, stopTyping]
+  );
+
+  // While a question is open, text typed in the main box ("greenwich") answers it, keeping the original ask
+  // (previous:{query, answer}); a rewritten full ask still starts fresh.
+  const answerClarify = useCallback(
+    (answer: string) => submit(answer, { query: state.ask || state.query, answer }, you ?? undefined, { display: baseAsk.current || state.query }),
+    [submit, state.ask, state.query, you]
+  );
+  const askOrAnswer = useCallback(
+    (q: string) => {
+      const text = q.trim();
+      const base = baseAsk.current.trim();
+      if (status === "clarify" && state.clarify && text && base && text !== base && !text.startsWith(base) && !base.startsWith(text)) {
+        stopTyping();
+        answerClarify(text);
+        setQuery(base);
+        return;
+      }
+      ask(q);
+    },
+    [status, state.clarify, answerClarify, ask, stopTyping]
   );
 
   const snapPlan = useCallback(
@@ -569,7 +610,7 @@ export function SoWhereApp() {
         if (target === "chat") {
           setChat("");
           refine(t);
-        } else ask(t);
+        } else askOrAnswer(t);
       }, PENDING_MS);
     },
     onError: (m) => say(m),
@@ -599,7 +640,8 @@ export function SoWhereApp() {
   };
 
   // While a follow-up chip re-asks, keep the previous picks on screen (dimmed) so new results can animate into place.
-  const view = status === "result" ? result : refining ? shown : null;
+  // A failed follow-up keeps the plan that was on screen (shown); a failed new ask has none (ask() clears it).
+  const view = status === "result" ? result : refining ? shown : status === "error" && shown?.cards.length ? shown : null;
   // A halfway plan on screen: the poster becomes "meet halfway for <event>" with the same two people.
   const snapContext = view && view.intent === "meet_halfway" && view.middle ? { query: state.ask || view.query || baseAsk.current } : null;
   const selected = result?.cards.find((c) => c.id === selectedId) ?? result?.cards[0];
@@ -642,7 +684,7 @@ export function SoWhereApp() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                ask(query);
+                askOrAnswer(query);
               }}
             >
               <div className="-mx-1 mb-2.5 flex flex-wrap gap-1.5 px-1" role="group" aria-label="Quick starts">
@@ -699,7 +741,7 @@ export function SoWhereApp() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      ask(query);
+                      askOrAnswer(query);
                     }
                   }}
                   placeholder="Date Thursday at 7, I'm at Old Street, she's around Clapham…"
@@ -748,9 +790,9 @@ export function SoWhereApp() {
             {/* Live steps */}
             <div className="mt-4 flex flex-col gap-4">
               {/* Live timeline while working; once results are in, the strip moves below the cards (quiet). */}
-              {state.steps.length && !(finished && view) ? <AgentSteps steps={state.steps} finished={finished} elapsedMs={state.elapsedMs} /> : null}
+              {state.steps.length && status !== "error" && !(finished && view) ? <AgentSteps steps={state.steps} finished={finished} elapsedMs={state.elapsedMs} /> : null}
 
-              {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={(answer) => submit(answer, { query: state.ask || state.query, answer }, you ?? undefined, { display: baseAsk.current || state.query })} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
+              {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={answerClarify} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
 
               {view ? <Trail turns={turns} typing={refining && status === "running"} /> : null}
               {view ? (
@@ -762,7 +804,7 @@ export function SoWhereApp() {
                     <LayoutGroup>
                       <motion.div key="list" layout className="flex flex-col gap-3">
                         {view.cards.slice(0, 3).map((c, i) => (
-                          <PlanCard key={c.id} card={c} index={i} when={view.when} selected={c.id === (detailId ?? selected?.id)} hovered={c.id === hoverId} onOpen={() => openDetail(c.id)} onHover={(on) => setHoverId(on ? c.id : null)} />
+                          <PlanCard key={c.id} card={c} index={i} when={view.when} blurbPending={state.blurbsPending && status === "result"} selected={c.id === (detailId ?? selected?.id)} hovered={c.id === hoverId} onOpen={() => openDetail(c.id)} onHover={(on) => setHoverId(on ? c.id : null)} />
                         ))}
                         {!view.cards.length ? <p className="rounded-[14px] bg-tint p-4 text-[14px] text-ink-2 shadow-e1">Nothing matched. Try a wider area or a different time.</p> : null}
                       </motion.div>
@@ -793,6 +835,19 @@ export function SoWhereApp() {
                     </p>
                     <p className="mt-1">Map data © OpenStreetMap contributors · tiles OpenFreeMap · Powered by TfL Open Data · Weather: Open-Meteo (CC BY 4.0)</p>
                   </footer>
+                </motion.div>
+              ) : null}
+
+              {status === "error" && state.error && !view ? (
+                <motion.div role="alert" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start gap-3 rounded-[16px] bg-tint/80 p-4 shadow-e1 ring-1 ring-line/70">
+                  <Info className="mt-0.5 size-4 shrink-0 text-signal-ink" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14.5px] font-semibold leading-5 text-ink">{state.error}</p>
+                    <p className="mt-0.5 text-[12.5px] leading-[18px] text-ink-3">Nothing was saved or sent.</p>
+                  </div>
+                  <button type="button" onClick={() => ask(baseAsk.current || query)} className="sw-btn sw-btn-quiet min-h-10 shrink-0 rounded-[10px] px-3 text-[13.5px] font-semibold">
+                    Try again
+                  </button>
                 </motion.div>
               ) : null}
 

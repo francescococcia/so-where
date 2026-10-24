@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { findFact, openAnswer } from "./answers";
 import { fmtTime } from "./format";
 import { nearStation } from "./draft";
+import { cardArea } from "./blurb";
 import { readWeather } from "./map-chips";
 import { splitSubtitle } from "./plan-card";
 
@@ -137,7 +138,7 @@ export function RatingSlot({ rating }: { rating?: { value: number; count: number
 /** "Pub · Borough" (area = station area or postcode district). */
 export function placeMeta(result: PlanResult, card: Card) {
   const { type, address } = splitSubtitle(card.subtitle);
-  const area = nearStation(result, card) || address.match(/\b([A-Z]{1,2}\d{1,2}[A-Z]?)\b/)?.[1] || "";
+  const area = cardArea(card) || nearStation(result, card) || address.match(/\b([A-Z]{1,2}\d{1,2}[A-Z]?)\b/)?.[1] || "";
   return [type || (card.kind === "event" ? "Event" : ""), area].filter(Boolean).join(" · ");
 }
 
@@ -145,7 +146,7 @@ export function placeMeta(result: PlanResult, card: Card) {
 export function whyHere(result: PlanResult, card: Card): string {
   const { type } = splitSubtitle(card.subtitle);
   const kind = (type || (card.kind === "event" ? "Event" : "Spot")).replace(/^\w/, (c) => c.toUpperCase());
-  const station = nearStation(result, card);
+  const station = nearStation(result, card) || cardArea(card).match(/\bnear (.+)$/i)?.[1] || "";
   const walk = card.legs.map((l) => l.summary.match(/~?(\d{1,2})\s*min(?:ute)?s?\s*walk/i)?.[1]).find(Boolean);
   const w = findFact(card, /weather|forecast/i);
   const wx = w ? readWeather(w.value) : null;

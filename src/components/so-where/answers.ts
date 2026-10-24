@@ -47,7 +47,15 @@ function hhmm(v: unknown): string | undefined {
   if (/T\d{2}:\d{2}/.test(v)) return fmtTime(v) || undefined;
   return v.match(/\b([01]?\d|2[0-4]):([0-5]\d)\b/)?.[0];
 }
-const untilText = (t: string) => (/^(00|24):00$/.test(t) ? "Open until midnight" : `Open until ${t}`);
+/** "Thu " when the plan is on another London day than today; "" for today. */
+export function dayTag(whenIso: string, now = new Date()): string {
+  const d = new Date(whenIso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = (x: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(x);
+  return day(d) === day(now) ? "" : `${new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(d)} `;
+}
+/** "Open until 23:00" today; "Open Thu until 23:00" on another day. */
+const untilText = (t: string, whenIso = "") => `Open ${dayTag(whenIso)}until ${/^(00|24):00$/.test(t) ? "midnight" : t}`;
 
 /** Parsed server hours fact: "Open until 23:00 (12:00–23:00) · checked …", "Open 24 hours", "Closed at 19:00 (12:00–17:00)",
  *  "Hours not in OSM", "OSM hours: …", or an older plain range "12:00–23:00". */
@@ -78,7 +86,7 @@ export function openAnswer(card: Card, whenIso: string): { text: string; sub?: s
   const openTo = (soon: boolean) =>
     soon ? { text: closes ? `Closes soon · ${closes}` : "Closes soon", sub, state: true, tone: "soon" as const, fact: h }
       : ph.kind === "24h" && !hhmm(x.closesAt) ? { text: "Open 24 hours", state: true, tone: "ok" as const, fact: h }
-      : { text: closes ? untilText(closes) : `Open at ${at}`, sub, state: true, tone: "ok" as const, fact: h };
+      : { text: closes ? untilText(closes, whenIso) : `Open at ${at}`, sub, state: true, tone: "ok" as const, fact: h };
   if (x.openAtPlan === true) return openTo(!!x.closingSoon);
   if (x.openAtPlan === false) return { text: `Closed at ${at}`, sub, state: false, tone: "closed", fact: h };
   if (x.hoursKnown === false) return none;
@@ -88,7 +96,7 @@ export function openAnswer(card: Card, whenIso: string): { text: string; sub?: s
   const s = openAt(h.value, whenIso);
   if (s === true) {
     const end = h.value.match(/[–-]\s*(\d{1,2}:\d{2})/)?.[1];
-    return { text: end ? untilText(end) : `Open at ${at}`, sub, state: s, tone: "ok", fact: h };
+    return { text: end ? untilText(end, whenIso) : `Open at ${at}`, sub, state: s, tone: "ok", fact: h };
   }
   if (s === false) return { text: `Probably closed at ${at}`, sub, state: s, tone: "closed", fact: h };
   return none;
