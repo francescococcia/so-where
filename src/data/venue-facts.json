@@ -1,0 +1,728 @@
+{
+  "checked_on": "2026-10-23",
+  "note": "Public facts per venue. Null means not found in a public source. Capacity is the largest published figure (usually standing); capacity_note has the detail. good_for is derived from the venue type plus anything the venue says it hosts.",
+  "new_venues": [
+    {
+      "seed_key": "public-somerset-house-exchange",
+      "name": "Somerset House Exchange",
+      "address": "Somerset House, Strand, London WC2R 1LA",
+      "lat": 51.510926,
+      "lng": -0.117683
+    },
+    {
+      "seed_key": "public-sanctuary-and-soul",
+      "name": "The Sanctuary &Soul",
+      "address": "114-116 Cheshire Street, London E2 6EJ",
+      "lat": 51.523717,
+      "lng": -0.066484
+    },
+    {
+      "seed_key": "public-london-hackspace",
+      "name": "London Hackspace",
+      "address": "41-43 Standard Road, Park Royal, London NW10 6HF",
+      "lat": 51.527754,
+      "lng": -0.264832
+    },
+    {
+      "seed_key": "public-the-grosvenor-hanwell",
+      "name": "The Grosvenor",
+      "address": "127 Oaklands Road, Hanwell, London W7 2DT",
+      "lat": 51.506224,
+      "lng": -0.32914
+    },
+    {
+      "seed_key": "public-the-lillie-langtry",
+      "name": "The Lillie Langtry",
+      "address": "19 Lillie Road, London SW6 1UE",
+      "lat": 51.486266,
+      "lng": -0.198265
+    },
+    {
+      "seed_key": "public-london-night-cafe",
+      "name": "London Night Cafe",
+      "address": "56 Middlesex Street, London E1 7EZ",
+      "lat": 51.516552,
+      "lng": -0.076488
+    }
+  ],
+  "venues": [
+    {
+      "match": "Somerset House Exchange",
+      "venue_type": "coworking",
+      "good_for": [
+        "coworking",
+        "workshop",
+        "community_event"
+      ],
+      "capacity": 140,
+      "capacity_note": "Over 140 coworking seats",
+      "hours": {
+        "mon": [
+          "08:00",
+          "23:00"
+        ],
+        "tue": [
+          "08:00",
+          "23:00"
+        ],
+        "wed": [
+          "08:00",
+          "23:00"
+        ],
+        "thu": [
+          "08:00",
+          "23:00"
+        ],
+        "fri": [
+          "08:00",
+          "23:00"
+        ],
+        "sat": [
+          "10:00",
+          "18:00"
+        ]
+      },
+      "sources": [
+        "https://www.somersethouse.org.uk/creative-workspaces/coworking-at-exchange",
+        "https://www.coworkinglondon.com/listings/exchange-at-sommerseth-house/"
+      ],
+      "hours_note": "Weekday hours from Somerset House (Strand entrance and New Wing 8am to 11pm); Saturday hours only from a listing site"
+    },
+    {
+      "match": "The Sanctuary &Soul",
+      "venue_type": "coworking",
+      "good_for": [
+        "coworking"
+      ],
+      "capacity": null,
+      "hours": {
+        "thu": [
+          "07:00",
+          "22:00"
+        ]
+      },
+      "hours_note": "Thursday hours from the Founder Cowork Club FAQ; other days not published",
+      "sources": [
+        "https://luma.com/sizrksgi",
+        "https://andsoulsanctuary.com/get-in-touch"
+      ]
+    },
+    {
+      "match": "London Hackspace",
+      "venue_type": "studio",
+      "good_for": [
+        "workshop"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": [
+        "https://wiki.london.hackspace.org.uk/view/Weekly_Open_Evenings"
+      ]
+    },
+    {
+      "match": "The Grosvenor",
+      "venue_type": "bar",
+      "good_for": [
+        "workshop",
+        "private_party"
+      ],
+      "capacity": null,
+      "hours": null,
+      "capacity_note": "Upstairs function room",
+      "sources": [
+        "https://ealingculture.org/event/life-drawing-drink-and-draw/"
+      ]
+    },
+    {
+      "match": "The Lillie Langtry",
+      "venue_type": "bar",
+      "good_for": [
+        "workshop",
+        "private_party"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": [
+        "https://benedictromain.wixsite.com/themerrynude/lillie-langtry"
+      ]
+    },
+    {
+      "match": "London Night Cafe",
+      "venue_type": "cafe",
+      "good_for": [
+        "private_party",
+        "community_event",
+        "coworking"
+      ],
+      "capacity": null,
+      "hours": {
+        "mon": [
+          "17:00",
+          "03:00"
+        ],
+        "tue": [
+          "22:00",
+          "03:00"
+        ],
+        "wed": [
+          "17:00",
+          "03:00"
+        ],
+        "thu": [
+          "17:00",
+          "03:00"
+        ],
+        "fri": [
+          "17:00",
+          "05:00"
+        ],
+        "sun": [
+          "17:00",
+          "03:00"
+        ]
+      },
+      "hours_note": "Open until the early hours; hireable for birthdays and co-working events. Entry £7 (£10 Fridays).",
+      "sources": [
+        "https://www.londonnightcafe.co.uk/"
+      ]
+    },
+    {
+      "match": "Libreria Bookshop",
+      "venue_type": "shop",
+      "good_for": [
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": {
+        "tue": [
+          "10:00",
+          "18:00"
+        ],
+        "wed": [
+          "10:00",
+          "18:00"
+        ],
+        "thu": [
+          "10:00",
+          "18:00"
+        ],
+        "fri": [
+          "10:00",
+          "18:00"
+        ],
+        "sat": [
+          "10:00",
+          "18:00"
+        ],
+        "sun": [
+          "12:00",
+          "18:00"
+        ]
+      },
+      "sources": [
+        "https://libreria.io/",
+        "https://libreria.io/private-hire/"
+      ]
+    },
+    {
+      "match": "Pique Café",
+      "venue_type": "cafe",
+      "good_for": [
+        "coworking"
+      ],
+      "capacity": null,
+      "hours": {
+        "mon": [
+          "07:30",
+          "16:30"
+        ],
+        "tue": [
+          "07:30",
+          "16:30"
+        ],
+        "wed": [
+          "07:30",
+          "16:30"
+        ],
+        "thu": [
+          "07:30",
+          "16:30"
+        ],
+        "fri": [
+          "07:30",
+          "16:30"
+        ],
+        "sat": [
+          "08:00",
+          "17:00"
+        ],
+        "sun": [
+          "08:00",
+          "16:00"
+        ]
+      },
+      "sources": [
+        "https://www.piquefood.co.uk/pages/cafe"
+      ],
+      "also_match": "Pique CafÃ©"
+    },
+    {
+      "match": "ARRO",
+      "venue_type": "cafe",
+      "good_for": [
+        "coworking"
+      ],
+      "capacity": null,
+      "hours": {
+        "mon": [
+          "07:00",
+          "18:00"
+        ],
+        "tue": [
+          "07:00",
+          "18:00"
+        ],
+        "wed": [
+          "07:00",
+          "18:00"
+        ],
+        "thu": [
+          "07:00",
+          "18:00"
+        ],
+        "fri": [
+          "07:00",
+          "18:00"
+        ],
+        "sat": [
+          "09:00",
+          "18:00"
+        ],
+        "sun": [
+          "09:00",
+          "18:00"
+        ]
+      },
+      "sources": [
+        "https://www.arrocoffee.com/our-cafes"
+      ]
+    },
+    {
+      "match": "How Matcha",
+      "venue_type": "cafe",
+      "good_for": [
+        "coworking"
+      ],
+      "capacity": null,
+      "hours": null,
+      "hours_note": "Published hours conflict between listings",
+      "sources": [
+        "https://howmatcha.com/"
+      ]
+    },
+    {
+      "match": "Blue Door Coffee",
+      "venue_type": "cafe",
+      "good_for": [
+        "coworking"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": [
+        "https://luma.com/qh2p3qij"
+      ]
+    },
+    {
+      "match": "Kensington Central Library",
+      "venue_type": "library",
+      "good_for": [
+        "coworking"
+      ],
+      "capacity": null,
+      "hours": null,
+      "hours_note": "Closed for building works when checked",
+      "sources": [
+        "https://www.rbkc.gov.uk/libraries-0/find-your-library/kensington-central-library"
+      ]
+    },
+    {
+      "match": "Hyde Park",
+      "venue_type": "outdoor",
+      "good_for": [
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": {
+        "mon": [
+          "05:00",
+          "23:59"
+        ],
+        "tue": [
+          "05:00",
+          "23:59"
+        ],
+        "wed": [
+          "05:00",
+          "23:59"
+        ],
+        "thu": [
+          "05:00",
+          "23:59"
+        ],
+        "fri": [
+          "05:00",
+          "23:59"
+        ],
+        "sat": [
+          "05:00",
+          "23:59"
+        ],
+        "sun": [
+          "05:00",
+          "23:59"
+        ]
+      },
+      "hours_note": "Gates 5am to midnight every day",
+      "sources": [
+        "https://www.royalparks.org.uk/visit/parks/hyde-park/faqs"
+      ]
+    },
+    {
+      "match": "Torrington Square",
+      "venue_type": "outdoor",
+      "good_for": [
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "Amazing Grace London Bridge",
+      "venue_type": "bar",
+      "good_for": [
+        "private_party",
+        "community_event"
+      ],
+      "capacity": 300,
+      "capacity_note": "300 standing or 120 seated (whole venue); mezzanine 100 standing",
+      "hours": {
+        "tue": [
+          "16:00",
+          "23:00"
+        ],
+        "wed": [
+          "16:00",
+          "00:00"
+        ],
+        "thu": [
+          "16:00",
+          "01:00"
+        ],
+        "fri": [
+          "16:00",
+          "02:00"
+        ],
+        "sat": [
+          "11:30",
+          "02:00"
+        ]
+      },
+      "sources": [
+        "https://amazinggraceldn.com/contact-london-bridge/",
+        "https://amazinggraceldn.com/wp-content/uploads/2026/07/Amazing-Grace-London-Bridge-Brochure-2026-compressed-1.pdf"
+      ]
+    },
+    {
+      "match": "Solt Room",
+      "venue_type": "bar",
+      "good_for": [
+        "private_party",
+        "community_event",
+        "workshop"
+      ],
+      "capacity": 100,
+      "capacity_note": "100 standing, 70 theatre, 30 dining",
+      "hours": null,
+      "sources": [
+        "https://www.tagvenue.com/venues/london/70251/solt-room",
+        "https://www.soltroom.com/"
+      ]
+    },
+    {
+      "match": "Maya Marylebone",
+      "venue_type": "bar",
+      "good_for": [
+        "private_party"
+      ],
+      "capacity": 80,
+      "capacity_note": "Private hire up to 80 guests; open Tue-Sat",
+      "hours": null,
+      "sources": [
+        "https://litme.events/venues/maya-hi-fi/",
+        "https://www.cavitarestaurant.com/mayahifibar"
+      ]
+    },
+    {
+      "match": "Bang Studios",
+      "venue_type": "studio",
+      "good_for": [
+        "workshop",
+        "private_party",
+        "community_event"
+      ],
+      "capacity": 200,
+      "capacity_note": "Whole venue 200 standing or 100 seated",
+      "hours": null,
+      "sources": [
+        "https://www.tagvenue.com/venues/london/58835/bang-studios"
+      ]
+    },
+    {
+      "match": "POCKO",
+      "venue_type": "studio",
+      "good_for": [
+        "workshop",
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": {
+        "mon": [
+          "09:30",
+          "18:30"
+        ],
+        "tue": [
+          "09:30",
+          "18:30"
+        ],
+        "wed": [
+          "09:30",
+          "18:30"
+        ],
+        "thu": [
+          "09:30",
+          "18:30"
+        ],
+        "fri": [
+          "09:30",
+          "18:30"
+        ]
+      },
+      "hours_note": "Gallery hours",
+      "sources": [
+        "https://www.pocko.com/exhibitions"
+      ]
+    },
+    {
+      "match": "Qube Shoreditch",
+      "venue_type": "studio",
+      "good_for": [
+        "community_event",
+        "private_party"
+      ],
+      "capacity": 100,
+      "capacity_note": "The Stage: 100 standing or 60 theatre",
+      "hours": null,
+      "sources": [
+        "https://www.tagvenue.com/rooms/london/120379/qube-shoreditch/the-stage",
+        "https://www.theqube.com/private-events"
+      ]
+    },
+    {
+      "match": "The Building Centre",
+      "venue_type": "hall",
+      "good_for": [
+        "community_event",
+        "workshop"
+      ],
+      "capacity": 350,
+      "capacity_note": "Main Gallery 350 standing or about 200 seated",
+      "hours": null,
+      "sources": [
+        "https://www.buildingcentre.co.uk/venue"
+      ]
+    },
+    {
+      "match": "Drapers' Hall",
+      "venue_type": "hall",
+      "good_for": [
+        "private_party",
+        "community_event"
+      ],
+      "capacity": 450,
+      "capacity_note": "Livery Hall 450 reception, 276 banquet, 350 theatre",
+      "hours": null,
+      "sources": [
+        "https://thedrapers.co.uk/hire/livery-hall"
+      ]
+    },
+    {
+      "match": "art'otel London Hoxton",
+      "venue_type": "hotel",
+      "good_for": [
+        "private_party",
+        "community_event"
+      ],
+      "capacity": 350,
+      "capacity_note": "Panorama (24th floor) 350 standing, 250 dinner",
+      "hours": null,
+      "sources": [
+        "https://artotel.com/en/newsfeed/panorama-artotel-london-hoxtons-bold-24th-floor-event-venue/"
+      ]
+    },
+    {
+      "match": "The Royal Horseguards Hotel",
+      "venue_type": "hotel",
+      "good_for": [
+        "private_party",
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "Olympia",
+      "venue_type": "hall",
+      "good_for": [
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "Newspeak House",
+      "venue_type": "community_space",
+      "good_for": [
+        "community_event",
+        "workshop"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": [
+        "https://newspeak.house/events"
+      ]
+    },
+    {
+      "match": "French Protestant Church of London",
+      "venue_type": "community_space",
+      "good_for": [
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "OrganicLea",
+      "venue_type": "community_space",
+      "good_for": [
+        "community_event",
+        "workshop"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "Central Saint Martins",
+      "venue_type": "campus",
+      "good_for": [
+        "community_event",
+        "workshop"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "Imperial College London",
+      "venue_type": "campus",
+      "good_for": [
+        "community_event",
+        "workshop"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "Granola",
+      "venue_type": "office",
+      "good_for": [
+        "community_event",
+        "coworking"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": [
+        "https://luma.com/4ddo9yl6"
+      ]
+    },
+    {
+      "match": "Meta Kings Cross",
+      "venue_type": "office",
+      "good_for": [
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "IFX Payments",
+      "venue_type": "office",
+      "good_for": [
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "Harvey Nash London",
+      "venue_type": "office",
+      "good_for": [
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "AutogenAI",
+      "venue_type": "office",
+      "good_for": [
+        "community_event"
+      ],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "230 Blackfriars Rd",
+      "venue_type": "other",
+      "good_for": [],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "11 Caledonian Rd",
+      "venue_type": "other",
+      "good_for": [],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    },
+    {
+      "match": "LaundRe",
+      "venue_type": "other",
+      "good_for": [],
+      "capacity": null,
+      "hours": null,
+      "sources": []
+    }
+  ]
+}

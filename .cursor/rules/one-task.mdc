@@ -1,0 +1,8 @@
+---
+description: Work in small chunks from the Encode build queue
+alwaysApply: true
+---
+- The build queue is the build order table in knowledge/plan.md §10 (cards N1–N8, M1, D1). Unless told a card id, take the first unticked card.
+- Do ONLY that one card. Do not start the next one, refactor unrelated code, or expand scope.
+- If it will take longer than its timebox, split it and do only the first part. 15-min debug cap per bug, then use the card's fallback.
+- When done: tick the card, commit with the card id in the message (for example 'N1: near briefing'), then stop and report in 3 lines.

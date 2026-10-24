@@ -1,0 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=block');
+:root{--font-bricolage:"Bricolage Grotesque";--font-instrument:"Instrument Sans";--font-plex-mono:"IBM Plex Mono";}
+html,body{width:1440px;height:900px;overflow:hidden}
+.stage{position:relative;width:1440px;height:900px;overflow:hidden;background:var(--paper)}
+.map{position:absolute;inset:0;width:1440px;height:900px;filter:saturate(.6) sepia(.14) contrast(1.02) brightness(1.0)}
+.map-tint{position:absolute;inset:0;background:linear-gradient(90deg,rgba(245,240,230,.85) 0,rgba(245,240,230,.5) 560px,rgba(245,240,230,0) 680px);mix-blend-mode:normal}
+svg.overlay{position:absolute;inset:0}
+.top{position:absolute;left:24px;right:24px;top:20px;height:52px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}
+.brand{display:flex;align-items:baseline;gap:10px;background:var(--surface);padding:8px 16px 9px;border-radius:999px;box-shadow:var(--shadow-sm);border:1px solid var(--line)}
+.brand b{font-family:var(--font-family-display);font-weight:800;font-size:22px;letter-spacing:-.03em}
+.brand b i{font-style:normal;color:var(--pillar)}
+.brand span{font-family:var(--font-family-mono);font-size:11px;color:var(--ink-3);letter-spacing:.02em}
+.topr{display:flex;gap:8px}
+.pill{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:500;color:var(--ink-2);box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:7px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.panel{position:absolute;left:24px;top:88px;bottom:24px;width:536px;background:var(--surface);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-lg);border:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+.ask{padding:16px 18px 14px;border-bottom:1px solid var(--line)}
+.label{font-family:var(--font-family-mono);font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3)}
+.chips{display:flex;flex-wrap:nowrap;gap:4px;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:4px;height:32px;padding:0 8px;border-radius:999px;border:1px solid var(--line-strong);font-size:12px;font-weight:500;color:var(--ink-2);background:var(--surface);white-space:nowrap;letter-spacing:-.005em}
+.chip.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.chip svg{width:14px;height:14px}
+.input{margin-top:12px;background:var(--well);border-radius:var(--border-radius-md);padding:13px 14px 12px 16px;display:flex;gap:12px;align-items:flex-end;border:1px solid transparent}
+.input p{margin:0;font-size:16px;line-height:1.42;color:var(--ink);flex:1}
+.go{flex:none;width:40px;height:40px;border-radius:12px;background:var(--pillar);display:grid;place-items:center;color:#fff}
+.body{padding:14px 22px;overflow:hidden;flex:1}
+.lead{font-family:var(--font-family-display);font-weight:700;font-size:22px;line-height:1.14;letter-spacing:-.025em;margin:6px 0 6px}
+.lead em{font-style:normal;background:linear-gradient(transparent 58%,rgba(242,194,48,.75) 58%)}
+.sub{font-size:14px;color:var(--ink-2);margin:0 0 14px}
+.src{font-family:var(--font-family-mono);font-size:11px;color:var(--ink-3);white-space:nowrap}
+.card{border:1px solid var(--line);border-radius:var(--border-radius-md);background:var(--surface);box-shadow:var(--shadow-md);overflow:hidden}
+.card-h{display:flex;justify-content:space-between;align-items:flex-start;padding:11px 16px 9px}
+.card-h h3{margin:0;font-size:20px;font-weight:700}
+.card-h .addr{font-size:13px;color:var(--ink-3);margin-top:3px}
+.badge-n{font-family:var(--font-family-display);font-weight:800;width:30px;height:30px;border-radius:50%;background:var(--pillar);color:#fff;display:grid;place-items:center;font-size:15px;box-shadow:var(--shadow-pin);flex:none}
+.times{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.times>div{padding:8px 16px 9px}
+.times>div+div{border-left:1px solid var(--line)}
+.times .big{font-family:var(--font-family-display);font-weight:700;font-size:24px;line-height:1.1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.times .big small{font-size:14px;font-weight:600;color:var(--ink-2);margin-left:3px}
+.times .how{font-size:12.5px;color:var(--ink-2)}
+.facts{list-style:none;margin:0;padding:6px 16px 10px}
+.facts li{display:grid;grid-template-columns:92px 1fr auto;gap:10px;align-items:center;padding:4px 0;font-size:14px;border-bottom:1px dashed var(--line)}
+.facts li:last-child{border-bottom:0}
+.v{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:6px;height:22px;width:max-content}
+.v.ok{color:var(--park);background:var(--park-soft)}
+.v.inf{color:var(--amber);background:var(--amber-soft)}
+.v.unk{color:var(--slate);background:var(--slate-soft)}
+.v::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.unk-box{margin:0 16px 14px;padding:10px 12px;border-radius:10px;background:var(--slate-soft);font-size:13px;color:var(--ink-2)}
+.unk-box b{color:var(--ink)}
+.actions{display:flex;gap:8px;padding:14px 22px 16px;border-top:1px solid var(--line);align-items:center;background:var(--surface)}
+.btn{height:44px;padding:0 18px;border-radius:12px;font-weight:600;font-size:15px;display:inline-flex;align-items:center;gap:8px}
+.btn.p{background:var(--pillar);color:#fff;box-shadow:0 2px 0 var(--pillar-press)}
+.btn.s{background:var(--surface);border:1px solid var(--line-strong);color:var(--ink)}
+.privacy{font-size:12px;color:var(--ink-3);line-height:1.35;margin-left:4px}
+.mapchip{position:absolute;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:13px;font-weight:600;box-shadow:var(--shadow-md);white-space:nowrap}
+.mapchip .src{display:block;font-weight:400;margin-top:1px}
+.attrib{position:absolute;right:12px;bottom:8px;font-family:var(--font-family-mono);font-size:10.5px;color:var(--ink-2);background:rgba(255,253,248,.85);padding:3px 8px;border-radius:6px}
+.mocklabel{position:absolute;right:12px;top:84px;font-family:var(--font-family-mono);font-size:10.5px;color:var(--ink-2);background:rgba(255,253,248,.9);padding:3px 8px;border-radius:6px;border:1px solid var(--line)}

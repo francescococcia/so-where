@@ -1,0 +1,8 @@
+---
+description: Gemini API rules (Encode, Gemini 4 Argon)
+globs: src/app/api/**,src/lib/**
+alwaysApply: false
+---
+- SDK `@google/genai@latest`; use the Interactions API (`client.interactions.create`). Key `GEMINI_API_KEY`, server-side only.
+- `gemini-4-argon`: set `thinking_level` (not `thinking_budget`); don't send `temperature`, `top_p`, `top_k` or explicit `cached_content`; use `background=True` beyond 65,536 tokens.
+- Companion models allowed (e.g. `gemini-3.8-flash`). Use function calling for the data tools in knowledge/plan.md §4. Return structured JSON with `source`, `confidence` and `evidence`; say "not sure" or "data missing" rather than guess.

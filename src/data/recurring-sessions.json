@@ -1,0 +1,201 @@
+{
+  "checked_on": "2026-10-23",
+  "note": "Public recurring sessions at London venues. Times are Europe/London. Each row cites the public page it came from.",
+  "sessions": [
+    {
+      "key": "superteam-coworking-fridays",
+      "title": "Co-Working Fridays: London Chapter",
+      "organiser": "Superteam UK",
+      "use_case": "cowork",
+      "day_of_week": "fri",
+      "start_time": "10:00",
+      "end_time": "20:30",
+      "cadence": "weekly",
+      "price": "Free",
+      "rsvp": "Approval required, register on Luma",
+      "url": "https://luma.com/superteam",
+      "source_urls": [
+        "https://luma.com/london-oct-23",
+        "https://luma.com/london-mar-20",
+        "https://luma.com/superteam"
+      ],
+      "summary": "Free desk space for builders and creatives at Somerset House Exchange every Friday, 60+ desks, wifi, drinks and snacks. Entry is approval only, so register on Luma first.",
+      "venue_name": "Somerset House Exchange",
+      "lat": 51.510926,
+      "lng": -0.117683,
+      "with_others": true,
+      "audience": "Builders and creatives"
+    },
+    {
+      "key": "founder-cowork-club-thursdays",
+      "title": "Founder Cowork Club",
+      "organiser": "Founder Cowork Club",
+      "use_case": "cowork",
+      "day_of_week": "thu",
+      "start_time": "09:00",
+      "end_time": "18:00",
+      "cadence": "weekly",
+      "price": "Free (optional £12 sauna upgrade)",
+      "rsvp": "Register on Luma",
+      "url": "https://luma.com/foundercoworkclub",
+      "source_urls": [
+        "https://luma.com/sizrksgi",
+        "https://luma.com/foundercoworkclub"
+      ],
+      "summary": "Free deep-work coworking for purpose-driven founders every Thursday at The Sanctuary &Soul, just off Brick Lane. The space is open from 7am to around 10pm.",
+      "venue_name": "The Sanctuary &Soul",
+      "lat": 51.523717,
+      "lng": -0.066484,
+      "with_others": true,
+      "audience": "Purpose-driven founders"
+    },
+    {
+      "key": "cafe-granola-coworking-sunday",
+      "title": "Coworking Sunday at Cafe Granola",
+      "organiser": "Shreman Shrestha & Vidhi Desai",
+      "venue_name": "Granola",
+      "lat": 51.5267,
+      "lng": -0.081,
+      "use_case": "cowork",
+      "day_of_week": "sun",
+      "start_time": "11:00",
+      "end_time": "17:00",
+      "cadence": "recurring Sundays, dates on Luma",
+      "price": "Free, lunch provided",
+      "rsvp": "Register on Luma (exact address shown after registering)",
+      "url": "https://luma.com/4ddo9yl6",
+      "source_urls": [
+        "https://luma.com/4ddo9yl6"
+      ],
+      "summary": "On Sundays Granola's office becomes Cafe Granola for builders: arrive 11am, shared lunch at 12, cowork 1 to 5pm. Registration was closed when checked.",
+      "with_others": true,
+      "audience": "Builders"
+    },
+    {
+      "key": "newspeak-ration-club",
+      "title": "Ration Club",
+      "organiser": "Newspeak House",
+      "venue_name": "Newspeak House",
+      "lat": 51.5252,
+      "lng": -0.0713,
+      "use_case": "meetup",
+      "day_of_week": "wed",
+      "start_time": "19:00",
+      "end_time": "22:00",
+      "cadence": "weekly",
+      "price": "£10 suggested donation",
+      "rsvp": "Register on Luma",
+      "url": "https://luma.com/RationClub",
+      "source_urls": [
+        "https://newspeak.house/events",
+        "https://luma.com/RationClub"
+      ],
+      "summary": "Weekly community dinner in the Lounge at Newspeak House, running since 2015 and open to anyone curious about the college."
+    },
+    {
+      "key": "campaign-lab-hack-night",
+      "title": "Campaign Lab Hack Night",
+      "organiser": "Campaign Lab",
+      "venue_name": "Newspeak House",
+      "lat": 51.5252,
+      "lng": -0.0713,
+      "use_case": "workshop",
+      "day_of_week": "mon",
+      "start_time": "19:00",
+      "end_time": "22:00",
+      "cadence": "every other Monday",
+      "anchor_date": "2026-11-02",
+      "price": "Free, snacks and drinks provided",
+      "rsvp": "See the Newspeak House calendar",
+      "url": "https://newspeak.house/events",
+      "source_urls": [
+        "https://newspeak.house/events"
+      ],
+      "summary": "Bi-weekly hack night in the Drawing Room for technologists and campaigners working on progressive election tools. Bring a laptop.",
+      "with_others": true,
+      "audience": "Technologists and campaigners, bring a laptop"
+    },
+    {
+      "key": "london-hackspace-open-evening",
+      "title": "Weekly Hackspace Tour and Induction",
+      "organiser": "London Hackspace",
+      "use_case": "workshop",
+      "day_of_week": "wed",
+      "start_time": "18:30",
+      "end_time": "21:00",
+      "cadence": "weekly",
+      "price": null,
+      "rsvp": "No booking, check Discord that it's on",
+      "url": "https://wiki.london.hackspace.org.uk/view/Weekly_Open_Evenings",
+      "source_urls": [
+        "https://wiki.london.hackspace.org.uk/view/Weekly_Open_Evenings"
+      ],
+      "summary": "Every Wednesday the Park Royal makerspace opens its doors at 6:30pm for a tour and member induction, about two hours in total. Everyone is welcome.",
+      "venue_name": "London Hackspace",
+      "lat": 51.527754,
+      "lng": -0.264832
+    },
+    {
+      "key": "drink-and-draw-grosvenor",
+      "title": "Drink & Draw life drawing",
+      "organiser": "Vicky Saumarez",
+      "use_case": "workshop",
+      "day_of_week": "wed",
+      "start_time": "18:30",
+      "end_time": "20:30",
+      "cadence": "weekly",
+      "price": "£12",
+      "rsvp": "Book on Bookwhen, tickets open the Thursday before",
+      "url": "https://www.saumarez.com/dropin",
+      "source_urls": [
+        "https://www.saumarez.com/dropin",
+        "https://ealingculture.org/event/life-drawing-drink-and-draw/"
+      ],
+      "summary": "Untaught, drop-in life drawing in the upstairs function room of The Grosvenor pub in Hanwell every Wednesday. Boards and paper provided.",
+      "venue_name": "The Grosvenor",
+      "lat": 51.506224,
+      "lng": -0.32914
+    },
+    {
+      "key": "merry-nude-lillie-langtry",
+      "title": "The Merry Nude: drink and draw",
+      "organiser": "The Merry Nude",
+      "use_case": "workshop",
+      "day_of_week": "mon",
+      "start_time": "19:00",
+      "end_time": "21:00",
+      "cadence": "weekly",
+      "price": "£14 online, £15 on the door",
+      "rsvp": "Book online or drop in",
+      "url": "https://benedictromain.wixsite.com/themerrynude/lillie-langtry",
+      "source_urls": [
+        "https://benedictromain.wixsite.com/themerrynude/lillie-langtry"
+      ],
+      "summary": "Weekly Monday life drawing at The Lillie Langtry pub near West Brompton, with materials and friendly tuition included.",
+      "venue_name": "The Lillie Langtry",
+      "lat": 51.486266,
+      "lng": -0.198265
+    },
+    {
+      "key": "silent-book-club-night-cafe",
+      "title": "Silent Book Club",
+      "organiser": "London Silent Book Club",
+      "use_case": "meetup",
+      "day_of_week": "tue",
+      "start_time": "18:00",
+      "end_time": "22:00",
+      "cadence": "4th Tuesday of the month",
+      "price": null,
+      "rsvp": "RSVP on Meetup",
+      "url": "https://www.londonnightcafe.co.uk/",
+      "source_urls": [
+        "https://www.londonnightcafe.co.uk/",
+        "https://www.meetup.com/london-silent-book-club/events/315966239/"
+      ],
+      "summary": "Monthly bring-your-own-book quiet reading social at the London Night Cafe on Middlesex Street, on the fourth Tuesday of each month.",
+      "venue_name": "London Night Cafe",
+      "lat": 51.516552,
+      "lng": -0.076488
+    }
+  ]
+}

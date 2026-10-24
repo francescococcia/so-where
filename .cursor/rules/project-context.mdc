@@ -1,0 +1,8 @@
+---
+description: Encode London project context
+alwaysApply: true
+---
+Lumap Near Me at the Encode London Hackathon 2026 (The Real World + Agents That Ship): live London open data (TfL, roadworks, planning, weather, air quality, flood, Luma events) in one neighbourhood view, a plain-English assistant with sources, TfL "get there" directions, and photo actions (Luma event, OSM note) behind human approval with an action log. Read `knowledge/plan.md`, `knowledge/pitch.md` and `knowledge/event.md` before planning. Follow `AGENTS.md`. Feature freeze Sun 10:30 GMT, submission Sun 12:00 GMT. Keep scope tiny and demo-first.
+
+- Every answer cites sources and freshness; say "data missing" or "not sure" instead of guessing. Strip EXIF and blur faces/plates before publishing; never store raw photos or user locations. Publishing needs a human Approve click and a log entry.
+- Light theme only, matching docs/lumap-mockup.jpg. Use shadcn/ui, Magic UI or Aceternity, and Framer Motion. Do not write or run tests.

@@ -1,0 +1,1282 @@
+{
+  "fetched_at": "2026-10-22T18:42:07.087937+00:00",
+  "source": "https://api.lu.ma/discover/get-paginated-events?discover_place_api_id=discplace-QCcNk3HXowOR97j&pagination_limit=50",
+  "events": [
+    {
+      "api_id": "evt-Yz7RR89Zlv56tya",
+      "name": "Agentic AI in Financial Services and Insurance: Pilot to Production",
+      "start_at": "2026-10-22T16:00:00.000Z",
+      "end_at": "2026-10-22T20:00:00.000Z",
+      "url": "https://lu.ma/gkmdzbk9",
+      "guest_count": 139,
+      "calendar": {
+        "name": "Future Forward",
+        "api_id": "cal-wUKLVX9VWOdVkpg"
+      },
+      "geo_address_info": {
+        "place_name": "IFX Payments",
+        "full_address": "IFX Payments, 2nd Floor, The Carter, 11 Pilgrim St, London EC4V 6RN, UK",
+        "short_address": "2nd Floor, The Carter, 11 Pilgrim St, London",
+        "city": "London",
+        "lat": 51.513413,
+        "lng": -0.10274799999999999,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-BUz6a7CLYDbHMc4",
+      "name": "Fuckup Nights London #12 x Acquisition Entrepreneurs",
+      "start_at": "2026-10-22T16:30:00.000Z",
+      "end_at": "2026-10-22T20:30:00.000Z",
+      "url": "https://lu.ma/l1z4azjp",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Acquisition Entrepreneurs",
+        "api_id": "cal-0nXOMDEVHCta5Uk"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.51502836485775,
+        "lng": -0.08211008930874833,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-D8ObUirtnP2sDKQ",
+      "name": "Funeral for the Annual Pentest by Intruder",
+      "start_at": "2026-10-22T16:30:00.000Z",
+      "end_at": "2026-10-22T22:00:00.000Z",
+      "url": "https://lu.ma/k479y31u",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Intruder",
+        "api_id": "cal-B0KNgG9yflZ0SmO"
+      },
+      "geo_address_info": {
+        "place_name": "Amazing Grace London Bridge",
+        "full_address": "Amazing Grace London Bridge, 9a St Thomas St, London SE1 9RY, UK",
+        "short_address": "9a St Thomas St, London",
+        "city": "London",
+        "lat": 51.5049991,
+        "lng": -0.0884359,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-wMttQOAZJPbOeDy",
+      "name": "Innovation at CSM: Beyond the Scroll",
+      "start_at": "2026-10-22T16:30:00.000Z",
+      "end_at": "2026-10-22T19:30:00.000Z",
+      "url": "https://lu.ma/5luq6uxf",
+      "guest_count": 69,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-BOY7YHLaqUUBqwq"
+      },
+      "geo_address_info": {
+        "place_name": "Central Saint Martins",
+        "full_address": "Central Saint Martins, Granary Building, 1 Granary Square, London N1C 4AA, UK",
+        "short_address": "Granary Building, 1 Granary Square, London",
+        "city": "London",
+        "lat": 51.536380699999995,
+        "lng": -0.12457620000000001,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-s88hUhrTG1scBnb",
+      "name": "Internet Icons: Eben Upton, Raspberry Pi",
+      "start_at": "2026-10-22T16:30:00.000Z",
+      "end_at": "2026-10-22T19:00:00.000Z",
+      "url": "https://lu.ma/granola-raspberry-pi",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Granola",
+        "api_id": "cal-ofXMwxW9NLr0RDU"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.52458583732269,
+        "lng": -0.08015315697166048,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-TgHPexIRELx5Uxp",
+      "name": "Beyond Borders: London to Tokyo - SusHi Tech London",
+      "start_at": "2026-10-22T16:45:00.000Z",
+      "end_at": "2026-10-22T19:00:00.000Z",
+      "url": "https://lu.ma/m8q7l68w",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Access to Tokyo - London Desk",
+        "api_id": "cal-xlKt5PjeELqEVol"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.52762621432664,
+        "lng": -0.09225736904979244,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-dHqbg51NFr7zaaz",
+      "name": "Chet Rock Jeans Collection Launch",
+      "start_at": "2026-10-22T17:30:00.000Z",
+      "end_at": "2026-10-22T21:30:00.000Z",
+      "url": "https://lu.ma/1e7tvpzz",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-OENhGfN7fIAzAVs"
+      },
+      "geo_address_info": {
+        "place_name": "LaundRe",
+        "full_address": "LaundRe, Unit 4, Maskell Estate, 29 Bidder St, London E16 4ST, UK",
+        "short_address": "Unit 4, Maskell Estate, 29 Bidder St, London",
+        "city": "London",
+        "lat": 51.5160073,
+        "lng": 0.0053877,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-ddAVHdpVOHsgmSm",
+      "name": "In The Room: House Warming",
+      "start_at": "2026-10-22T17:30:00.000Z",
+      "end_at": "2026-10-22T22:00:00.000Z",
+      "url": "https://lu.ma/t7w030vo",
+      "guest_count": 265,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-5gB7KX1llEkjlxc"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.52452672011948,
+        "lng": -0.0779219230996344,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-npuskVBY8CAE8xL",
+      "name": "Life After Layoffs: The Reality of Finding a Job in Tech Today",
+      "start_at": "2026-10-22T17:30:00.000Z",
+      "end_at": "2026-10-22T19:30:00.000Z",
+      "url": "https://lu.ma/dl0m714h",
+      "guest_count": 62,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-PsMWBmtIdb7uYDP"
+      },
+      "geo_address_info": {
+        "place_name": "Harvey Nash London",
+        "full_address": "Harvey Nash London, 10 Throgmorton Ave, London EC2N 2DL, UK",
+        "short_address": "10 Throgmorton Ave, London",
+        "city": "London",
+        "lat": 51.5162422,
+        "lng": -0.0865316,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-ugG3iMI2c8qflOn",
+      "name": "Broken Pots | In conversation",
+      "start_at": "2026-10-23T17:00:00.000Z",
+      "end_at": "2026-10-23T20:00:00.000Z",
+      "url": "https://lu.ma/ra3hwn6i",
+      "guest_count": 70,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-VZ6NHEOiYsSdrcr"
+      },
+      "geo_address_info": {
+        "place_name": "11 Caledonian Rd",
+        "full_address": "11 Caledonian Rd, London N1 9DX, UK",
+        "short_address": "Dun A Ri Bar, 11 Caledonian Rd, London",
+        "city": "London",
+        "lat": 51.5313922,
+        "lng": -0.1210937,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-5qYSJayRDb7yHzv",
+      "name": "Meet Your Creative Match presented by DistroKid",
+      "start_at": "2026-10-23T18:00:00.000Z",
+      "end_at": "2026-10-23T21:00:00.000Z",
+      "url": "https://lu.ma/rprxn1eb",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Qube",
+        "api_id": "cal-9QeWEECZKnh6GG2"
+      },
+      "geo_address_info": {
+        "place_name": "Qube Shoreditch",
+        "full_address": "Qube Shoreditch, 29 -33 Scrutton St, London EC2A 4HU, UK",
+        "short_address": "29 -33 Scrutton St, London",
+        "city": "London",
+        "lat": 51.5233144,
+        "lng": -0.082678,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-SUWF8qicUEkkfo1",
+      "name": "The Roaming Table Soft Launch - Supper in the Greenhouse",
+      "start_at": "2026-10-23T18:00:00.000Z",
+      "end_at": "2026-10-23T21:00:00.000Z",
+      "url": "https://lu.ma/c8mk9aof",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-EG1moGGNYwgTVrj"
+      },
+      "geo_address_info": {
+        "place_name": "OrganicLea",
+        "full_address": "OrganicLea, 115 Hawkwood Cres, London E4 7UH, UK",
+        "short_address": "Waltham Forest Council Nursery, 115 Hawkwood Cres, London",
+        "city": "London",
+        "lat": 51.6407239,
+        "lng": -0.0028366,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-002h4RDHfEYLEvM",
+      "name": "Company Brain Buildathon",
+      "start_at": "2026-10-24T08:00:00.000Z",
+      "end_at": "2026-10-24T16:00:00.000Z",
+      "url": "https://lu.ma/a5yfh2ve",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Lightfern",
+        "api_id": "cal-uPH7tPHkw0G0Mhu"
+      },
+      "geo_address_info": {
+        "place_name": "The Building Centre",
+        "full_address": "The Building Centre, 26 Store St, London WC1E 7BT, UK",
+        "short_address": "26 Store St, London",
+        "city": "London",
+        "lat": 51.5194994,
+        "lng": -0.1315151,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-0pjZCb6fITa6cF9",
+      "name": "Noetic X Nebius One Day Hackathon",
+      "start_at": "2026-10-24T09:00:00.000Z",
+      "end_at": "2026-10-24T18:00:00.000Z",
+      "url": "https://lu.ma/qa1ds94p",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Noetic",
+        "api_id": "cal-vb2zQHUVREdaYC9"
+      },
+      "geo_address_info": {
+        "place_name": "Imperial College London",
+        "full_address": "Imperial College London, Exhibition Rd, South Kensington, London SW7 2AZ, UK",
+        "short_address": "Exhibition Rd, London",
+        "city": "London",
+        "lat": 51.498822200000006,
+        "lng": -0.1748735,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-kT50J4WYHnYAnO7",
+      "name": "BLUE DOOR COFFEE BECOMES… | The Relaunch Party",
+      "start_at": "2026-10-24T10:00:00.000Z",
+      "end_at": "2026-10-24T13:00:00.000Z",
+      "url": "https://lu.ma/qh2p3qij",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-30OBxF42Oi4vz1v"
+      },
+      "geo_address_info": {
+        "place_name": "Blue Door Coffee",
+        "full_address": "Blue Door Coffee, 778 Fulham Rd., London SW6 5SJ, UK",
+        "short_address": "778 Fulham Rd., London",
+        "city": "London",
+        "lat": 51.472136899999995,
+        "lng": -0.2103835,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-kAtFkUVGMjclOf3",
+      "name": "The Elsewhere Club: Journey to the American South",
+      "start_at": "2026-10-24T17:00:00.000Z",
+      "end_at": "2026-10-24T21:00:00.000Z",
+      "url": "https://lu.ma/8h1u8bvw",
+      "guest_count": 0,
+      "calendar": {
+        "name": "The Elsewhere Club",
+        "api_id": "cal-swGAM7jWRRz8pur"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.513601798241154,
+        "lng": -0.1794318751131094,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-OKfr9z97HWSXWN7",
+      "name": "Matcha & Walk 2.0",
+      "start_at": "2026-10-25T14:00:00.000Z",
+      "end_at": "2026-10-25T16:00:00.000Z",
+      "url": "https://lu.ma/age-q5is",
+      "guest_count": 69,
+      "calendar": {
+        "name": "Longevity Cities",
+        "api_id": "cal-HOwk70F1O7tbbQa"
+      },
+      "geo_address_info": {
+        "place_name": "How Matcha",
+        "full_address": "How Matcha, 47 Blandford St, London W1U 7HQ, UK",
+        "short_address": "Admiral Court, 47 Blandford St, London",
+        "city": "London",
+        "lat": 51.5182126,
+        "lng": -0.15454469999999998,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-4V3iphQ5C93TdDS",
+      "name": "No Other Land Screening",
+      "start_at": "2026-10-25T17:30:00.000Z",
+      "end_at": "2026-10-25T21:00:00.000Z",
+      "url": "https://lu.ma/zrk45rju",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-E8SOHUmSqY49hXD"
+      },
+      "geo_address_info": {
+        "place_name": "art'otel London Hoxton",
+        "full_address": "art'otel London Hoxton, 1-3 Rivington St, London EC2A 3DT, UK",
+        "short_address": "1-3 Rivington St, London",
+        "city": "London",
+        "lat": 51.5261886,
+        "lng": -0.083359,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-BV0qFsdLK6CKFU6",
+      "name": "Ayn Rand Lecture 2026: A Rational Life with Madsen Pirie",
+      "start_at": "2026-10-26T18:00:00.000Z",
+      "end_at": "2026-10-26T21:00:00.000Z",
+      "url": "https://lu.ma/63g6l0e5",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Adam Smith Institute",
+        "api_id": "cal-oOcEhpitmO6aEhC"
+      },
+      "geo_address_info": {
+        "place_name": "Drapers' Hall",
+        "full_address": "Drapers' Hall, Throgmorton Ave, London EC2N 2DQ, UK",
+        "short_address": "Throgmorton Ave, London",
+        "city": "London",
+        "lat": 51.5152151,
+        "lng": -0.0864948,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-ikQTLdE8qlzvVp5",
+      "name": "SoTA Extreme Weather Frontiers Night",
+      "start_at": "2026-10-26T18:00:00.000Z",
+      "end_at": "2026-10-26T21:00:00.000Z",
+      "url": "https://lu.ma/extreme-weather",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-ezo5S9YfxMjMmpb"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.520867019477826,
+        "lng": -0.08378821070411552,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-sxUQee2f5q3mBdK",
+      "name": "Anti-Networking Event (Monday, October 26)",
+      "start_at": "2026-10-26T19:00:00.000Z",
+      "end_at": "2026-10-26T21:27:00.000Z",
+      "url": "https://lu.ma/w5ygfmcy",
+      "guest_count": 63,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-ICGSRoYI4C6bbJZ"
+      },
+      "geo_address_info": {
+        "place_name": "Libreria Bookshop",
+        "full_address": "Libreria Bookshop, 65 Hanbury St, London E1 5JP, UK",
+        "short_address": "65 Hanbury St, London",
+        "city": "London",
+        "lat": 51.520376299999995,
+        "lng": -0.0706371,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-vEncDauGPEH2xBU",
+      "name": "BLACK UNDERGRAD: AUTUMN CAREERS FAIR",
+      "start_at": "2026-10-27T16:00:00.000Z",
+      "end_at": "2026-10-27T20:00:00.000Z",
+      "url": "https://lu.ma/3i3uijvd",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-Gr7drhQipWP81R8"
+      },
+      "geo_address_info": {
+        "place_name": "Torrington Square",
+        "full_address": "Torrington Square, London WC1E 7HX, UK",
+        "short_address": "Torrington Square, London",
+        "city": "London",
+        "lat": 51.522414,
+        "lng": -0.1301669,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-Rxq3WlarQi50rWW",
+      "name": "Grantham Institute Annual Lecture 2026 with Anne Hidalgo",
+      "start_at": "2026-10-27T17:30:00.000Z",
+      "end_at": "2026-10-27T20:30:00.000Z",
+      "url": "https://lu.ma/uyqc0kwq",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Grantham Institute",
+        "api_id": "cal-odVn0iSboTMyS0t"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.497847111716446,
+        "lng": -0.17250116176592334,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-zqAHmwcW2yZfoPz",
+      "name": "The Agentic Web Explained",
+      "start_at": "2026-10-27T18:00:00.000Z",
+      "end_at": "2026-10-27T20:30:00.000Z",
+      "url": "https://lu.ma/AI4Oct26",
+      "guest_count": 0,
+      "calendar": {
+        "name": "AI for the rest of us",
+        "api_id": "cal-gqMNzrwbCn1Wmfm"
+      },
+      "geo_address_info": {
+        "place_name": "AutogenAI",
+        "full_address": "AutogenAI, 123 Pentonville Rd, London N1 9LG, UK",
+        "short_address": "123 Pentonville Rd, London",
+        "city": "London",
+        "lat": 51.531237999999995,
+        "lng": -0.1131232,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-mpFjl5NyyznC1tQ",
+      "name": "Halloween Edition TRD: London Startups Operator RunClub & Social",
+      "start_at": "2026-10-27T19:00:00.000Z",
+      "end_at": "2026-10-27T20:00:00.000Z",
+      "url": "https://lu.ma/da0ioqx8",
+      "guest_count": 76,
+      "calendar": {
+        "name": "The Run Down: Operators Runclub",
+        "api_id": "cal-xVyERRj1II00cTZ"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.505434340763244,
+        "lng": -0.1189863461482779,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-ijFEM7faBVCrJEp",
+      "name": "Capital & Castling: Chess Night for the Startup Community (October edition)",
+      "start_at": "2026-10-28T18:00:00.000Z",
+      "end_at": "2026-10-28T20:30:00.000Z",
+      "url": "https://lu.ma/h43nt6jj",
+      "guest_count": 87,
+      "calendar": {
+        "name": "enki events",
+        "api_id": "cal-SOdGPNezHwDAE6w"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.52179374702906,
+        "lng": -0.06978686162491152,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-heCVuyrkvowPrIg",
+      "name": "Lychee's Startup Games Night",
+      "start_at": "2026-10-28T18:00:00.000Z",
+      "end_at": "2026-10-28T22:00:00.000Z",
+      "url": "https://lu.ma/151r4ad1",
+      "guest_count": 115,
+      "calendar": {
+        "name": "Lychee",
+        "api_id": "cal-OVeh8yKLrAIym0I"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.49484741387961,
+        "lng": -0.13412858724183632,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-iaaEH1PvoS1vEEz",
+      "name": "The Road to Growth | Lessons from Giant Ventures, Atomico & OMERS",
+      "start_at": "2026-10-28T18:00:00.000Z",
+      "end_at": "2026-10-28T21:00:00.000Z",
+      "url": "https://lu.ma/novabook-0uce",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Novabook",
+        "api_id": "cal-hToMGw3ot55mird"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.51337226504448,
+        "lng": -0.12967426330831727,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-BIDAEbAYQKshcJI",
+      "name": "Atlas Book Club: An Evening in Colombia - Love in the Time of Cholera by Gabriel Garcia Marquez",
+      "start_at": "2026-10-28T18:30:00.000Z",
+      "end_at": "2026-10-28T20:30:00.000Z",
+      "url": "https://lu.ma/4kvb1hrk",
+      "guest_count": 35,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-HSGRnlBsxn8RG0u"
+      },
+      "geo_address_info": {
+        "place_name": "Bang Studios",
+        "full_address": "Bang Studios, 8 Marylebone Passage, London W1W 8EX, UK",
+        "short_address": "8 Marylebone Passage, London",
+        "city": "London",
+        "lat": 51.5169928,
+        "lng": -0.13801549999999999,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-ZoXjbNuMYGPSVI1",
+      "name": "Building a $1bn Revenue Engine",
+      "start_at": "2026-10-28T18:30:00.000Z",
+      "end_at": "2026-10-28T21:30:00.000Z",
+      "url": "https://lu.ma/revenueengine",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Reasoning Project",
+        "api_id": "cal-lfZsS1HrTbRIiTk"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.504550222242166,
+        "lng": -0.02529782929206597,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-hBjnl2fDyUKmOdC",
+      "name": "Deep Feedback: Live Podcast Filming with Elijah",
+      "start_at": "2026-10-28T18:30:00.000Z",
+      "end_at": "2026-10-28T21:30:00.000Z",
+      "url": "https://lu.ma/stv9t10o",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Qube",
+        "api_id": "cal-9QeWEECZKnh6GG2"
+      },
+      "geo_address_info": {
+        "place_name": "Qube Shoreditch",
+        "full_address": "Qube Shoreditch, 29 -33 Scrutton St, London EC2A 4HU, UK",
+        "short_address": "29 -33 Scrutton St, London",
+        "city": "London",
+        "lat": 51.5233144,
+        "lng": -0.082678,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-rWKcLr25iPUrAAf",
+      "name": "AI Movie Club x The Terminator (1984)",
+      "start_at": "2026-10-29T18:00:00.000Z",
+      "end_at": "2026-10-29T21:30:00.000Z",
+      "url": "https://lu.ma/fwyhkq6w",
+      "guest_count": 0,
+      "calendar": {
+        "name": "II Calendar",
+        "api_id": "cal-9YW2ZNjq2eyTOEE"
+      },
+      "geo_address_info": {
+        "place_name": "Kensington Central Library",
+        "full_address": "Kensington Central Library, 12 Phillimore Walk, London W8 7RX, UK",
+        "short_address": "12 Phillimore Walk, London",
+        "city": "London",
+        "lat": 51.501509000000006,
+        "lng": -0.1941385,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-Jc1OOSm1iY4V0Cp",
+      "name": "Artist Talk: Pocko After Hours w/ Nomoco at Pocko Gallery",
+      "start_at": "2026-10-29T18:00:00.000Z",
+      "end_at": "2026-10-29T20:00:00.000Z",
+      "url": "https://lu.ma/pqlsyokj",
+      "guest_count": 23,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-rpxFRlhea23Hv3O"
+      },
+      "geo_address_info": {
+        "place_name": "POCKO",
+        "full_address": "POCKO, 51A King Henry's Walk, London N1 4NH, UK",
+        "short_address": "51A King Henry's Walk, London",
+        "city": "London",
+        "lat": 51.549148599999995,
+        "lng": -0.0792833,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-TvVukFlc8ZXL9Zk",
+      "name": "Is AI making us less creative?: An Oxford-style debate",
+      "start_at": "2026-10-29T18:30:00.000Z",
+      "end_at": "2026-10-29T20:30:00.000Z",
+      "url": "https://lu.ma/rek0kyyz",
+      "guest_count": 126,
+      "calendar": {
+        "name": "The Founder-writer Collective",
+        "api_id": "cal-BHvlIEtmyMuIbvr"
+      },
+      "geo_address_info": {
+        "place_name": "Granola",
+        "full_address": "Granola, 346 Old St, London EC1V 9NQ, UK",
+        "short_address": "346 Old St, London",
+        "city": "London",
+        "lat": 51.52673,
+        "lng": -0.0809555,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-296vMaEwHi6Ghxg",
+      "name": "Tech Summit 2026",
+      "start_at": "2026-10-31T09:30:00.000Z",
+      "end_at": "2026-10-31T17:30:00.000Z",
+      "url": "https://lu.ma/techsummit",
+      "guest_count": 0,
+      "calendar": {
+        "name": "KCL Tech",
+        "api_id": "cal-LBycZQ6fz4bIe9n"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.5127259903634,
+        "lng": -0.12036720816595592,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-cKrLsCOy4HDL2dX",
+      "name": "Halloween At Imperial: Gemini Edition",
+      "start_at": "2026-10-31T10:00:00.000Z",
+      "end_at": "2026-10-31T18:00:00.000Z",
+      "url": "https://lu.ma/p41k1z3g",
+      "guest_count": 99,
+      "calendar": {
+        "name": "UK AI Agents Lab",
+        "api_id": "cal-ObXRLmBUISp8LQh"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.49903777551543,
+        "lng": -0.17755890261997248,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-oPFX7v6j7WToqlA",
+      "name": "The Startup Stroll x FoundHers",
+      "start_at": "2026-10-31T11:00:00.000Z",
+      "end_at": "2026-10-31T15:00:00.000Z",
+      "url": "https://lu.ma/4gsodxj4",
+      "guest_count": 67,
+      "calendar": {
+        "name": "The Startup Stroll",
+        "api_id": "cal-Dr6cQpUYyVXF3V1"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.55969220310471,
+        "lng": -0.14980374726668752,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-2KWwxVy27gk95qf",
+      "name": "EXP: Cotswolds Hike II📍",
+      "start_at": "2026-11-01T07:00:00.000Z",
+      "end_at": "2026-11-01T21:00:00.000Z",
+      "url": "https://lu.ma/aw3il7e5",
+      "guest_count": 0,
+      "calendar": {
+        "name": "exp calender",
+        "api_id": "cal-NySkt1GEaeEbKad"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.499127629410175,
+        "lng": -0.1487295696925022,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-8dntupEO60aiWT5",
+      "name": "Solana Hacker House - London",
+      "start_at": "2026-11-01T10:00:00.000Z",
+      "end_at": "2026-11-12T20:00:00.000Z",
+      "url": "https://lu.ma/london-hh-26",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Solana Hacker Houses",
+        "api_id": "cal-dLrjJu0Dqay3WBe"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.512123703505985,
+        "lng": -0.11497384047930949,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-ZDVdgqIyXbwKhW4",
+      "name": "Built By Few: The Summit by Connect",
+      "start_at": "2026-11-03T10:00:00.000Z",
+      "end_at": "2026-11-03T17:00:00.000Z",
+      "url": "https://lu.ma/phtg8nap",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-0ROCHrurlZnUIHc"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.512379986646295,
+        "lng": -0.13724849257409902,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-a8aHuAGjwivTli8",
+      "name": "Regenerative Futures",
+      "start_at": "2026-11-03T18:00:00.000Z",
+      "end_at": "2026-11-03T21:00:00.000Z",
+      "url": "https://lu.ma/6p4pf7pr",
+      "guest_count": 45,
+      "calendar": {
+        "name": "Maison/0",
+        "api_id": "cal-tZLCMAz7HtlpQ4J"
+      },
+      "geo_address_info": {
+        "place_name": "Central Saint Martins",
+        "full_address": "Central Saint Martins, Granary Building, 1 Granary Square, London N1C 4AA, UK",
+        "short_address": "Granary Building, 1 Granary Square, London",
+        "city": "London",
+        "lat": 51.536380699999995,
+        "lng": -0.12457620000000001,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-6tmN87665vaD1pb",
+      "name": "HACKATHON - Agent Eval Harness",
+      "start_at": "2026-11-04T17:30:00.000Z",
+      "end_at": "2026-11-04T21:00:00.000Z",
+      "url": "https://lu.ma/h8zer2ek",
+      "guest_count": 72,
+      "calendar": {
+        "name": "The Friendly Data Meetup London",
+        "api_id": "cal-PXKqPzUJdglytAZ"
+      },
+      "geo_address_info": {
+        "place_name": "230 Blackfriars Rd",
+        "full_address": "230 Blackfriars Rd, London SE1 8NW, UK",
+        "short_address": "230 Blackfriars Rd, London",
+        "city": "London",
+        "lat": 51.5059586,
+        "lng": -0.104151,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-jpvedgsEI3u6nq1",
+      "name": "Designing Futures: What We Give Forward",
+      "start_at": "2026-11-05T18:00:00.000Z",
+      "end_at": "2026-11-05T21:00:00.000Z",
+      "url": "https://lu.ma/4lkgf2hc",
+      "guest_count": 55,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-XPWEL40Bfs1ickY"
+      },
+      "geo_address_info": {
+        "place_name": "French Protestant Church of London",
+        "full_address": "French Protestant Church of London, French Protestant Church, 8-9 Soho Square, London W1D 3QD, UK",
+        "short_address": "French Protestant Church, 8-9 Soho Square, London",
+        "city": "London",
+        "lat": 51.5156376,
+        "lng": -0.1329888,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-KIv1V2DQBUh9JNj",
+      "name": "House London #3 | Data Hackathon",
+      "start_at": "2026-11-07T10:00:00.000Z",
+      "end_at": "2026-11-07T19:30:00.000Z",
+      "url": "https://lu.ma/m3pbljlh",
+      "guest_count": 112,
+      "calendar": {
+        "name": "House London!",
+        "api_id": "cal-T7EDRIJfOdmE0mq"
+      },
+      "geo_address_info": {
+        "place_name": "Newspeak House",
+        "full_address": "Newspeak House, 133 Bethnal Grn Rd, London E2 7DG, UK",
+        "short_address": "133 Bethnal Grn Rd, London",
+        "city": "London",
+        "lat": 51.5251662,
+        "lng": -0.0713456,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-52ZTOXRmycSmjhC",
+      "name": "Dia De Los Muertos",
+      "start_at": "2026-11-07T20:00:00.000Z",
+      "end_at": "2026-11-08T01:00:00.000Z",
+      "url": "https://lu.ma/izmqq0pd",
+      "guest_count": 77,
+      "calendar": {
+        "name": "ALIDAD",
+        "api_id": "cal-PGPIX3uDyUry2cg"
+      },
+      "geo_address_info": {
+        "place_name": "Maya Marylebone",
+        "full_address": "Maya Marylebone, 60 Wigmore St, London W1U 2RZ, UK",
+        "short_address": "60 Wigmore St, London",
+        "city": "London",
+        "lat": 51.5163423,
+        "lng": -0.14957099999999998,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-w730na4VbEGIKZr",
+      "name": "Yes Atlas: Scavenger Hunt- UK 🇬🇧",
+      "start_at": "2026-11-08T12:00:00.000Z",
+      "end_at": "2026-11-08T14:00:00.000Z",
+      "url": "https://lu.ma/bfgjvco9",
+      "guest_count": 60,
+      "calendar": {
+        "name": "Seek Discomfort",
+        "api_id": "cal-RnCiATsBzDZanZn"
+      },
+      "geo_address_info": {
+        "place_name": "Hyde Park",
+        "full_address": "Hyde Park, London, UK",
+        "short_address": "London",
+        "city": "London",
+        "lat": 51.5073638,
+        "lng": -0.1641135,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-MgdhYr9RORaw5d6",
+      "name": "Poker Night @ DAS London",
+      "start_at": "2026-11-09T18:00:00.000Z",
+      "end_at": "2026-11-10T00:00:00.000Z",
+      "url": "https://lu.ma/z7g0eoa3",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-nVHQ7REFGAkwAo9"
+      },
+      "geo_address_info": {
+        "place_name": "The Royal Horseguards Hotel & One Whitehall Place, London",
+        "full_address": "The Royal Horseguards Hotel & One Whitehall Place, London, 2 Whitehall Ct, London SW1A 2EJ, UK",
+        "short_address": "2 Whitehall Ct, London",
+        "city": "London",
+        "lat": 51.5060478,
+        "lng": -0.12413679999999998,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-ILT0lcMhDtLznT4",
+      "name": "Cover the Distance 5K | DAS London 🇬🇧",
+      "start_at": "2026-11-11T07:30:00.000Z",
+      "end_at": "2026-11-11T08:45:00.000Z",
+      "url": "https://lu.ma/gh66ltup",
+      "guest_count": 40,
+      "calendar": {
+        "name": "OpenCover",
+        "api_id": "cal-6glMHFKJswUSOLG"
+      },
+      "geo_address_info": {
+        "place_name": "ARRO",
+        "full_address": "ARRO, 45 Curzon St, London W1J 7UG, UK",
+        "short_address": "45 Curzon St, London",
+        "city": "London",
+        "lat": 51.506755,
+        "lng": -0.1465648,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-zxjxdRejzk2dk1P",
+      "name": "React Foundation Meetup: London",
+      "start_at": "2026-11-11T18:00:00.000Z",
+      "end_at": "2026-11-11T21:30:00.000Z",
+      "url": "https://lu.ma/g9q690i2",
+      "guest_count": 73,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-bxTmCX7Krog3H7C"
+      },
+      "geo_address_info": {
+        "place_name": "Meta Kings Cross",
+        "full_address": "Meta Kings Cross, 11-22 Canal Reach, London N1C 4DB, UK",
+        "short_address": "11-21 Canal Reach Office, 11-22 Canal Reach, London",
+        "city": "London",
+        "lat": 51.538452799999995,
+        "lng": -0.1277721,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-ZE3eBcWkz2pxO1N",
+      "name": "Maison Margiela: Inside Out",
+      "start_at": "2026-11-12T18:00:00.000Z",
+      "end_at": "2026-11-12T20:00:00.000Z",
+      "url": "https://lu.ma/eo722inl",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Voiceroom",
+        "api_id": "cal-nzOAgynAmCRqYgW"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.50148957022378,
+        "lng": -0.1428694254424974,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-UqUVnzhZE8gFPkd",
+      "name": "200ms",
+      "start_at": "2026-11-13T09:00:00.000Z",
+      "end_at": "2026-11-13T18:00:00.000Z",
+      "url": "https://lu.ma/6xip72je",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Jito Events",
+        "api_id": "cal-CwdMJjV20evdBPo"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.495364624850545,
+        "lng": -0.21251481809878195,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-saiU3xVXKv6HsFC",
+      "name": "Scale or Die",
+      "start_at": "2026-11-14T09:30:00.000Z",
+      "end_at": "2026-11-14T18:30:00.000Z",
+      "url": "https://lu.ma/scale-or-die-26",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Solana Accelerate",
+        "api_id": "cal-78uQDEIMsmrT3GN"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.49326626153274,
+        "lng": -0.21201908585795776,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-Ukw5t6zrVyNWYqX",
+      "name": "La Mode Darelle Pop-up: It’s Summer Somewhere",
+      "start_at": "2026-11-14T11:00:00.000Z",
+      "end_at": "2026-11-14T20:00:00.000Z",
+      "url": "https://lu.ma/3lquw02s",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-SnY3NiDTsozRb4C"
+      },
+      "geo_address_info": {
+        "place_name": "Solt Room",
+        "full_address": "Solt Room, 199, Railway Arches, Morning Ln, London E9 6LJ, UK",
+        "short_address": "199, Railway Arches, Morning Ln, London",
+        "city": "London",
+        "lat": 51.5472858,
+        "lng": -0.0497219,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-KFDtoSxKwrXxRwQ",
+      "name": "Solana Breakpoint 2026",
+      "start_at": "2026-11-15T16:00:00.000Z",
+      "end_at": "2026-11-17T19:00:00.000Z",
+      "url": "https://lu.ma/breakpoint2026",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Solana Breakpoint",
+        "api_id": "evgrp-f8F1bDAHhBNDM1f"
+      },
+      "geo_address_info": {
+        "place_name": "Olympia",
+        "full_address": "Olympia, Hammersmith Rd, London W14 8UX, UK",
+        "short_address": "Hammersmith Rd, London",
+        "city": "London",
+        "lat": 51.4963566,
+        "lng": -0.2107637,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-CZgpfroA4Hny1a7",
+      "name": "GTM Hackathon by Granola x Gemini",
+      "start_at": "2026-11-17T18:00:00.000Z",
+      "end_at": "2026-11-17T20:30:00.000Z",
+      "url": "https://lu.ma/granola-gemini-hackathon",
+      "guest_count": 0,
+      "calendar": {
+        "name": "Granola",
+        "api_id": "cal-ofXMwxW9NLr0RDU"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.527510523572815,
+        "lng": -0.08331225179748034,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-JceIJoLx8I3HNxN",
+      "name": "She Bytes Back x Snyk: What Breaks When Agents Start Shipping Your Code?",
+      "start_at": "2026-11-18T18:00:00.000Z",
+      "end_at": "2026-11-18T21:00:00.000Z",
+      "url": "https://lu.ma/q3uykk0n",
+      "guest_count": 61,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-kAGd1sHDKJZayqy"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.527017406673885,
+        "lng": -0.13327628997661958,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-p6TmzT9HhWLNeAJ",
+      "name": "HACKCEPTION: A hack within a hack 🌀",
+      "start_at": "2026-11-21T09:30:00.000Z",
+      "end_at": "2026-11-21T17:30:00.000Z",
+      "url": "https://lu.ma/xjd0fs6x",
+      "guest_count": 60,
+      "calendar": {
+        "name": "Lovable London Community",
+        "api_id": "cal-tIVlGWmxHLpUZ0Y"
+      },
+      "geo_address_info": {
+        "place_name": null,
+        "full_address": null,
+        "short_address": null,
+        "city": "London",
+        "lat": 51.50416186959394,
+        "lng": -0.11718722189425729,
+        "address_hidden": true
+      },
+      "location_type": "offline"
+    },
+    {
+      "api_id": "evt-kP2fsWYA84nOchg",
+      "name": "THE WILD TABLE",
+      "start_at": "2026-11-26T19:00:00.000Z",
+      "end_at": "2026-11-26T21:30:00.000Z",
+      "url": "https://lu.ma/wjyuhipj",
+      "guest_count": 11,
+      "calendar": {
+        "name": "Personal",
+        "api_id": "cal-uhBPUCXO5dtj1qb"
+      },
+      "geo_address_info": {
+        "place_name": "Pique Café",
+        "full_address": "Pique Café, 171 Lavender Hill, London SW11 5TE, UK",
+        "short_address": "171 Lavender Hill, London",
+        "city": "London",
+        "lat": 51.464709799999994,
+        "lng": -0.1592073,
+        "address_hidden": false
+      },
+      "location_type": "offline"
+    }
+  ]
+}

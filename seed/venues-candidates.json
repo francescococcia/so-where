@@ -1,0 +1,455 @@
+{
+  "note": "CANDIDATE venues derived from public Luma events (status pending, unverified). max_guest_count_lower_bound = largest RSVP count seen at this address: a lower bound on capacity, NOT verified capacity. No AV, terms, or availability claims. Events with hidden (obfuscated) addresses are excluded.",
+  "generated_at": "2026-10-22T18:42:07.087937+00:00",
+  "venues": [
+    {
+      "key": "51.5364,-0.1246",
+      "name": "Central Saint Martins",
+      "address": "Central Saint Martins, Granary Building, 1 Granary Square, London N1C 4AA, UK",
+      "lat": 51.536381,
+      "lng": -0.124576,
+      "status": "pending",
+      "events_count": 2,
+      "max_guest_count_lower_bound": 69,
+      "communities": [
+        "Personal",
+        "Maison/0"
+      ],
+      "last_event_at": "2026-11-03T18:00:00.000Z"
+    },
+    {
+      "key": "51.5233,-0.0827",
+      "name": "Qube Shoreditch",
+      "address": "Qube Shoreditch, 29 -33 Scrutton St, London EC2A 4HU, UK",
+      "lat": 51.523314,
+      "lng": -0.082678,
+      "status": "pending",
+      "events_count": 2,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Qube"
+      ],
+      "last_event_at": "2026-10-28T18:30:00.000Z"
+    },
+    {
+      "key": "51.5134,-0.1027",
+      "name": "IFX Payments",
+      "address": "IFX Payments, 2nd Floor, The Carter, 11 Pilgrim St, London EC4V 6RN, UK",
+      "lat": 51.513413,
+      "lng": -0.102748,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 139,
+      "communities": [
+        "Future Forward"
+      ],
+      "last_event_at": "2026-10-22T16:00:00.000Z"
+    },
+    {
+      "key": "51.5267,-0.0810",
+      "name": "Granola",
+      "address": "Granola, 346 Old St, London EC1V 9NQ, UK",
+      "lat": 51.52673,
+      "lng": -0.080955,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 126,
+      "communities": [
+        "The Founder-writer Collective"
+      ],
+      "last_event_at": "2026-10-29T18:30:00.000Z"
+    },
+    {
+      "key": "51.5252,-0.0713",
+      "name": "Newspeak House",
+      "address": "Newspeak House, 133 Bethnal Grn Rd, London E2 7DG, UK",
+      "lat": 51.525166,
+      "lng": -0.071346,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 112,
+      "communities": [
+        "House London!"
+      ],
+      "last_event_at": "2026-11-07T10:00:00.000Z"
+    },
+    {
+      "key": "51.5163,-0.1496",
+      "name": "Maya Marylebone",
+      "address": "Maya Marylebone, 60 Wigmore St, London W1U 2RZ, UK",
+      "lat": 51.516342,
+      "lng": -0.149571,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 77,
+      "communities": [
+        "ALIDAD"
+      ],
+      "last_event_at": "2026-11-07T20:00:00.000Z"
+    },
+    {
+      "key": "51.5385,-0.1278",
+      "name": "Meta Kings Cross",
+      "address": "Meta Kings Cross, 11-22 Canal Reach, London N1C 4DB, UK",
+      "lat": 51.538453,
+      "lng": -0.127772,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 73,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-11-11T18:00:00.000Z"
+    },
+    {
+      "key": "51.5060,-0.1042",
+      "name": "230 Blackfriars Rd",
+      "address": "230 Blackfriars Rd, London SE1 8NW, UK",
+      "lat": 51.505959,
+      "lng": -0.104151,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 72,
+      "communities": [
+        "The Friendly Data Meetup London"
+      ],
+      "last_event_at": "2026-11-04T17:30:00.000Z"
+    },
+    {
+      "key": "51.5314,-0.1211",
+      "name": "11 Caledonian Rd",
+      "address": "11 Caledonian Rd, London N1 9DX, UK",
+      "lat": 51.531392,
+      "lng": -0.121094,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 70,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-23T17:00:00.000Z"
+    },
+    {
+      "key": "51.5182,-0.1545",
+      "name": "How Matcha",
+      "address": "How Matcha, 47 Blandford St, London W1U 7HQ, UK",
+      "lat": 51.518213,
+      "lng": -0.154545,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 69,
+      "communities": [
+        "Longevity Cities"
+      ],
+      "last_event_at": "2026-10-25T14:00:00.000Z"
+    },
+    {
+      "key": "51.5204,-0.0706",
+      "name": "Libreria Bookshop",
+      "address": "Libreria Bookshop, 65 Hanbury St, London E1 5JP, UK",
+      "lat": 51.520376,
+      "lng": -0.070637,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 63,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-26T19:00:00.000Z"
+    },
+    {
+      "key": "51.5162,-0.0865",
+      "name": "Harvey Nash London",
+      "address": "Harvey Nash London, 10 Throgmorton Ave, London EC2N 2DL, UK",
+      "lat": 51.516242,
+      "lng": -0.086532,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 62,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-22T17:30:00.000Z"
+    },
+    {
+      "key": "51.5074,-0.1641",
+      "name": "Hyde Park",
+      "address": "Hyde Park, London, UK",
+      "lat": 51.507364,
+      "lng": -0.164113,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 60,
+      "communities": [
+        "Seek Discomfort"
+      ],
+      "last_event_at": "2026-11-08T12:00:00.000Z"
+    },
+    {
+      "key": "51.5156,-0.1330",
+      "name": "French Protestant Church of London",
+      "address": "French Protestant Church of London, French Protestant Church, 8-9 Soho Square, London W1D 3QD, UK",
+      "lat": 51.515638,
+      "lng": -0.132989,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 55,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-11-05T18:00:00.000Z"
+    },
+    {
+      "key": "51.5068,-0.1466",
+      "name": "ARRO",
+      "address": "ARRO, 45 Curzon St, London W1J 7UG, UK",
+      "lat": 51.506755,
+      "lng": -0.146565,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 40,
+      "communities": [
+        "OpenCover"
+      ],
+      "last_event_at": "2026-11-11T07:30:00.000Z"
+    },
+    {
+      "key": "51.5170,-0.1380",
+      "name": "Bang Studios",
+      "address": "Bang Studios, 8 Marylebone Passage, London W1W 8EX, UK",
+      "lat": 51.516993,
+      "lng": -0.138015,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 35,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-28T18:30:00.000Z"
+    },
+    {
+      "key": "51.5491,-0.0793",
+      "name": "POCKO",
+      "address": "POCKO, 51A King Henry's Walk, London N1 4NH, UK",
+      "lat": 51.549149,
+      "lng": -0.079283,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 23,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-29T18:00:00.000Z"
+    },
+    {
+      "key": "51.4647,-0.1592",
+      "name": "Pique Café",
+      "address": "Pique Café, 171 Lavender Hill, London SW11 5TE, UK",
+      "lat": 51.46471,
+      "lng": -0.159207,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 11,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-11-26T19:00:00.000Z"
+    },
+    {
+      "key": "51.5050,-0.0884",
+      "name": "Amazing Grace London Bridge",
+      "address": "Amazing Grace London Bridge, 9a St Thomas St, London SE1 9RY, UK",
+      "lat": 51.504999,
+      "lng": -0.088436,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Intruder"
+      ],
+      "last_event_at": "2026-10-22T16:30:00.000Z"
+    },
+    {
+      "key": "51.5160,0.0054",
+      "name": "LaundRe",
+      "address": "LaundRe, Unit 4, Maskell Estate, 29 Bidder St, London E16 4ST, UK",
+      "lat": 51.516007,
+      "lng": 0.005388,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-22T17:30:00.000Z"
+    },
+    {
+      "key": "51.6407,-0.0028",
+      "name": "OrganicLea",
+      "address": "OrganicLea, 115 Hawkwood Cres, London E4 7UH, UK",
+      "lat": 51.640724,
+      "lng": -0.002837,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-23T18:00:00.000Z"
+    },
+    {
+      "key": "51.5195,-0.1315",
+      "name": "The Building Centre",
+      "address": "The Building Centre, 26 Store St, London WC1E 7BT, UK",
+      "lat": 51.519499,
+      "lng": -0.131515,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Lightfern"
+      ],
+      "last_event_at": "2026-10-24T08:00:00.000Z"
+    },
+    {
+      "key": "51.4988,-0.1749",
+      "name": "Imperial College London",
+      "address": "Imperial College London, Exhibition Rd, South Kensington, London SW7 2AZ, UK",
+      "lat": 51.498822,
+      "lng": -0.174873,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Noetic"
+      ],
+      "last_event_at": "2026-10-24T09:00:00.000Z"
+    },
+    {
+      "key": "51.4721,-0.2104",
+      "name": "Blue Door Coffee",
+      "address": "Blue Door Coffee, 778 Fulham Rd., London SW6 5SJ, UK",
+      "lat": 51.472137,
+      "lng": -0.210384,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-24T10:00:00.000Z"
+    },
+    {
+      "key": "51.5262,-0.0834",
+      "name": "art'otel London Hoxton",
+      "address": "art'otel London Hoxton, 1-3 Rivington St, London EC2A 3DT, UK",
+      "lat": 51.526189,
+      "lng": -0.083359,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-25T17:30:00.000Z"
+    },
+    {
+      "key": "51.5152,-0.0865",
+      "name": "Drapers' Hall",
+      "address": "Drapers' Hall, Throgmorton Ave, London EC2N 2DQ, UK",
+      "lat": 51.515215,
+      "lng": -0.086495,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Adam Smith Institute"
+      ],
+      "last_event_at": "2026-10-26T18:00:00.000Z"
+    },
+    {
+      "key": "51.5224,-0.1302",
+      "name": "Torrington Square",
+      "address": "Torrington Square, London WC1E 7HX, UK",
+      "lat": 51.522414,
+      "lng": -0.130167,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-10-27T16:00:00.000Z"
+    },
+    {
+      "key": "51.5312,-0.1131",
+      "name": "AutogenAI",
+      "address": "AutogenAI, 123 Pentonville Rd, London N1 9LG, UK",
+      "lat": 51.531238,
+      "lng": -0.113123,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "AI for the rest of us"
+      ],
+      "last_event_at": "2026-10-27T18:00:00.000Z"
+    },
+    {
+      "key": "51.5015,-0.1941",
+      "name": "Kensington Central Library",
+      "address": "Kensington Central Library, 12 Phillimore Walk, London W8 7RX, UK",
+      "lat": 51.501509,
+      "lng": -0.194138,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "II Calendar"
+      ],
+      "last_event_at": "2026-10-29T18:00:00.000Z"
+    },
+    {
+      "key": "51.5060,-0.1241",
+      "name": "The Royal Horseguards Hotel & One Whitehall Place, London",
+      "address": "The Royal Horseguards Hotel & One Whitehall Place, London, 2 Whitehall Ct, London SW1A 2EJ, UK",
+      "lat": 51.506048,
+      "lng": -0.124137,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-11-09T18:00:00.000Z"
+    },
+    {
+      "key": "51.5473,-0.0497",
+      "name": "Solt Room",
+      "address": "Solt Room, 199, Railway Arches, Morning Ln, London E9 6LJ, UK",
+      "lat": 51.547286,
+      "lng": -0.049722,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Personal"
+      ],
+      "last_event_at": "2026-11-14T11:00:00.000Z"
+    },
+    {
+      "key": "51.4964,-0.2108",
+      "name": "Olympia",
+      "address": "Olympia, Hammersmith Rd, London W14 8UX, UK",
+      "lat": 51.496357,
+      "lng": -0.210764,
+      "status": "pending",
+      "events_count": 1,
+      "max_guest_count_lower_bound": 0,
+      "communities": [
+        "Solana Breakpoint"
+      ],
+      "last_event_at": "2026-11-15T16:00:00.000Z"
+    }
+  ]
+}

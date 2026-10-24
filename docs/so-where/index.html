@@ -1,0 +1,86 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>So where? — Plan</title>
+<link rel="stylesheet" href="design-tokens.css"><link rel="stylesheet" href="base.css"></head>
+<body><div class="stage">
+<img class="map" src="basemap-meet-raw.png" alt="">
+<div class="map-tint"></div>
+<svg class="overlay" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs><filter id="sh" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="2" stdDeviation="0" flood-color="#1C2333"/></filter></defs>
+  <!-- her area: rounded ~500 m (z13 ≈ 11.9 m/px → r≈42px) -->
+  <circle cx="699.1" cy="766.5" r="42" fill="rgba(29,92,133,.10)" stroke="#1D5C85" stroke-width="2" stroke-dasharray="5 5"/>
+  <!-- routes -->
+  <polyline points="995.1,167.7 989.2,235.1 989.2,284.7 1002,360.5 969.8,385.2" fill="none" stroke="#FFFDF8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="995.1,167.7 989.2,235.1 989.2,284.7 1002,360.5 969.8,385.2" fill="none" stroke="#1C2333" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="699.1,766.5 748.6,737.5 789.4,668.3 847.1,578.5 891.9,517.7 922.2,462.5 956,398.9 969.8,385.2" fill="none" stroke="#FFFDF8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="699.1,766.5 748.6,737.5 789.4,668.3 847.1,578.5 891.9,517.7 922.2,462.5 956,398.9 969.8,385.2" fill="none" stroke="#1D5C85" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 9" />
+  <polyline points="699.1,766.5 748.6,737.5 789.4,668.3 847.1,578.5 891.9,517.7 922.2,462.5 956,398.9 969.8,385.2" fill="none" stroke="#1D5C85" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- stations -->
+  <g fill="#FFFDF8" stroke="#1C2333" stroke-width="2">
+    <circle cx="989.2" cy="235.1" r="4"/><circle cx="989.2" cy="284.7" r="4"/><circle cx="1002" cy="360.5" r="4"/>
+    <circle cx="748.6" cy="737.5" r="4"/><circle cx="789.4" cy="668.3" r="4"/><circle cx="847.1" cy="578.5" r="4"/><circle cx="891.9" cy="517.7" r="4"/><circle cx="922.2" cy="462.5" r="4"/><circle cx="956" cy="398.9" r="4"/>
+  </g>
+  <!-- fair middle halo -->
+  <circle cx="969.8" cy="385.2" r="34" fill="rgba(242,194,48,.30)" stroke="#F2C230" stroke-width="2"/>
+  <!-- you -->
+  <g filter="url(#sh)"><circle cx="995.1" cy="167.7" r="11" fill="#F2C230" stroke="#1C2333" stroke-width="2.5"/></g>
+  <circle cx="995.1" cy="167.7" r="3.5" fill="#1C2333"/>
+  <!-- chosen pin -->
+  <g transform="translate(969.8,385.2)" filter="url(#sh)">
+    <path d="M0 0 C -4 -10 -16 -16 -16 -30 A 16 16 0 1 1 16 -30 C 16 -16 4 -10 0 0 Z" fill="#C2402A" stroke="#1C2333" stroke-width="2"/>
+    <text x="0" y="-24" text-anchor="middle" font-family="Bricolage Grotesque" font-weight="800" font-size="16" fill="#fff">1</text>
+  </g>
+</svg>
+
+<div class="mapchip" style="left:1016px;top:146px">You · Old Street<span class="src">exact, on your device only</span></div>
+<div class="mapchip" style="left:556px;top:818px;">Her area · Clapham Common<span class="src">rounded ~500 m · not stored</span></div>
+<div class="mapchip" style="left:1004px;top:380px">Fair middle · Borough<span class="src">24 vs 23 min</span></div>
+
+<div class="top">
+  <div class="brand"><b>So where<i>?</i></b><span>London</span></div>
+  <div class="topr">
+    <div class="pill"><span class="dot" style="background:var(--park)"></span>Northern line: Good Service <span class="src">TfL · 18:49 BST</span></div>
+    <div class="pill"><span class="dot" style="background:var(--amber)"></span>Central: Severe Delays</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="ask">
+    <div class="label">Plan</div>
+    <div class="chips">
+      <span class="chip on">Meet halfway</span>
+      <span class="chip">Coffee with a friend</span>
+      <span class="chip">What's on near me</span>
+      <span class="chip">No-registration events</span>
+    </div>
+    <div class="input"><p>Date on Thursday at 7. I'm at Old Street, she's around Clapham. A pub halfway, about £40 for two.</p>
+      <div class="go"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div>
+  </div>
+  <div class="body">
+    <div class="label">Thu 29 Oct · 19:00 · meet halfway</div>
+    <div class="lead">Borough is the <em>fair middle</em>: you 24 min, her 23.</div>
+    <p class="sub"><span class="src">TfL Journey Planner, Thu 18:30 · fetched Sat 24 Oct 18:49 BST</span></p>
+    <div class="card">
+      <div class="card-h"><div><h3>The Blue Maid</h3><div class="addr">Pub · 173 Borough High Street, SE1</div></div><div class="badge-n">1</div></div>
+      <div class="times">
+        <div><div class="label">You</div><div class="big">24<small>min</small></div><div class="how">Walk · Northern line · walk</div></div>
+        <div><div class="label">Her</div><div class="big">23<small>min</small></div><div class="how">Northern line, direct</div></div>
+      </div>
+      <ul class="facts">
+        <li><span class="label">Open Thu</span><span>12:00–00:00 <span class="src">OSM · no check date</span></span><span class="v inf">Likely</span></li>
+        <li><span class="label">Trains</span><span>Northern line: Good Service <span class="src">now · recheck Thu</span></span><span class="v ok">Confirmed</span></li>
+        <li><span class="label">Weather</span><span>0% rain, 13°C at 19:00 <span class="src">Open-Meteo forecast</span></span><span class="v inf">Forecast</span></li>
+        <li><span class="label">£40 for two</span><span>No prices in our sources</span><span class="v unk">Unknown</span></li>
+        <li><span class="label">Not known</span><span>No noise data; access not tagged in OSM</span><span class="v unk">Unknown</span></li>
+      </ul>
+    </div>
+    <div style="margin-top:10px;font-size:13.5px;color:var(--ink-2);display:flex;justify-content:space-between"><span>+ 2 more pubs near Borough · George Inn, Bunch of Grapes</span><span style="color:var(--canal);font-weight:600">Show</span></div>
+  </div>
+  <div class="actions">
+    <span class="btn p"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M4 12l16-8-6 16-2-7z"/></svg>Send plan</span>
+    <span class="btn s">Change</span>
+    <span class="privacy">Opens a draft you send yourself.<br>Her area isn't stored or put in the message.</span>
+  </div>
+</div>
+
+<div class="mocklabel" style="top:auto;bottom:34px">Mockup · real data fetched Sat 24 Oct, 18:49–18:53 BST (TfL, OSM via Overpass, Open-Meteo)</div>
+<div class="attrib">© OpenStreetMap contributors · Powered by TfL Open Data · Weather: Open-Meteo (CC BY 4.0)</div>
+</div></body></html>

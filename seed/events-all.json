@@ -1,0 +1,2289 @@
+{
+ "fetched_at": "2026-10-22T18:50:09+00:00",
+ "ranking": "score = log10(size+1) + 2 if in person/hybrid in London (0.5 if online) + 2*(1-days/42) if starting within 6 weeks (2 if under way) + 1.5 if hackathon",
+ "sources": {
+  "luma": {
+   "url": "https://api.lu.ma/discover/get-paginated-events?discover_place_api_id=discplace-QCcNk3HXowOR97j",
+   "count": 58,
+   "status": "ok",
+   "note": "existing snapshot luma-london.json (in-person only)",
+   "dropped_finished": 0,
+   "kept_after_dedup": 58
+  },
+  "devpost": {
+   "url": "https://devpost.com/api/hackathons?status[]=upcoming|open&search=london",
+   "count": 1,
+   "status": "ok",
+   "note": "2 returned (upcoming 2, open 0; 1 page each was enough); Hack Western 13 dropped (London, Ontario, Canada)",
+   "dropped_finished": 0,
+   "kept_after_dedup": 1
+  },
+  "builderbase": {
+   "url": "https://edge.builderbase.com/super-events/public/discovery?status=active&limit=100",
+   "count": 4,
+   "status": "ok",
+   "note": "29 returned, kept UK (country GB/United Kingdom) or online",
+   "dropped_finished": 0,
+   "kept_after_dedup": 4
+  },
+  "mlh": {
+   "url": "https://mlh.io/seasons/2027/events",
+   "count": 3,
+   "status": "ok",
+   "note": "69 upcoming worldwide, kept GB or online",
+   "dropped_finished": 0,
+   "kept_after_dedup": 3
+  },
+  "meetup": {
+   "url": "https://www.meetup.com/find/?location=gb--17--London&source=EVENTS&keywords=tech",
+   "count": 28,
+   "status": "ok",
+   "note": "page 1 only (~25-28 events)",
+   "dropped_finished": 0,
+   "kept_after_dedup": 28
+  }
+ },
+ "events": [
+  {
+   "id": "luma:evt-KIv1V2DQBUh9JNj",
+   "source": "luma",
+   "title": "House London #3 | Data Hackathon",
+   "url": "https://lu.ma/m3pbljlh",
+   "start_at": "2026-11-07T10:00:00.000Z",
+   "end_at": "2026-11-07T19:30:00.000Z",
+   "city": "London",
+   "lat": 51.5251662,
+   "lng": -0.0713456,
+   "format": "in_person",
+   "size": 112,
+   "size_kind": "going",
+   "organiser": "House London!",
+   "themes": [],
+   "is_hackathon": true,
+   "score": 6.809,
+   "reasons": [
+    "112 going",
+    "in person, London",
+    "in 16 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "luma:evt-6tmN87665vaD1pb",
+   "source": "luma",
+   "title": "HACKATHON - Agent Eval Harness",
+   "url": "https://lu.ma/h8zer2ek",
+   "start_at": "2026-11-04T17:30:00.000Z",
+   "end_at": "2026-11-04T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.5059586,
+   "lng": -0.104151,
+   "format": "in_person",
+   "size": 72,
+   "size_kind": "going",
+   "organiser": "The Friendly Data Meetup London",
+   "themes": [],
+   "is_hackathon": true,
+   "score": 6.747,
+   "reasons": [
+    "72 going",
+    "in person, London",
+    "in 13 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "luma:evt-ddAVHdpVOHsgmSm",
+   "source": "luma",
+   "title": "In The Room: House Warming",
+   "url": "https://lu.ma/t7w030vo",
+   "start_at": "2026-10-22T17:30:00.000Z",
+   "end_at": "2026-10-22T22:00:00.000Z",
+   "city": "London",
+   "lat": 51.52452672011948,
+   "lng": -0.0779219230996344,
+   "format": "in_person",
+   "size": 265,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 6.425,
+   "reasons": [
+    "265 going",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "meetup:315666129",
+   "source": "meetup",
+   "title": "OpenUK London Meet-up: “Agentic AI in Financial Services”",
+   "url": "https://www.meetup.com/openuk/events/315666129/",
+   "start_at": "2026-10-22T18:00:00+01:00",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 254,
+   "size_kind": "RSVPs",
+   "organiser": "OpenUK",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 6.407,
+   "reasons": [
+    "254 RSVPs",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-Yz7RR89Zlv56tya",
+   "source": "luma",
+   "title": "Agentic AI in Financial Services and Insurance: Pilot to Production",
+   "url": "https://lu.ma/gkmdzbk9",
+   "start_at": "2026-10-22T16:00:00.000Z",
+   "end_at": "2026-10-22T20:00:00.000Z",
+   "city": "London",
+   "lat": 51.513413,
+   "lng": -0.10274799999999999,
+   "format": "in_person",
+   "size": 139,
+   "size_kind": "going",
+   "organiser": "Future Forward",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 6.146,
+   "reasons": [
+    "139 going",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "meetup:316679005",
+   "source": "meetup",
+   "title": "UKTV x BBC Tech Meetup - Connected TV Development October 2026",
+   "url": "https://www.meetup.com/bbc-tech-meetup/events/316679005/",
+   "start_at": "2026-10-22T17:30:00+01:00",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 93,
+   "size_kind": "RSVPs",
+   "organiser": "BBC Tech Meetup",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.973,
+   "reasons": [
+    "93 RSVPs",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-p6TmzT9HhWLNeAJ",
+   "source": "luma",
+   "title": "HACKCEPTION: A hack within a hack 🌀",
+   "url": "https://lu.ma/xjd0fs6x",
+   "start_at": "2026-11-21T09:30:00.000Z",
+   "end_at": "2026-11-21T17:30:00.000Z",
+   "city": "London",
+   "lat": 51.50416186959394,
+   "lng": -0.11718722189425729,
+   "format": "in_person",
+   "size": 60,
+   "size_kind": "going",
+   "organiser": "Lovable London Community",
+   "themes": [],
+   "is_hackathon": true,
+   "score": 5.875,
+   "reasons": [
+    "60 going",
+    "in person, London",
+    "in 30 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "luma:evt-wMttQOAZJPbOeDy",
+   "source": "luma",
+   "title": "Innovation at CSM: Beyond the Scroll",
+   "url": "https://lu.ma/5luq6uxf",
+   "start_at": "2026-10-22T16:30:00.000Z",
+   "end_at": "2026-10-22T19:30:00.000Z",
+   "city": "London",
+   "lat": 51.536380699999995,
+   "lng": -0.12457620000000001,
+   "format": "in_person",
+   "size": 69,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.845,
+   "reasons": [
+    "69 going",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-ugG3iMI2c8qflOn",
+   "source": "luma",
+   "title": "Broken Pots | In conversation",
+   "url": "https://lu.ma/ra3hwn6i",
+   "start_at": "2026-10-23T17:00:00.000Z",
+   "end_at": "2026-10-23T20:00:00.000Z",
+   "city": "London",
+   "lat": 51.5313922,
+   "lng": -0.1210937,
+   "format": "in_person",
+   "size": 70,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.807,
+   "reasons": [
+    "70 going",
+    "in person, London",
+    "tomorrow"
+   ]
+  },
+  {
+   "id": "luma:evt-npuskVBY8CAE8xL",
+   "source": "luma",
+   "title": "Life After Layoffs: The Reality of Finding a Job in Tech Today",
+   "url": "https://lu.ma/dl0m714h",
+   "start_at": "2026-10-22T17:30:00.000Z",
+   "end_at": "2026-10-22T19:30:00.000Z",
+   "city": "London",
+   "lat": 51.5162422,
+   "lng": -0.0865316,
+   "format": "in_person",
+   "size": 62,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.799,
+   "reasons": [
+    "62 going",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-heCVuyrkvowPrIg",
+   "source": "luma",
+   "title": "Lychee's Startup Games Night",
+   "url": "https://lu.ma/151r4ad1",
+   "start_at": "2026-10-28T18:00:00.000Z",
+   "end_at": "2026-10-28T22:00:00.000Z",
+   "city": "London",
+   "lat": 51.49484741387961,
+   "lng": -0.13412858724183632,
+   "format": "in_person",
+   "size": 115,
+   "size_kind": "going",
+   "organiser": "Lychee",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.78,
+   "reasons": [
+    "115 going",
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "luma:evt-TvVukFlc8ZXL9Zk",
+   "source": "luma",
+   "title": "Is AI making us less creative?: An Oxford-style debate",
+   "url": "https://lu.ma/rek0kyyz",
+   "start_at": "2026-10-29T18:30:00.000Z",
+   "end_at": "2026-10-29T20:30:00.000Z",
+   "city": "London",
+   "lat": 51.52673,
+   "lng": -0.0809555,
+   "format": "in_person",
+   "size": 126,
+   "size_kind": "going",
+   "organiser": "The Founder-writer Collective",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.771,
+   "reasons": [
+    "126 going",
+    "in person, London",
+    "in 7 days"
+   ]
+  },
+  {
+   "id": "meetup:316944404",
+   "source": "meetup",
+   "title": "Test, Deploy and Ship",
+   "url": "https://www.meetup.com/cpplondon/events/316944404/",
+   "start_at": "2026-10-28T19:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 101,
+   "size_kind": "RSVPs",
+   "organiser": "C++ London",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.723,
+   "reasons": [
+    "101 RSVPs",
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "luma:evt-OKfr9z97HWSXWN7",
+   "source": "luma",
+   "title": "Matcha & Walk 2.0",
+   "url": "https://lu.ma/age-q5is",
+   "start_at": "2026-10-25T14:00:00.000Z",
+   "end_at": "2026-10-25T16:00:00.000Z",
+   "city": "London",
+   "lat": 51.5182126,
+   "lng": -0.15454469999999998,
+   "format": "in_person",
+   "size": 69,
+   "size_kind": "going",
+   "organiser": "Longevity Cities",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.712,
+   "reasons": [
+    "69 going",
+    "in person, London",
+    "in 3 days"
+   ]
+  },
+  {
+   "id": "meetup:316183895",
+   "source": "meetup",
+   "title": "What Breaks When You Let an Agent Loose on Your Repo",
+   "url": "https://www.meetup.com/london-elastic-fantastics/events/316183895/",
+   "start_at": "2026-10-22T18:00:00+01:00",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 50,
+   "size_kind": "RSVPs",
+   "organiser": "Elastic London User Group",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.708,
+   "reasons": [
+    "50 RSVPs",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-ijFEM7faBVCrJEp",
+   "source": "luma",
+   "title": "Capital & Castling: Chess Night for the Startup Community (October edition)",
+   "url": "https://lu.ma/h43nt6jj",
+   "start_at": "2026-10-28T18:00:00.000Z",
+   "end_at": "2026-10-28T20:30:00.000Z",
+   "city": "London",
+   "lat": 51.52179374702906,
+   "lng": -0.06978686162491152,
+   "format": "in_person",
+   "size": 87,
+   "size_kind": "going",
+   "organiser": "enki events",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.66,
+   "reasons": [
+    "87 going",
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "luma:evt-mpFjl5NyyznC1tQ",
+   "source": "luma",
+   "title": "Halloween Edition TRD: London Startups Operator RunClub & Social",
+   "url": "https://lu.ma/da0ioqx8",
+   "start_at": "2026-10-27T19:00:00.000Z",
+   "end_at": "2026-10-27T20:00:00.000Z",
+   "city": "London",
+   "lat": 51.505434340763244,
+   "lng": -0.1189863461482779,
+   "format": "in_person",
+   "size": 76,
+   "size_kind": "going",
+   "organiser": "The Run Down: Operators Runclub",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.648,
+   "reasons": [
+    "76 going",
+    "in person, London",
+    "in 5 days"
+   ]
+  },
+  {
+   "id": "luma:evt-sxUQee2f5q3mBdK",
+   "source": "luma",
+   "title": "Anti-Networking Event (Monday, October 26)",
+   "url": "https://lu.ma/w5ygfmcy",
+   "start_at": "2026-10-26T19:00:00.000Z",
+   "end_at": "2026-10-26T21:27:00.000Z",
+   "city": "London",
+   "lat": 51.520376299999995,
+   "lng": -0.0706371,
+   "format": "in_person",
+   "size": 63,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.615,
+   "reasons": [
+    "63 going",
+    "in person, London",
+    "in 4 days"
+   ]
+  },
+  {
+   "id": "meetup:317054890",
+   "source": "meetup",
+   "title": "PyData London - 111th Meetup",
+   "url": "https://www.meetup.com/pydata-london-meetup/events/317054890/",
+   "start_at": "2026-11-04T17:30:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 167,
+   "size_kind": "RSVPs",
+   "organiser": "PyData London Meetup",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.609,
+   "reasons": [
+    "167 RSVPs",
+    "in person, London",
+    "in 13 days"
+   ]
+  },
+  {
+   "id": "luma:evt-cKrLsCOy4HDL2dX",
+   "source": "luma",
+   "title": "Halloween At Imperial: Gemini Edition",
+   "url": "https://lu.ma/p41k1z3g",
+   "start_at": "2026-10-31T10:00:00.000Z",
+   "end_at": "2026-10-31T18:00:00.000Z",
+   "city": "London",
+   "lat": 51.49903777551543,
+   "lng": -0.17755890261997248,
+   "format": "in_person",
+   "size": 99,
+   "size_kind": "going",
+   "organiser": "UK AI Agents Lab",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.589,
+   "reasons": [
+    "99 going",
+    "in person, London",
+    "in 9 days"
+   ]
+  },
+  {
+   "id": "meetup:316957735",
+   "source": "meetup",
+   "title": "AI-built reports to question & comment on with Zebra BI on Fabric & Power BI",
+   "url": "https://www.meetup.com/london-fabug/events/316957735/",
+   "start_at": "2026-10-22T18:30:00+01:00",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 36,
+   "size_kind": "RSVPs",
+   "organiser": "London Microsoft Fabric & Power BI User Group",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.568,
+   "reasons": [
+    "36 RSVPs",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "meetup:316267481",
+   "source": "meetup",
+   "title": "DSOLG October Event",
+   "url": "https://www.meetup.com/devsecops-london-gathering/events/316267481/",
+   "start_at": "2026-10-28T18:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 69,
+   "size_kind": "RSVPs",
+   "organiser": "DevSecOps - London Gathering",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.561,
+   "reasons": [
+    "69 RSVPs",
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "meetup:316953049",
+   "source": "meetup",
+   "title": "London.js at VEED.IO on Wednesday 28th October 2026",
+   "url": "https://www.meetup.com/london-js/events/316953049/",
+   "start_at": "2026-10-28T18:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 67,
+   "size_kind": "RSVPs",
+   "organiser": "London.js - Learn, Share & Use JavaScript",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.548,
+   "reasons": [
+    "67 RSVPs",
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "devpost:31633",
+   "source": "devpost",
+   "title": "Asymmetric Reframed Reality Hackathon & Co-Creation Workshop",
+   "url": "https://arr-hackathon-co-creation.devpost.com/",
+   "start_at": "2026-11-04T00:00:00+00:00",
+   "end_at": "2026-11-06T00:00:00+00:00",
+   "city": "London",
+   "location_text": "Caroline Graveson Building",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 3,
+   "size_kind": "registered",
+   "organiser": "Goldsmiths, University of London",
+   "themes": [
+    "AR/VR",
+    "Health",
+    "Music/Art"
+   ],
+   "city_note": "inferred from organiser name; listing location is: Caroline Graveson Building",
+   "is_hackathon": true,
+   "score": 5.52,
+   "reasons": [
+    "3 registered",
+    "in person, London",
+    "in 13 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "builderbase:feead9db-7c8a-4358-b6e8-566499187393",
+   "source": "builderbase",
+   "title": "Encode London Hackathon and Conference",
+   "url": "https://luma.com/encode-london-2026?utm_source=builderbase.com&utm_medium=referral",
+   "start_at": "2026-10-23T00:00:00+00:00",
+   "end_at": "2026-10-25T00:00:00+00:00",
+   "city": "London",
+   "lat": 51.5074,
+   "lng": -0.1278,
+   "format": "in_person",
+   "size": null,
+   "size_kind": "participants",
+   "organiser": "Encode Club",
+   "themes": [
+    "AI",
+    "Web3",
+    "hackathon"
+   ],
+   "is_hackathon": true,
+   "score": 5.49,
+   "reasons": [
+    "in person, London",
+    "tomorrow",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "luma:evt-0pjZCb6fITa6cF9",
+   "source": "luma",
+   "title": "Noetic X Nebius One Day Hackathon",
+   "url": "https://lu.ma/qa1ds94p",
+   "start_at": "2026-10-24T09:00:00.000Z",
+   "end_at": "2026-10-24T18:00:00.000Z",
+   "city": "London",
+   "lat": 51.498822200000006,
+   "lng": -0.1748735,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Noetic",
+   "themes": [],
+   "is_hackathon": true,
+   "score": 5.424,
+   "reasons": [
+    "in person, London",
+    "in 2 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "luma:evt-oPFX7v6j7WToqlA",
+   "source": "luma",
+   "title": "The Startup Stroll x FoundHers",
+   "url": "https://lu.ma/4gsodxj4",
+   "start_at": "2026-10-31T11:00:00.000Z",
+   "end_at": "2026-10-31T15:00:00.000Z",
+   "city": "London",
+   "lat": 51.55969220310471,
+   "lng": -0.14980374726668752,
+   "format": "in_person",
+   "size": 67,
+   "size_kind": "going",
+   "organiser": "The Startup Stroll",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.419,
+   "reasons": [
+    "67 going",
+    "in person, London",
+    "in 9 days"
+   ]
+  },
+  {
+   "id": "meetup:316997681",
+   "source": "meetup",
+   "title": "Revoking Agents and the Rise of the AI Security Engineer",
+   "url": "https://www.meetup.com/aiseceng-london/events/316997681/",
+   "start_at": "2026-10-28T18:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 49,
+   "size_kind": "RSVPs",
+   "organiser": "AI Security Engineers - London, UK",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.415,
+   "reasons": [
+    "49 RSVPs",
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "meetup:316578225",
+   "source": "meetup",
+   "title": "Software Engineering: Extinction or Evolution?",
+   "url": "https://www.meetup.com/beyond-the-code/events/316578225/",
+   "start_at": "2026-11-05T17:30:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 89,
+   "size_kind": "RSVPs",
+   "organiser": "Beyond the Code",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.29,
+   "reasons": [
+    "89 RSVPs",
+    "in person, London",
+    "in 14 days"
+   ]
+  },
+  {
+   "id": "meetup:315992081",
+   "source": "meetup",
+   "title": "Cloud Native London, November 2026",
+   "url": "https://www.meetup.com/cloud-native-london/events/315992081/",
+   "start_at": "2026-11-04T18:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 78,
+   "size_kind": "RSVPs",
+   "organiser": "Cloud Native London",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.28,
+   "reasons": [
+    "78 RSVPs",
+    "in person, London",
+    "in 13 days"
+   ]
+  },
+  {
+   "id": "luma:evt-BIDAEbAYQKshcJI",
+   "source": "luma",
+   "title": "Atlas Book Club: An Evening in Colombia - Love in the Time of Cholera by Gabriel Garcia Marquez",
+   "url": "https://lu.ma/4kvb1hrk",
+   "start_at": "2026-10-28T18:30:00.000Z",
+   "end_at": "2026-10-28T20:30:00.000Z",
+   "city": "London",
+   "lat": 51.5169928,
+   "lng": -0.13801549999999999,
+   "format": "in_person",
+   "size": 35,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.271,
+   "reasons": [
+    "35 going",
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "meetup:316926189",
+   "source": "meetup",
+   "title": "Meetup #19 - The Agentic Web Explained",
+   "url": "https://www.meetup.com/ai-for-the-rest-of-us-london/events/316926189/",
+   "start_at": "2026-10-27T18:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 30,
+   "size_kind": "RSVPs",
+   "organiser": "AI for the rest of us London",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.255,
+   "reasons": [
+    "30 RSVPs",
+    "in person, London",
+    "in 5 days"
+   ]
+  },
+  {
+   "id": "meetup:316694616",
+   "source": "meetup",
+   "title": "Strengthening the spiral of technoprogressive trust",
+   "url": "https://www.meetup.com/london-futurists/events/316694616/",
+   "start_at": "2026-10-22T18:00:00+01:00",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 16,
+   "size_kind": "RSVPs",
+   "organiser": "London Futurists",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.23,
+   "reasons": [
+    "16 RSVPs",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "meetup:316909711",
+   "source": "meetup",
+   "title": "Software Factory in Practice",
+   "url": "https://www.meetup.com/devday-uk/events/316909711/",
+   "start_at": "2026-10-22T18:00:00+01:00",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 16,
+   "size_kind": "RSVPs",
+   "organiser": "Dev Day UK",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.23,
+   "reasons": [
+    "16 RSVPs",
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "meetup:316628568",
+   "source": "meetup",
+   "title": "Tech & AI Networking London | Cybersecurity, Founders & Startups",
+   "url": "https://www.meetup.com/london-networking-for-startups-professionals/events/316628568/",
+   "start_at": "2026-11-03T18:30:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 61,
+   "size_kind": "RSVPs",
+   "organiser": "Networx London - Connect & Grow",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.222,
+   "reasons": [
+    "61 RSVPs",
+    "in person, London",
+    "in 12 days"
+   ]
+  },
+  {
+   "id": "meetup:316897150",
+   "source": "meetup",
+   "title": "IndieBeers // London Meetup #79 (Supported by Novabook)",
+   "url": "https://www.meetup.com/indiebeers-london/events/316897150/",
+   "start_at": "2026-10-28T18:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 29,
+   "size_kind": "RSVPs",
+   "organiser": "IndieBeers London 🇬🇧",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 5.193,
+   "reasons": [
+    "29 RSVPs",
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "luma:evt-52ZTOXRmycSmjhC",
+   "source": "luma",
+   "title": "Dia De Los Muertos",
+   "url": "https://lu.ma/izmqq0pd",
+   "start_at": "2026-11-07T20:00:00.000Z",
+   "end_at": "2026-11-08T01:00:00.000Z",
+   "city": "London",
+   "lat": 51.5163423,
+   "lng": -0.14957099999999998,
+   "format": "in_person",
+   "size": 77,
+   "size_kind": "going",
+   "organiser": "ALIDAD",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.128,
+   "reasons": [
+    "77 going",
+    "in person, London",
+    "in 16 days"
+   ]
+  },
+  {
+   "id": "luma:evt-a8aHuAGjwivTli8",
+   "source": "luma",
+   "title": "Regenerative Futures",
+   "url": "https://lu.ma/6p4pf7pr",
+   "start_at": "2026-11-03T18:00:00.000Z",
+   "end_at": "2026-11-03T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.536380699999995,
+   "lng": -0.12457620000000001,
+   "format": "in_person",
+   "size": 45,
+   "size_kind": "going",
+   "organiser": "Maison/0",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.093,
+   "reasons": [
+    "45 going",
+    "in person, London",
+    "in 12 days"
+   ]
+  },
+  {
+   "id": "luma:evt-jpvedgsEI3u6nq1",
+   "source": "luma",
+   "title": "Designing Futures: What We Give Forward",
+   "url": "https://lu.ma/4lkgf2hc",
+   "start_at": "2026-11-05T18:00:00.000Z",
+   "end_at": "2026-11-05T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.5156376,
+   "lng": -0.1329888,
+   "format": "in_person",
+   "size": 55,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.083,
+   "reasons": [
+    "55 going",
+    "in person, London",
+    "in 14 days"
+   ]
+  },
+  {
+   "id": "luma:evt-Jc1OOSm1iY4V0Cp",
+   "source": "luma",
+   "title": "Artist Talk: Pocko After Hours w/ Nomoco at Pocko Gallery",
+   "url": "https://lu.ma/pqlsyokj",
+   "start_at": "2026-10-29T18:00:00.000Z",
+   "end_at": "2026-10-29T20:00:00.000Z",
+   "city": "London",
+   "lat": 51.549148599999995,
+   "lng": -0.0792833,
+   "format": "in_person",
+   "size": 23,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 5.049,
+   "reasons": [
+    "23 going",
+    "in person, London",
+    "in 7 days"
+   ]
+  },
+  {
+   "id": "luma:evt-8dntupEO60aiWT5",
+   "source": "luma",
+   "title": "Solana Hacker House - London",
+   "url": "https://lu.ma/london-hh-26",
+   "start_at": "2026-11-01T10:00:00.000Z",
+   "end_at": "2026-11-12T20:00:00.000Z",
+   "city": "London",
+   "lat": 51.512123703505985,
+   "lng": -0.11497384047930949,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Solana Hacker Houses",
+   "themes": [],
+   "is_hackathon": true,
+   "score": 5.041,
+   "reasons": [
+    "in person, London",
+    "in 10 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "luma:evt-w730na4VbEGIKZr",
+   "source": "luma",
+   "title": "Yes Atlas: Scavenger Hunt- UK 🇬🇧",
+   "url": "https://lu.ma/bfgjvco9",
+   "start_at": "2026-11-08T12:00:00.000Z",
+   "end_at": "2026-11-08T14:00:00.000Z",
+   "city": "London",
+   "lat": 51.5073638,
+   "lng": -0.1641135,
+   "format": "in_person",
+   "size": 60,
+   "size_kind": "going",
+   "organiser": "Seek Discomfort",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 4.989,
+   "reasons": [
+    "60 going",
+    "in person, London",
+    "in 17 days"
+   ]
+  },
+  {
+   "id": "luma:evt-zxjxdRejzk2dk1P",
+   "source": "luma",
+   "title": "React Foundation Meetup: London",
+   "url": "https://lu.ma/g9q690i2",
+   "start_at": "2026-11-11T18:00:00.000Z",
+   "end_at": "2026-11-11T21:30:00.000Z",
+   "city": "London",
+   "lat": 51.538452799999995,
+   "lng": -0.1277721,
+   "format": "in_person",
+   "size": 73,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 4.919,
+   "reasons": [
+    "73 going",
+    "in person, London",
+    "in 20 days"
+   ]
+  },
+  {
+   "id": "meetup:316894266",
+   "source": "meetup",
+   "title": "Tech Founders & Business Social Network London",
+   "url": "https://www.meetup.com/meetup-group-jrvwlfvu/events/316894266/",
+   "start_at": "2026-10-23T13:30:00+01:00",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 8,
+   "size_kind": "RSVPs",
+   "organiser": "London New Product Development: Software & Tech Meetup Group",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 4.919,
+   "reasons": [
+    "8 RSVPs",
+    "in person, London",
+    "tomorrow"
+   ]
+  },
+  {
+   "id": "builderbase:ee8fcd6a-88e1-4dbc-91ca-a8cbb55b9c4b",
+   "source": "builderbase",
+   "title": "AgentVerse",
+   "url": "https://builderbase.com/event/agentverse",
+   "start_at": "2026-11-07T09:00:00+00:00",
+   "end_at": "2026-11-08T14:00:00+00:00",
+   "city": "London",
+   "lat": 51.54,
+   "lng": -0.01,
+   "format": "in_person",
+   "size": null,
+   "size_kind": "participants",
+   "organiser": "UCL AI Society's Base",
+   "themes": [
+    "hackathon"
+   ],
+   "is_hackathon": true,
+   "score": 4.758,
+   "reasons": [
+    "in person, London",
+    "in 16 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "luma:evt-ILT0lcMhDtLznT4",
+   "source": "luma",
+   "title": "Cover the Distance 5K | DAS London 🇬🇧",
+   "url": "https://lu.ma/gh66ltup",
+   "start_at": "2026-11-11T07:30:00.000Z",
+   "end_at": "2026-11-11T08:45:00.000Z",
+   "city": "London",
+   "lat": 51.506755,
+   "lng": -0.1465648,
+   "format": "in_person",
+   "size": 40,
+   "size_kind": "going",
+   "organiser": "OpenCover",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 4.683,
+   "reasons": [
+    "40 going",
+    "in person, London",
+    "in 20 days"
+   ]
+  },
+  {
+   "id": "meetup:316894370",
+   "source": "meetup",
+   "title": "Global Tech Innovators & Business Social Club",
+   "url": "https://www.meetup.com/meetup-group-jrvwlfvu/events/316894370/",
+   "start_at": "2026-10-23T13:30:00+01:00",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 3,
+   "size_kind": "RSVPs",
+   "organiser": "London New Product Development: Software & Tech Meetup Group",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 4.567,
+   "reasons": [
+    "3 RSVPs",
+    "in person, London",
+    "tomorrow"
+   ]
+  },
+  {
+   "id": "luma:evt-JceIJoLx8I3HNxN",
+   "source": "luma",
+   "title": "She Bytes Back x Snyk: What Breaks When Agents Start Shipping Your Code?",
+   "url": "https://lu.ma/q3uykk0n",
+   "start_at": "2026-11-18T18:00:00.000Z",
+   "end_at": "2026-11-18T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.527017406673885,
+   "lng": -0.13327628997661958,
+   "format": "in_person",
+   "size": 61,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 4.508,
+   "reasons": [
+    "61 going",
+    "in person, London",
+    "in 27 days"
+   ]
+  },
+  {
+   "id": "meetup:316957493",
+   "source": "meetup",
+   "title": "What’s Next for  Semantic Models  in Fabric Data Agent",
+   "url": "https://www.meetup.com/microsoft-power-bi-uk/events/316957493/",
+   "start_at": "2026-10-22T18:00:00+01:00",
+   "end_at": null,
+   "city": null,
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "online",
+   "size": 97,
+   "size_kind": "RSVPs",
+   "organiser": "Microsoft Fabric UK",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 4.491,
+   "reasons": [
+    "97 RSVPs",
+    "online",
+    "happening now"
+   ]
+  },
+  {
+   "id": "meetup:316172181",
+   "source": "meetup",
+   "title": "Meetup #18",
+   "url": "https://www.meetup.com/data-ai-london/events/316172181/",
+   "start_at": "2026-11-25T18:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 122,
+   "size_kind": "RSVPs",
+   "organiser": "Data & AI London",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 4.473,
+   "reasons": [
+    "122 RSVPs",
+    "in person, London",
+    "in 34 days"
+   ]
+  },
+  {
+   "id": "meetup:317057152",
+   "source": "meetup",
+   "title": "[London] Graphs AI Workshop with Neo4j and Google",
+   "url": "https://www.meetup.com/london-ai-tech-talk/events/317057152/",
+   "start_at": "2026-11-05T13:30:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 8,
+   "size_kind": "RSVPs",
+   "organiser": "London AI Developers Group",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 4.298,
+   "reasons": [
+    "8 RSVPs",
+    "in person, London",
+    "in 14 days"
+   ]
+  },
+  {
+   "id": "luma:evt-CZgpfroA4Hny1a7",
+   "source": "luma",
+   "title": "GTM Hackathon by Granola x Gemini",
+   "url": "https://lu.ma/granola-gemini-hackathon",
+   "start_at": "2026-11-17T18:00:00.000Z",
+   "end_at": "2026-11-17T20:30:00.000Z",
+   "city": "London",
+   "lat": 51.527510523572815,
+   "lng": -0.08331225179748034,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Granola",
+   "themes": [],
+   "is_hackathon": true,
+   "score": 4.264,
+   "reasons": [
+    "in person, London",
+    "in 26 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "meetup:310429777",
+   "source": "meetup",
+   "title": "London (All Day) D365PPUG - December 2026",
+   "url": "https://www.meetup.com/d365ppug/events/310429777/",
+   "start_at": "2026-12-07T09:30:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 182,
+   "size_kind": "RSVPs",
+   "organiser": "Dynamics 365 & Power Platform UK User Groups",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 4.262,
+   "reasons": [
+    "182 RSVPs",
+    "in person, London",
+    "in 45 days (beyond 6 weeks)"
+   ]
+  },
+  {
+   "id": "meetup:313382541",
+   "source": "meetup",
+   "title": "Herts Tech  Meetup at The Goat Inn St Albans",
+   "url": "https://www.meetup.com/hertfordshire-tech/events/313382541/",
+   "start_at": "2026-10-29T19:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 2,
+   "size_kind": "RSVPs",
+   "organiser": "\"Herts\" : \"Tech\"",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 4.143,
+   "reasons": [
+    "2 RSVPs",
+    "in person, London",
+    "in 7 days"
+   ]
+  },
+  {
+   "id": "meetup:317070814",
+   "source": "meetup",
+   "title": "Databricks London - Nov 2026",
+   "url": "https://www.meetup.com/databricks-london/events/317070814/",
+   "start_at": "2026-11-26T17:30:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 59,
+   "size_kind": "RSVPs",
+   "organiser": "Databricks London Meetup",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 4.114,
+   "reasons": [
+    "59 RSVPs",
+    "in person, London",
+    "in 35 days"
+   ]
+  },
+  {
+   "id": "meetup:316752051",
+   "source": "meetup",
+   "title": "The Android Circuit: Ninth Stop, St Paul's",
+   "url": "https://www.meetup.com/gdglondon/events/316752051/",
+   "start_at": "2026-10-27T18:00:00Z",
+   "end_at": null,
+   "city": "London",
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": 1,
+   "size_kind": "RSVPs",
+   "organiser": "GDG London",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 4.065,
+   "reasons": [
+    "1 RSVPs",
+    "in person, London",
+    "in 5 days"
+   ]
+  },
+  {
+   "id": "luma:evt-BUz6a7CLYDbHMc4",
+   "source": "luma",
+   "title": "Fuckup Nights London #12 x Acquisition Entrepreneurs",
+   "url": "https://lu.ma/l1z4azjp",
+   "start_at": "2026-10-22T16:30:00.000Z",
+   "end_at": "2026-10-22T20:30:00.000Z",
+   "city": "London",
+   "lat": 51.51502836485775,
+   "lng": -0.08211008930874833,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Acquisition Entrepreneurs",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 4.0,
+   "reasons": [
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-D8ObUirtnP2sDKQ",
+   "source": "luma",
+   "title": "Funeral for the Annual Pentest by Intruder",
+   "url": "https://lu.ma/k479y31u",
+   "start_at": "2026-10-22T16:30:00.000Z",
+   "end_at": "2026-10-22T22:00:00.000Z",
+   "city": "London",
+   "lat": 51.5049991,
+   "lng": -0.0884359,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Intruder",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 4.0,
+   "reasons": [
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-s88hUhrTG1scBnb",
+   "source": "luma",
+   "title": "Internet Icons: Eben Upton, Raspberry Pi",
+   "url": "https://lu.ma/granola-raspberry-pi",
+   "start_at": "2026-10-22T16:30:00.000Z",
+   "end_at": "2026-10-22T19:00:00.000Z",
+   "city": "London",
+   "lat": 51.52458583732269,
+   "lng": -0.08015315697166048,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Granola",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 4.0,
+   "reasons": [
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-TgHPexIRELx5Uxp",
+   "source": "luma",
+   "title": "Beyond Borders: London to Tokyo - SusHi Tech London",
+   "url": "https://lu.ma/m8q7l68w",
+   "start_at": "2026-10-22T16:45:00.000Z",
+   "end_at": "2026-10-22T19:00:00.000Z",
+   "city": "London",
+   "lat": 51.52762621432664,
+   "lng": -0.09225736904979244,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Access to Tokyo - London Desk",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 4.0,
+   "reasons": [
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-dHqbg51NFr7zaaz",
+   "source": "luma",
+   "title": "Chet Rock Jeans Collection Launch",
+   "url": "https://lu.ma/1e7tvpzz",
+   "start_at": "2026-10-22T17:30:00.000Z",
+   "end_at": "2026-10-22T21:30:00.000Z",
+   "city": "London",
+   "lat": 51.5160073,
+   "lng": 0.0053877,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 4.0,
+   "reasons": [
+    "in person, London",
+    "happening now"
+   ]
+  },
+  {
+   "id": "luma:evt-5qYSJayRDb7yHzv",
+   "source": "luma",
+   "title": "Meet Your Creative Match presented by DistroKid",
+   "url": "https://lu.ma/rprxn1eb",
+   "start_at": "2026-10-23T18:00:00.000Z",
+   "end_at": "2026-10-23T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.5233144,
+   "lng": -0.082678,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Qube",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.954,
+   "reasons": [
+    "in person, London",
+    "tomorrow"
+   ]
+  },
+  {
+   "id": "luma:evt-SUWF8qicUEkkfo1",
+   "source": "luma",
+   "title": "The Roaming Table Soft Launch - Supper in the Greenhouse",
+   "url": "https://lu.ma/c8mk9aof",
+   "start_at": "2026-10-23T18:00:00.000Z",
+   "end_at": "2026-10-23T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.6407239,
+   "lng": -0.0028366,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.954,
+   "reasons": [
+    "in person, London",
+    "tomorrow"
+   ]
+  },
+  {
+   "id": "luma:evt-002h4RDHfEYLEvM",
+   "source": "luma",
+   "title": "Company Brain Buildathon",
+   "url": "https://lu.ma/a5yfh2ve",
+   "start_at": "2026-10-24T08:00:00.000Z",
+   "end_at": "2026-10-24T16:00:00.000Z",
+   "city": "London",
+   "lat": 51.5194994,
+   "lng": -0.1315151,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Lightfern",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.926,
+   "reasons": [
+    "in person, London",
+    "in 2 days"
+   ]
+  },
+  {
+   "id": "luma:evt-kT50J4WYHnYAnO7",
+   "source": "luma",
+   "title": "BLUE DOOR COFFEE BECOMES… | The Relaunch Party",
+   "url": "https://lu.ma/qh2p3qij",
+   "start_at": "2026-10-24T10:00:00.000Z",
+   "end_at": "2026-10-24T13:00:00.000Z",
+   "city": "London",
+   "lat": 51.472136899999995,
+   "lng": -0.2103835,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.922,
+   "reasons": [
+    "in person, London",
+    "in 2 days"
+   ]
+  },
+  {
+   "id": "luma:evt-kAtFkUVGMjclOf3",
+   "source": "luma",
+   "title": "The Elsewhere Club: Journey to the American South",
+   "url": "https://lu.ma/8h1u8bvw",
+   "start_at": "2026-10-24T17:00:00.000Z",
+   "end_at": "2026-10-24T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.513601798241154,
+   "lng": -0.1794318751131094,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "The Elsewhere Club",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.908,
+   "reasons": [
+    "in person, London",
+    "in 2 days"
+   ]
+  },
+  {
+   "id": "luma:evt-4V3iphQ5C93TdDS",
+   "source": "luma",
+   "title": "No Other Land Screening",
+   "url": "https://lu.ma/zrk45rju",
+   "start_at": "2026-10-25T17:30:00.000Z",
+   "end_at": "2026-10-25T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.5261886,
+   "lng": -0.083359,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.86,
+   "reasons": [
+    "in person, London",
+    "in 3 days"
+   ]
+  },
+  {
+   "id": "luma:evt-BV0qFsdLK6CKFU6",
+   "source": "luma",
+   "title": "Ayn Rand Lecture 2026: A Rational Life with Madsen Pirie",
+   "url": "https://lu.ma/63g6l0e5",
+   "start_at": "2026-10-26T18:00:00.000Z",
+   "end_at": "2026-10-26T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.5152151,
+   "lng": -0.0864948,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Adam Smith Institute",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.811,
+   "reasons": [
+    "in person, London",
+    "in 4 days"
+   ]
+  },
+  {
+   "id": "luma:evt-ikQTLdE8qlzvVp5",
+   "source": "luma",
+   "title": "SoTA Extreme Weather Frontiers Night",
+   "url": "https://lu.ma/extreme-weather",
+   "start_at": "2026-10-26T18:00:00.000Z",
+   "end_at": "2026-10-26T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.520867019477826,
+   "lng": -0.08378821070411552,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.811,
+   "reasons": [
+    "in person, London",
+    "in 4 days"
+   ]
+  },
+  {
+   "id": "meetup:316873995",
+   "source": "meetup",
+   "title": "Modernize Databases Faster with AI-Assisted Migration and Optimization",
+   "url": "https://www.meetup.com/microsoft-reactor-london/events/316873995/",
+   "start_at": "2026-10-27T17:00:00Z",
+   "end_at": null,
+   "city": null,
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "online",
+   "size": 32,
+   "size_kind": "RSVPs",
+   "organiser": "Microsoft Reactor London",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 3.784,
+   "reasons": [
+    "32 RSVPs",
+    "online",
+    "in 5 days"
+   ]
+  },
+  {
+   "id": "luma:evt-vEncDauGPEH2xBU",
+   "source": "luma",
+   "title": "BLACK UNDERGRAD: AUTUMN CAREERS FAIR",
+   "url": "https://lu.ma/3i3uijvd",
+   "start_at": "2026-10-27T16:00:00.000Z",
+   "end_at": "2026-10-27T20:00:00.000Z",
+   "city": "London",
+   "lat": 51.522414,
+   "lng": -0.1301669,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.768,
+   "reasons": [
+    "in person, London",
+    "in 5 days"
+   ]
+  },
+  {
+   "id": "luma:evt-Rxq3WlarQi50rWW",
+   "source": "luma",
+   "title": "Grantham Institute Annual Lecture 2026 with Anne Hidalgo",
+   "url": "https://lu.ma/uyqc0kwq",
+   "start_at": "2026-10-27T17:30:00.000Z",
+   "end_at": "2026-10-27T20:30:00.000Z",
+   "city": "London",
+   "lat": 51.497847111716446,
+   "lng": -0.17250116176592334,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Grantham Institute",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.765,
+   "reasons": [
+    "in person, London",
+    "in 5 days"
+   ]
+  },
+  {
+   "id": "luma:evt-zqAHmwcW2yZfoPz",
+   "source": "luma",
+   "title": "The Agentic Web Explained",
+   "url": "https://lu.ma/AI4Oct26",
+   "start_at": "2026-10-27T18:00:00.000Z",
+   "end_at": "2026-10-27T20:30:00.000Z",
+   "city": "London",
+   "lat": 51.531237999999995,
+   "lng": -0.1131232,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "AI for the rest of us",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.764,
+   "reasons": [
+    "in person, London",
+    "in 5 days"
+   ]
+  },
+  {
+   "id": "luma:evt-iaaEH1PvoS1vEEz",
+   "source": "luma",
+   "title": "The Road to Growth | Lessons from Giant Ventures, Atomico & OMERS",
+   "url": "https://lu.ma/novabook-0uce",
+   "start_at": "2026-10-28T18:00:00.000Z",
+   "end_at": "2026-10-28T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.51337226504448,
+   "lng": -0.12967426330831727,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Novabook",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.716,
+   "reasons": [
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "luma:evt-ZoXjbNuMYGPSVI1",
+   "source": "luma",
+   "title": "Building a $1bn Revenue Engine",
+   "url": "https://lu.ma/revenueengine",
+   "start_at": "2026-10-28T18:30:00.000Z",
+   "end_at": "2026-10-28T21:30:00.000Z",
+   "city": "London",
+   "lat": 51.504550222242166,
+   "lng": -0.02529782929206597,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Reasoning Project",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.715,
+   "reasons": [
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "luma:evt-hBjnl2fDyUKmOdC",
+   "source": "luma",
+   "title": "Deep Feedback: Live Podcast Filming with Elijah",
+   "url": "https://lu.ma/stv9t10o",
+   "start_at": "2026-10-28T18:30:00.000Z",
+   "end_at": "2026-10-28T21:30:00.000Z",
+   "city": "London",
+   "lat": 51.5233144,
+   "lng": -0.082678,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Qube",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.715,
+   "reasons": [
+    "in person, London",
+    "in 6 days"
+   ]
+  },
+  {
+   "id": "luma:evt-rWKcLr25iPUrAAf",
+   "source": "luma",
+   "title": "AI Movie Club x The Terminator (1984)",
+   "url": "https://lu.ma/fwyhkq6w",
+   "start_at": "2026-10-29T18:00:00.000Z",
+   "end_at": "2026-10-29T21:30:00.000Z",
+   "city": "London",
+   "lat": 51.501509000000006,
+   "lng": -0.1941385,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "II Calendar",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.668,
+   "reasons": [
+    "in person, London",
+    "in 7 days"
+   ]
+  },
+  {
+   "id": "luma:evt-296vMaEwHi6Ghxg",
+   "source": "luma",
+   "title": "Tech Summit 2026",
+   "url": "https://lu.ma/techsummit",
+   "start_at": "2026-10-31T09:30:00.000Z",
+   "end_at": "2026-10-31T17:30:00.000Z",
+   "city": "London",
+   "lat": 51.5127259903634,
+   "lng": -0.12036720816595592,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "KCL Tech",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.59,
+   "reasons": [
+    "in person, London",
+    "in 9 days"
+   ]
+  },
+  {
+   "id": "luma:evt-2KWwxVy27gk95qf",
+   "source": "luma",
+   "title": "EXP: Cotswolds Hike II📍",
+   "url": "https://lu.ma/aw3il7e5",
+   "start_at": "2026-11-01T07:00:00.000Z",
+   "end_at": "2026-11-01T21:00:00.000Z",
+   "city": "London",
+   "lat": 51.499127629410175,
+   "lng": -0.1487295696925022,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "exp calender",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.547,
+   "reasons": [
+    "in person, London",
+    "in 10 days"
+   ]
+  },
+  {
+   "id": "luma:evt-ZDVdgqIyXbwKhW4",
+   "source": "luma",
+   "title": "Built By Few: The Summit by Connect",
+   "url": "https://lu.ma/phtg8nap",
+   "start_at": "2026-11-03T10:00:00.000Z",
+   "end_at": "2026-11-03T17:00:00.000Z",
+   "city": "London",
+   "lat": 51.512379986646295,
+   "lng": -0.13724849257409902,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.446,
+   "reasons": [
+    "in person, London",
+    "in 12 days"
+   ]
+  },
+  {
+   "id": "builderbase:c3f3218a-da46-4733-9b10-093cc81432ff",
+   "source": "builderbase",
+   "title": "HackNotts '26",
+   "url": "https://hacknotts.com/?utm_source=builderbase.com&utm_medium=referral",
+   "start_at": "2026-10-24T00:00:00+00:00",
+   "end_at": "2026-10-25T00:00:00+00:00",
+   "city": "Nottingham",
+   "lat": 52.9548,
+   "lng": -1.1581,
+   "format": "in_person",
+   "size": null,
+   "size_kind": "participants",
+   "organiser": "University of Nottingham Computer Science Society",
+   "themes": [
+    "Other",
+    "hackathon"
+   ],
+   "is_hackathon": true,
+   "score": 3.442,
+   "reasons": [
+    "in person, Nottingham (outside London)",
+    "in 2 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "mlh:019ff171-24a3-0dd9-42c5-eabf54b0893c",
+   "source": "mlh",
+   "title": "OxHack '26",
+   "url": "https://26.oxhack.net/",
+   "start_at": "2026-10-24T01:11:11Z",
+   "end_at": "2026-10-25T21:00:00Z",
+   "city": "Oxford",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": null,
+   "size_kind": null,
+   "organiser": "MLH member event",
+   "themes": [],
+   "is_hackathon": true,
+   "score": 3.44,
+   "reasons": [
+    "in person, Oxford (outside London)",
+    "in 2 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "luma:evt-kP2fsWYA84nOchg",
+   "source": "luma",
+   "title": "THE WILD TABLE",
+   "url": "https://lu.ma/wjyuhipj",
+   "start_at": "2026-11-26T19:00:00.000Z",
+   "end_at": "2026-11-26T21:30:00.000Z",
+   "city": "London",
+   "lat": 51.464709799999994,
+   "lng": -0.1592073,
+   "format": "in_person",
+   "size": 11,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.412,
+   "reasons": [
+    "11 going",
+    "in person, London",
+    "in 35 days"
+   ]
+  },
+  {
+   "id": "meetup:316423211",
+   "source": "meetup",
+   "title": "Model Mondays - Spotlight on NVIDIA models",
+   "url": "https://www.meetup.com/microsoft-reactor-london/events/316423211/",
+   "start_at": "2026-11-02T18:30:00Z",
+   "end_at": null,
+   "city": null,
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "online",
+   "size": 20,
+   "size_kind": "RSVPs",
+   "organiser": "Microsoft Reactor London",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 3.299,
+   "reasons": [
+    "20 RSVPs",
+    "online",
+    "in 11 days"
+   ]
+  },
+  {
+   "id": "luma:evt-MgdhYr9RORaw5d6",
+   "source": "luma",
+   "title": "Poker Night @ DAS London",
+   "url": "https://lu.ma/z7g0eoa3",
+   "start_at": "2026-11-09T18:00:00.000Z",
+   "end_at": "2026-11-10T00:00:00.000Z",
+   "city": "London",
+   "lat": 51.5060478,
+   "lng": -0.12413679999999998,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.145,
+   "reasons": [
+    "in person, London",
+    "in 18 days"
+   ]
+  },
+  {
+   "id": "luma:evt-ZE3eBcWkz2pxO1N",
+   "source": "luma",
+   "title": "Maison Margiela: Inside Out",
+   "url": "https://lu.ma/eo722inl",
+   "start_at": "2026-11-12T18:00:00.000Z",
+   "end_at": "2026-11-12T20:00:00.000Z",
+   "city": "London",
+   "lat": 51.50148957022378,
+   "lng": -0.1428694254424974,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Voiceroom",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 3.002,
+   "reasons": [
+    "in person, London",
+    "in 21 days"
+   ]
+  },
+  {
+   "id": "luma:evt-UqUVnzhZE8gFPkd",
+   "source": "luma",
+   "title": "200ms",
+   "url": "https://lu.ma/6xip72je",
+   "start_at": "2026-11-13T09:00:00.000Z",
+   "end_at": "2026-11-13T18:00:00.000Z",
+   "city": "London",
+   "lat": 51.495364624850545,
+   "lng": -0.21251481809878195,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Jito Events",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 2.972,
+   "reasons": [
+    "in person, London",
+    "in 22 days"
+   ]
+  },
+  {
+   "id": "luma:evt-saiU3xVXKv6HsFC",
+   "source": "luma",
+   "title": "Scale or Die",
+   "url": "https://lu.ma/scale-or-die-26",
+   "start_at": "2026-11-14T09:30:00.000Z",
+   "end_at": "2026-11-14T18:30:00.000Z",
+   "city": "London",
+   "lat": 51.49326626153274,
+   "lng": -0.21201908585795776,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Solana Accelerate",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 2.923,
+   "reasons": [
+    "in person, London",
+    "in 23 days"
+   ]
+  },
+  {
+   "id": "luma:evt-Ukw5t6zrVyNWYqX",
+   "source": "luma",
+   "title": "La Mode Darelle Pop-up: It’s Summer Somewhere",
+   "url": "https://lu.ma/3lquw02s",
+   "start_at": "2026-11-14T11:00:00.000Z",
+   "end_at": "2026-11-14T20:00:00.000Z",
+   "city": "London",
+   "lat": 51.5472858,
+   "lng": -0.0497219,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Personal",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 2.92,
+   "reasons": [
+    "in person, London",
+    "in 23 days"
+   ]
+  },
+  {
+   "id": "luma:evt-KFDtoSxKwrXxRwQ",
+   "source": "luma",
+   "title": "Solana Breakpoint 2026",
+   "url": "https://lu.ma/breakpoint2026",
+   "start_at": "2026-11-15T16:00:00.000Z",
+   "end_at": "2026-11-17T19:00:00.000Z",
+   "city": "London",
+   "lat": 51.4963566,
+   "lng": -0.2107637,
+   "format": "in_person",
+   "size": 0,
+   "size_kind": "going",
+   "organiser": "Solana Breakpoint",
+   "themes": [],
+   "is_hackathon": false,
+   "score": 2.863,
+   "reasons": [
+    "in person, London",
+    "in 24 days"
+   ]
+  },
+  {
+   "id": "mlh:01a0f9ce-2aec-1d0e-a9c8-f5b4213b0d1b",
+   "source": "mlh",
+   "title": "HackTheBurgh",
+   "url": "https://hacktheburgh.com/",
+   "start_at": "2026-11-07T14:00:00Z",
+   "end_at": "2026-11-08T20:00:00Z",
+   "city": "Edinburgh",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": null,
+   "size_kind": null,
+   "organiser": "MLH member event",
+   "themes": [
+    "Software"
+   ],
+   "is_hackathon": true,
+   "score": 2.748,
+   "reasons": [
+    "in person, Edinburgh (outside London)",
+    "in 16 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "mlh:019e50f7-21ed-7be0-d9d3-25041a140a99",
+   "source": "mlh",
+   "title": "DurHack",
+   "url": "https://durhack.com",
+   "start_at": "2026-11-14T14:30:00Z",
+   "end_at": "2026-11-15T23:00:00Z",
+   "city": "Durham",
+   "lat": null,
+   "lng": null,
+   "format": "in_person",
+   "size": null,
+   "size_kind": null,
+   "organiser": "MLH member event",
+   "themes": [],
+   "is_hackathon": true,
+   "score": 2.413,
+   "reasons": [
+    "in person, Durham (outside London)",
+    "in 23 days",
+    "hackathon"
+   ]
+  },
+  {
+   "id": "meetup:317075400",
+   "source": "meetup",
+   "title": "IBM Bob TV episode 3: Benchmarking optimization tasks, cost & quality with Bob",
+   "url": "https://www.meetup.com/big-data-developers-in-london/events/317075400/",
+   "start_at": "2026-11-04T10:00:00Z",
+   "end_at": null,
+   "city": null,
+   "city_note": "from Meetup London search area, no venue in listing",
+   "lat": null,
+   "lng": null,
+   "format": "online",
+   "size": 1,
+   "size_kind": "RSVPs",
+   "organiser": "Data, Cloud and AI in London",
+   "themes": [
+    "tech"
+   ],
+   "is_hackathon": false,
+   "score": 2.2,
+   "reasons": [
+    "1 RSVPs",
+    "online",
+    "in 13 days"
+   ]
+  },
+  {
+   "id": "builderbase:7ba0887b-fa56-49a7-bb5c-b559ecf8dded",
+   "source": "builderbase",
+   "title": "LaunchHacks V",
+   "url": "https://launchhacks-v.devpost.com/?utm_source=builderbase.com&utm_medium=referral",
+   "start_at": "2026-12-11T00:00:00+00:00",
+   "end_at": "2026-12-15T00:00:00+00:00",
+   "city": null,
+   "lat": null,
+   "lng": null,
+   "format": "online",
+   "size": null,
+   "size_kind": "participants",
+   "organiser": null,
+   "themes": [
+    "AI",
+    "hackathon"
+   ],
+   "is_hackathon": true,
+   "score": 2.0,
+   "reasons": [
+    "online",
+    "in 49 days (beyond 6 weeks)",
+    "hackathon"
+   ]
+  }
+ ]
+}

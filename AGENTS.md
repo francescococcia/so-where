@@ -1,36 +1,39 @@
-# AGENTS.md: instructions for coding agents
+# Agent instructions
 
-## Context
-- This repo is for **Encode London Hackathon 2026** (Encode Hub, London, 23–25 Oct 2026). The builder is Francesco Coccia.
-- The project is **TBD**. Candidate challenges: Gemini 4 Argon (Google DeepMind), MongoDB Atlas, Saint, The Real World, Agents That Ship.
-- **`README.md` is the source of truth** for rules, judging criteria, submission requirements and deadlines. Read it before you start. Don't invent event facts; anything unconfirmed is marked TBC.
-- Francesco switches tasks a lot. Keep updates short: what you did, what's next, and what's blocked on him.
+Event: **Encode London Hackathon 2026**. Product: **Lumap Near Me**, a "what's happening near me" explorer. Before planning or writing code, read:
+- `knowledge/plan.md`: problem, user, assistant rules, data sources, actions, MVP, build order (cards N1–N8, M1, D1), risks, open decisions
+- `knowledge/pitch.md`: 30-second pitch and 3-minute demo script
+- `knowledge/event.md`: schedule, checkpoints, judges
 
-## Hard rules
-1. **Only code written during the hackathon may be shown in the demo.** Open-source libraries and starter templates are fine, but don't paste in pre-existing project code.
-2. **Human in the loop:** any action that affects external systems, money, private data, sending messages or submitting forms must stop and ask for human approval. Log every action the agent takes, as judges want a clear record.
-3. **Secrets:** never commit keys. Use `.env` (ignored) and keep `.env.example` updated with key names only.
+## Deadlines (Sunday times are GMT; clocks go back at 02:00 Sun)
+- Feature freeze **Sun 10:30** · video by 11:30 · submit **Sun 12:00** (no late entries)
+- After the freeze: only fixes to the demo path.
 
-## Gemini 4 Argon API rules
-- SDKs: Python `pip install -U "google-genai>=2.3.0"`; JS/TS `npm install @google/genai@latest`.
-- Use the **Interactions API**: `client.interactions.create` (covers models and managed agents, server-side state, long background runs).
-- Use `thinking_level` (`"low"` | `"medium"` (default) | `"high"`). **Never** use `thinking_budget` (deprecated).
-- **Don't set** `temperature`, `top_p`, `top_k` or explicit `cached_content`. Implicit caching is automatic.
-- Set `background=True` to generate beyond **65,536 tokens** (up to 1M).
-- Model IDs: `gemini-4-argon` (lead), `antigravity-preview-09-2026` (sandbox agent), `gemini-3.8-flash` / `gemini-3.5-flash-lite` (subagents), `deep-research-preview-04-2026`, `gemini-3.8-live*`, `gemini-3.5-transcribe-live`, `gemini-3.5-live-translate-preview`, `gemini-3.8-flash-tts`, `gemini-nano-banana-2.1`, `gemini-omni-1.1-flash`, `lyria-3.5`, `gemma-4-31b-it`. Full table in README §2.
-- Install the Gemini skills before writing Gemini code:
-  ```bash
-  npx skills add google-gemini/gemini-skills --skill gemini-api-dev
-  npx skills add google-gemini/gemini-skills --skill gemini-live-api-dev
-  # Antigravity: agy plugin install https://github.com/google-gemini/gemini-skills
-  ```
+## Build rules
+- Optimise for a working, reliable 3-minute live demo on real London inputs (Encode Hub, Shoreditch/Old Street). Cut anything not in `pitch.md`.
+- Encode features must be new code written after Fri 23 Oct 17:00 BST. Don't present pre-Encode code as Encode work.
+- Keep the existing app (venues, Luma events, map, Ask) as one layer of the neighbourhood view; don't rewrite it.
+- Every data source: cache the demo point, return `{source, fetched_at, ok}`, show attribution. On failure retry once, then use the cache labelled "cached".
+- Assistant honesty: every fact has a source and freshness; missing data is said plainly; low confidence means "not sure". Never invent step-free status, times, prices or addresses.
+- Actions that publish (Luma event, OSM note, any upload) need an explicit human Approve click and an action-log entry. Read-only tool calls don't.
+- Privacy: read EXIF GPS in the browser, then strip all EXIF; blur faces (and plates) before anything is published; don't store raw photos or user locations.
+- Keep commits small and descriptive, with the card id (e.g. `N1: near briefing`).
+- Never commit secrets. Keys go in `.env` (gitignored); document new vars in `.env.example`.
 
-## How to work
-- **Verification loops:** every agent feature needs a concrete pass/fail signal (tests, compiler output, runtime logs, headless browser checks). Run it before saying a task is done. (This is worth 50% of the Gemini score.)
-- **Demo first:** keep a demo runnable from a fresh clone in **under 3 minutes**, with real inputs. Don't break the demo path. If an extra (voice, video, 3D) isn't working within about 20–30 min, add a fallback and move on.
-- **Commit often:** small commits with clear messages, then push. Unpushed work doesn't exist.
-- **Keep README setup instructions updated** (README §10) whenever dependencies, env vars or run commands change.
-- **Record models and agents used** (and data sources, tools and approval points) in README §10 as you go. The submission notes need them.
-- MongoDB: if Atlas is used, make it core to the app and list each Atlas feature used (more features = more points).
-- Privacy: blur or avoid faces, number plates and personal locations. Show model uncertainty honestly.
-- One task at a time: finish, verify, commit, write a one-line note for the next agent, stop.
+## Gemini API (when a card uses Gemini)
+- SDK: `@google/genai@latest` (or `google-genai>=2.3.0` in Python). Use the Interactions API, `client.interactions.create`.
+- `gemini-4-argon`: use `thinking_level`, not `thinking_budget`; no `temperature`, `top_p`, `top_k` or explicit `cached_content`; use `background=True` beyond 65,536 tokens.
+- Companion models allowed, e.g. `gemini-3.8-flash` for fast reads.
+- Skills: `npx skills add google-gemini/gemini-skills --skill gemini-api-dev`.
+- Key: `GEMINI_API_KEY` in `.env`, server routes only.
+
+## UI rules (Francesco)
+- Light theme only. No dark colours or dark mode. Match `docs/lumap-mockup.jpg` (off-white #FAFAF7, white cards, violet #7C5CFF accent, mint/amber pin states).
+- Build UI from component libraries: shadcn/ui as the base, Magic UI or Aceternity UI for showy pieces, Framer Motion (`motion`) for animation, lucide-react for icons. Don't hand-roll components that a library already provides.
+- Do not write or run tests. Verify by looking at the running app.
+
+## Working in small chunks (every agent: Cursor, Codex, others)
+- The build queue is the build order table in `knowledge/plan.md` §10. Do ONLY the card id you were given (or the first unticked one).
+- Don't start the next card, refactor unrelated code, or expand scope. If a card looks bigger than its timebox, split it and do only the first part.
+- 15-min debug cap per bug, then use the card's fallback.
+- When done: tick the card, commit with the card id, then stop and report in 3 lines.
