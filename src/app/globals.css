@@ -1,12 +1,125 @@
 @import "tailwindcss";
 
+/*
+  So where? — "Portland stone & bus red"
+  A London street atlas that's alive: stone ground, ink chrome, colour only on data
+  (routes, pins, verdicts, live signals). One data hue (bus red) + one highlighter
+  (the fair middle). Light only.
+*/
 :root {
   color-scheme: light;
-  background: #fafaf7;
-  color: #20202a;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* ground & surfaces */
+  --sw-ground: #eeede8;      /* Portland stone */
+  --sw-surface: #ffffff;
+  --sw-raised: #f5f4f0;      /* input well, fact rows */
+  --sw-sunk: #e4e2db;
+  --sw-border: #e2e0d9;
+  --sw-rule: #edebe6;
+  --sw-control: #cfccc3;
+
+  /* ink */
+  --sw-ink: #15171c;
+  --sw-ink-2: #4b4e56;
+  --sw-ink-3: #5f626a;       /* ≥4.5:1 on white and on raised */
+
+  /* data */
+  --sw-signal: #e1251b;      /* bus red: pins, their route, live */
+  --sw-signal-ink: #b81d14;  /* red as text */
+  --sw-signal-soft: #fde6e3;
+  --sw-hi: #ffd23f;          /* highlighter: the fair middle, never text */
+  --sw-route-you: #15171c;
+  --sw-route-them: #e1251b;
+
+  /* verdicts: pale tint + dark ink of the same hue */
+  --sw-ok-bg: #ddf3e4;   --sw-ok: #0f5a2e;
+  --sw-likely-bg: #fcefc7; --sw-likely: #6b4a00;
+  --sw-unknown-bg: #e9e8e3; --sw-unknown: #45474d;
+  --sw-fc-bg: #dcebfa;   --sw-fc: #0d4a85;
+
+  /* shape & motion */
+  --sw-radius-panel: 20px;
+  --sw-radius-card: 14px;
+  --sw-radius-chip: 999px;
+  --sw-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --sw-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --sw-shadow-float: 0 1px 2px rgba(21, 23, 28, 0.06), 0 12px 32px rgba(21, 23, 28, 0.12);
+
+  background: var(--sw-ground);
+  color: var(--sw-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+@theme inline {
+  --font-sans: var(--font-schibsted);
+  --font-mono: var(--font-geist-mono);
+  --color-ground: var(--sw-ground);
+  --color-surface: var(--sw-surface);
+  --color-raised: var(--sw-raised);
+  --color-sunk: var(--sw-sunk);
+  --color-line: var(--sw-border);
+  --color-rule: var(--sw-rule);
+  --color-control: var(--sw-control);
+  --color-ink: var(--sw-ink);
+  --color-ink-2: var(--sw-ink-2);
+  --color-ink-3: var(--sw-ink-3);
+  --color-signal: var(--sw-signal);
+  --color-signal-ink: var(--sw-signal-ink);
+  --color-signal-soft: var(--sw-signal-soft);
+  --color-hi: var(--sw-hi);
+  --color-ok: var(--sw-ok);
+  --color-ok-bg: var(--sw-ok-bg);
+  --color-likely: var(--sw-likely);
+  --color-likely-bg: var(--sw-likely-bg);
+  --color-unknown: var(--sw-unknown);
+  --color-unknown-bg: var(--sw-unknown-bg);
+  --color-fc: var(--sw-fc);
+  --color-fc-bg: var(--sw-fc-bg);
+  --ease-sw: var(--sw-ease-out);
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; }
+body { margin: 0; -webkit-font-smoothing: antialiased; }
 a { color: inherit; text-decoration: none; }
+::selection { background: var(--sw-hi); color: var(--sw-ink); }
+:focus-visible { outline: 2px solid var(--sw-ink); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- map markers (DOM, outside React) ---------- */
+@keyframes sw-drop { 0% { transform: translateY(-22px) scale(.6); opacity: 0 } 60% { transform: translateY(2px) scale(1.06); opacity: 1 } 100% { transform: none; opacity: 1 } }
+@keyframes sw-breathe { 0%, 100% { transform: scale(1); opacity: .55 } 50% { transform: scale(1.35); opacity: .15 } }
+@keyframes sw-ping { 0% { transform: scale(1); opacity: .6 } 100% { transform: scale(2.6); opacity: 0 } }
+@keyframes sw-fade { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+
+.sw-pin { cursor: pointer; display: grid; place-items: center; }
+.sw-pin-body { animation: sw-drop .6s var(--sw-ease-out) both; transform-origin: 50% 100%; transition: transform .25s var(--sw-ease-out); }
+.sw-pin-head { width: 30px; height: 30px; border-radius: 999px 999px 999px 2px; transform: rotate(-45deg); background: var(--sw-signal); border: 2.5px solid #fff; box-shadow: 2px 2px 0 rgba(21,23,28,.35); display: grid; place-items: center; transition: background .2s ease; }
+.sw-pin-head span { transform: rotate(45deg); color: #fff; font: 700 13px/1 var(--font-geist-mono), monospace; }
+.sw-pin:hover .sw-pin-body, .sw-pin.is-on .sw-pin-body { transform: translateY(-3px) scale(1.12); }
+.sw-pin.is-on .sw-pin-head { background: var(--sw-ink); }
+.sw-pin.is-on { z-index: 6; }
+
+.sw-tag { pointer-events: none; background: #fff; color: var(--sw-ink); border-radius: 10px; padding: 6px 10px; font: 600 12.5px/1.3 var(--font-schibsted), sans-serif; box-shadow: var(--sw-shadow-float); white-space: nowrap; animation: sw-fade .5s var(--sw-ease-out) both; }
+.sw-tag small { display: block; font: 400 11.5px/1.35 var(--font-geist-mono), monospace; color: var(--sw-ink-3); margin-top: 1px; }
+
+.sw-you { position: relative; width: 22px; height: 22px; }
+.sw-you i { position: absolute; inset: 0; border-radius: 999px; background: var(--sw-hi); animation: sw-ping 2.2s var(--sw-ease-out) infinite; }
+.sw-you b { position: absolute; inset: 3px; border-radius: 999px; background: var(--sw-ink); border: 3px solid var(--sw-hi); }
+
+.sw-mid { position: relative; width: 26px; height: 26px; }
+.sw-mid i { position: absolute; inset: -14px; border-radius: 999px; background: var(--sw-hi); animation: sw-breathe 3.2s ease-in-out infinite; }
+.sw-mid b { position: absolute; inset: 0; border-radius: 999px; background: var(--sw-hi); border: 3px solid var(--sw-ink); }
+
+.maplibregl-ctrl-attrib { font: 400 11px/1.4 var(--font-schibsted), sans-serif !important; background: rgba(255,255,255,.85) !important; }
+.maplibregl-ctrl-group { border-radius: 10px !important; box-shadow: var(--sw-shadow-float) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  .sw-you i, .sw-mid i { display: none; }
+}
+
+/* pin name label (shown for the selected pin) */
+.sw-pin { position: relative; }
+.sw-pin .sw-tag { position: absolute; left: 30px; bottom: 14px; display: none; }
+.sw-pin.is-on .sw-tag, .sw-pin:hover .sw-tag { display: block; }
+.sw-area-tag { border: 1.5px dashed rgba(184, 29, 20, .55); }

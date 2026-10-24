@@ -1,35 +1,29 @@
-import { ChevronDown, MapPin } from "lucide-react";
-import { AddVenueDialog } from "@/components/add-venue-dialog";
-import { AskPanel } from "@/components/ask-panel";
-import { AuthMenu } from "@/components/auth-menu";
-import { Button } from "@/components/ui/button";
-import { VenueHome } from "@/components/venue-home";
+import fs from "node:fs";
+import path from "node:path";
+import { SoWhereApp } from "@/components/so-where/so-where-app";
+
+/**
+ * "Tested on N asks": read evals/last-run.json at build time. No file → no badge.
+ * Never hardcode N.
+ */
+function testedCount(): number | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(process.cwd(), "evals", "last-run.json"), "utf8"));
+    const pick = (v: unknown) => (typeof v === "number" ? v : Array.isArray(v) ? v.length : null);
+    if (Array.isArray(raw)) return raw.length || null;
+    for (const k of ["n", "total", "count", "asks", "cases", "results", "runs"]) {
+      const n = pick(raw?.[k]);
+      if (n) return n;
+    }
+    if (typeof raw?.passed === "number" && typeof raw?.failed === "number") return raw.passed + raw.failed || null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export const dynamic = "force-static";
 
 export default function Home() {
-  return (
-    <main className="min-h-screen bg-[#fafaf7] text-[#20202a]">
-      <header className="flex h-16 items-center justify-between border-b border-[#ecebf0] bg-white px-6 sm:px-10">
-        <div className="flex items-center gap-10">
-          <a href="/" className="flex items-center gap-2 text-[21px] font-semibold tracking-[-0.04em]" aria-label="Lumap home">
-            <MapPin className="h-8 w-8 fill-[#7854f6] text-[#7854f6] stroke-white" strokeWidth={2.5} />
-            <span>Lumap</span>
-          </a>
-          <Button variant="outline" className="h-10 gap-2 rounded-xl border-[#e8e7ed] px-3.5 font-medium text-[#30303a] shadow-none">
-            <MapPin className="h-4 w-4" />
-            London
-            <ChevronDown className="ml-1 h-4 w-4 text-[#85838f]" />
-          </Button>
-        </div>
-        <div className="flex items-center gap-3">
-          <a href="/review" className="hidden h-10 items-center rounded-xl px-3 text-sm font-medium !text-[#484751] transition-colors hover:bg-[#f4f3f7] hover:!text-[#7854f6] sm:inline-flex">
-            Review queue
-          </a>
-          <AddVenueDialog />
-          <AuthMenu />
-        </div>
-      </header>
-      <VenueHome />
-      <AskPanel />
-    </main>
-  );
+  return <SoWhereApp testedN={testedCount()} />;
 }
