@@ -43,3 +43,17 @@ export async function lookupPostcode(raw: string): Promise<Origin | { error: str
     return { error: "Couldn't look up that postcode right now." };
   }
 }
+
+/**
+ * Round a point to a ~500 m grid cell and return the cell centre, so the other person's location is only
+ * ever handled as an area. Callers must not store or log the unrounded input.
+ */
+export function roundToArea(p: { lat: number; lng: number }, metres = 500): { center: { lat: number; lng: number }; radiusM: number } {
+  const latStep = metres / 111_320;
+  const lngStep = metres / (111_320 * Math.cos((p.lat * Math.PI) / 180));
+  const snap = (v: number, step: number) => Math.round((Math.floor(v / step) + 0.5) * step * 1e5) / 1e5;
+  return { center: { lat: snap(p.lat, latStep), lng: snap(p.lng, lngStep) }, radiusM: metres };
+}
+
+/** Straight-line walking minutes with a 1.3 detour factor (an estimate, labelled as such where shown). */
+export const walkMinutes = (m: number) => Math.max(1, Math.round((m * 1.3) / WALK_M_PER_MIN));

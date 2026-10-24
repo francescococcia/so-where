@@ -1,0 +1,469 @@
+// "So where?" plan pipeline: parse → resolve places → compare hubs → venues/events → line status → weather → verify.
+// Every Fact carries a source; anything we couldn't check goes into `unknowns`. The other person's location
+// is only ever kept as a ~500 m area, is never logged, and never appears in draftMessage.
+import { parsePlanAsk, type PlanAsk } from "@/lib/ask-local";
+import { LONDON_CENTER } from "@/lib/areas";
+import { londonToday } from "@/lib/dates";
+import { seedEventsOn, type SeedEvent } from "@/lib/events";
+import { geminiFill } from "@/lib/gemini-intent";
+import { metresBetween, roundToArea, walkMinutes } from "@/lib/geo";
+import { londonClock, londonDayShort, londonLabel, londonParts, londonToUtc } from "@/lib/london-time";
+import { addressOf, findPlaces, hoursAt, kindLabel, osmUrl, type OsmKind, type OsmPlace, type OsmResult } from "@/lib/osm";
+import type { AgentStep, Clarify, Fact, LatLng, Leg, PlanCard, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
+import { fairPoint, journey, lineStatus, searchPlace, trimPathStart, type Journey, type LineStatus, type Place } from "@/lib/tfl";
+import { forecastAt, type Forecast } from "@/lib/weather";
+
+export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string } };
+export type StepSink = (step: AgentStep) => void;
+
+const MAX_CARDS = 3;
+const ME_SUGGESTIONS = ["Old Street", "King's Cross", "London Bridge"];
+const THEM_SUGGESTIONS = ["Clapham", "Brixton", "Stratford"];
+
+const fact = (label: string, value: string, verdict: Verdict, source: string, asOf?: string): Fact => ({ label, value, verdict, source, ...(asOf ? { asOf } : {}) });
+const validLatLng = (p: unknown): p is LatLng =>
+  !!p && typeof p === "object" && Number.isFinite((p as LatLng).lat) && Number.isFinite((p as LatLng).lng) && Math.abs((p as LatLng).lat) <= 90 && Math.abs((p as LatLng).lng) <= 180;
+
+function stepper(emit?: StepSink) {
+  const steps: AgentStep[] = [];
+  const begin = (id: string, label: string, source?: string) => {
+    const s: AgentStep = { id, label, status: "running", ...(source ? { source } : {}) };
+    steps.push(s);
+    emit?.({ ...s });
+    const t0 = Date.now();
+    return (status: AgentStep["status"], detail?: string) => {
+      s.status = status;
+      if (detail) s.detail = detail;
+      s.ms = Date.now() - t0;
+      emit?.({ ...s });
+    };
+  };
+  return { steps, begin };
+}
+
+/** Merge a clarify answer into the original ask: the answer fills exactly the slot that was missing. */
+function mergeAnswer(prevQuery: string, answer: string, today: string): { ask: PlanAsk; text: string } {
+  const base = parsePlanAsk(prevQuery, today);
+  const text = `${prevQuery} — ${answer}`;
+  const a = answer.trim().replace(/[.!?]+$/, "");
+  if (!base.intent) return { ask: parsePlanAsk(`${prevQuery}. ${answer}`, today), text };
+  const fromAnswer = parsePlanAsk(answer, today);
+  const ask = { ...base, signals: [...base.signals, "answer merged"] };
+  if (base.intent === "meet_halfway" && !base.themPlace) ask.themPlace = fromAnswer.themPlace ?? fromAnswer.youPlace ?? a;
+  else if (!base.youPlace) ask.youPlace = fromAnswer.youPlace ?? a;
+  ask.date ??= fromAnswer.date;
+  ask.time ??= fromAnswer.time;
+  ask.category ??= fromAnswer.category;
+  return { ask, text };
+}
+
+function planTime(ask: PlanAsk, reqWhen: string | undefined, now: Date, unknowns: string[]) {
+  const today = londonToday(now);
+  const given = reqWhen && Number.isFinite(Date.parse(reqWhen)) ? new Date(reqWhen) : null;
+  const gp = given ? londonParts(given) : null;
+  const date = ask.date ?? gp?.date ?? today;
+  let time = ask.time ?? (gp && !ask.date ? `${String(gp.hh).padStart(2, "0")}:${String(gp.mm).padStart(2, "0")}` : null);
+  if (!time) {
+    if (date === today) {
+      const n = londonParts(new Date(now.getTime() + 15 * 60_000));
+      time = `${String(n.hh).padStart(2, "0")}:${String(Math.floor(n.mm / 15) * 15).padStart(2, "0")}`;
+      unknowns.push("No time given, so this is planned for about now.");
+    } else {
+      time = "12:00";
+      unknowns.push("No time given, so this is planned for midday.");
+    }
+  }
+  const [hh, mm] = time.split(":").map(Number);
+  return londonToUtc(date, hh, mm);
+}
+
+type Sources = Map<string, string>;
+const addSource = (s: Sources, name: string, asOf?: string) => {
+  if (!asOf) return;
+  const prev = s.get(name);
+  if (!prev || prev < asOf) s.set(name, asOf);
+};
+
+function lineFacts(ids: string[], ls: Awaited<ReturnType<typeof lineStatus>> | null): Fact[] {
+  if (!ids.length) return [];
+  if (!ls || "error" in ls) return [fact("Lines", "Line status unavailable right now", "unknown", "TfL")];
+  const used = ls.lines.filter((l) => ids.includes(l.id));
+  if (!used.length) return [];
+  const text = used.map((l: LineStatus) => `${l.name}: ${l.status}${l.reason && l.severity < 10 ? ` (${l.reason.slice(0, 80)})` : ""}`).join(" · ");
+  return [fact("Lines", `${text} · now, as of ${londonClock(ls.fetchedAt)}`, "confirmed", "TfL", ls.fetchedAt)];
+}
+
+function weatherFact(w: Forecast | { error: string } | null, at: Date): Fact {
+  if (!w || "error" in w) return fact("Weather", `No forecast for ${londonLabel(at)} (${w && "error" in w ? w.error : "not checked"})`, "unknown", "Open-Meteo");
+  return fact("Weather", `${londonLabel(at)}: ${w.value}`, "forecast", "Open-Meteo", w.fetchedAt);
+}
+
+function venuePick(res: OsmResult, at: Date) {
+  const rank = { confirmed: 0, likely: 1, forecast: 2, unknown: 3 } as const;
+  const rows = res.places.map((p) => ({ p, h: hoursAt(p.tags, at, p.location) }));
+  const closed = rows.filter((r) => r.h.state === "closed").length;
+  const keep = rows.filter((r) => r.h.state !== "closed").sort((a, b) => rank[a.h.verdict] - rank[b.h.verdict] || a.p.distanceM - b.p.distanceM);
+  return { picks: keep.slice(0, MAX_CARDS), total: rows.length, closed };
+}
+
+function stepFree(tags: Record<string, string>, asOf: string, src: string): Fact {
+  const w = tags.wheelchair;
+  if (w === "yes") return fact("Step-free", "Wheelchair access: yes (OSM tag)", "likely", src, asOf);
+  if (w === "limited") return fact("Step-free", "Wheelchair access: limited (OSM tag)", "likely", src, asOf);
+  if (w === "no") return fact("Step-free", "Wheelchair access: no (OSM tag)", "likely", src, asOf);
+  return fact("Step-free", "Not tagged in OSM", "unknown", src);
+}
+
+function emptyResult(query: string, when: Date, you: LatLng | undefined, steps: AgentStep[], unknowns: string[]): PlanResultWithAgent {
+  return {
+    intent: "near_me",
+    query,
+    headline: "",
+    when: when.toISOString(),
+    you: you ?? { lat: LONDON_CENTER.lat, lng: LONDON_CENTER.lng },
+    filters: {},
+    cards: [],
+    unknowns,
+    sources: [],
+    draftMessage: "",
+    steps,
+  };
+}
+
+export async function runPlan(req: PlanRequest, emit?: StepSink, now = new Date()): Promise<PlanResultWithAgent> {
+  const { steps, begin } = stepper(emit);
+  const today = londonToday(now);
+  const unknowns: string[] = [];
+  const sources: Sources = new Map();
+  const reqYou = validLatLng(req.you) ? req.you : undefined;
+
+  // 1. Parse
+  const endParse = begin("parse", "Reading your ask", "rules");
+  const merged = req.previous?.query ? mergeAnswer(req.previous.query, req.previous.answer || req.query, today) : null;
+  const text = merged?.text ?? String(req.query ?? "").slice(0, 500);
+  let ask = merged?.ask ?? parsePlanAsk(text, today);
+  let parseSource = "rules";
+  if (process.env.GEMINI_API_KEY && (!ask.intent || (ask.intent === "meet_halfway" && (!ask.themPlace || !ask.youPlace)) || !ask.category)) {
+    const g = await geminiFill(text, ask, today);
+    if (g.used && g.filled.length) {
+      ask = g.ask;
+      parseSource = "rules + Gemini";
+    }
+  }
+  endParse("done", `${ask.intent ?? "no intent"} · ${ask.signals.join(" · ") || "nothing recognised"} (${parseSource})`);
+
+  const when = planTime(ask, req.when, now, unknowns);
+  const base = emptyResult(text, when, reqYou, steps, unknowns);
+  base.filters = {
+    ...(ask.walkIn ? { walkIn: true } : {}),
+    ...(ask.free ? { free: true } : {}),
+    ...(ask.budgetGBP ? { budgetGBP: ask.budgetGBP } : {}),
+    ...(ask.category ? { category: ask.category } : {}),
+    maxMinutes: ask.maxMinutes ?? 30,
+  };
+
+  const clarify = (c: Clarify, intent = ask.intent ?? "near_me"): PlanResultWithAgent => {
+    const v = begin("verify", "Verifying claims");
+    v("skipped", "Nothing to verify: waiting for your answer");
+    return { ...base, intent, headline: c.question, clarify: c, unknowns: [] };
+  };
+
+  if (!ask.intent) {
+    return clarify({
+      question: "What are you planning: meeting someone halfway, or something to do near you?",
+      missing: "category",
+      suggestions: ["Meet a friend halfway", "What's on near me", "Coffee near me"],
+    });
+  }
+
+  // 2. Resolve places
+  const endResolve = begin("resolve", "Finding the places you named", "TfL StopPoint");
+  const named = [ask.youPlace, ask.intent === "meet_halfway" ? ask.themPlace : null];
+  const [youR, themR] = await Promise.all(named.map((n) => (n ? searchPlace(n) : Promise.resolve(null))));
+  const youPlace: Place | null = youR?.place ?? null;
+  const themPlace: Place | null = themR?.place ?? null;
+  for (const p of [youPlace, themPlace]) if (p) addSource(sources, p.source, p.asOf);
+  const resolvedCount = [youPlace, themPlace].filter(Boolean).length;
+  const namedCount = named.filter(Boolean).length;
+  endResolve(namedCount ? "done" : "skipped", namedCount ? `${resolvedCount} of ${namedCount} place${namedCount > 1 ? "s" : ""} found${youPlace ? ` · you: ${youPlace.name}` : ""}${themPlace ? " · their area rounded to ~500 m" : ""}` : "No places named; using your location");
+
+  const who = ask.themWho;
+  if (ask.intent === "meet_halfway") {
+    if (ask.themPlace && !themPlace)
+      return clarify({ question: `I couldn't find "${ask.themPlace}" on TfL. Which station is ${who === "them" ? "the other person" : who} nearest?`, missing: "them_location", suggestions: THEM_SUGGESTIONS });
+    if (!ask.themPlace) return clarify({ question: `Where's ${who === "them" ? "the other person" : who === "her" ? "she" : who === "him" ? "he" : who} coming from?`, missing: "them_location", suggestions: THEM_SUGGESTIONS });
+    if (ask.youPlace && !youPlace) return clarify({ question: `I couldn't find "${ask.youPlace}" on TfL. Which station are you nearest?`, missing: "my_location", suggestions: ME_SUGGESTIONS });
+    if (!youPlace && !reqYou) return clarify({ question: "Where are you starting from?", missing: "my_location", suggestions: ME_SUGGESTIONS });
+    return meetHalfway({ ask, text, when, base, begin, unknowns, sources, you: youPlace ? { ...youPlace.location, id: youPlace.id ?? undefined } : reqYou!, youName: youPlace?.name ?? "your location", them: themPlace!, themTyped: ask.themPlace! });
+  }
+  if (ask.youPlace && !youPlace && !reqYou) return clarify({ question: `I couldn't find "${ask.youPlace}" on TfL. Where are you?`, missing: "my_location", suggestions: ME_SUGGESTIONS });
+  const origin = youPlace?.location ?? reqYou;
+  if (!origin) return clarify({ question: "Where are you? Share your location or name a station.", missing: "my_location", suggestions: ME_SUGGESTIONS });
+  return nearMe({ ask, text, when, base, begin, unknowns, sources, you: origin, youName: youPlace?.name });
+}
+
+type Ctx = {
+  ask: PlanAsk;
+  text: string;
+  when: Date;
+  base: PlanResultWithAgent;
+  begin: ReturnType<typeof stepper>["begin"];
+  unknowns: string[];
+  sources: Sources;
+};
+
+function finish(ctx: Ctx, r: PlanResultWithAgent): PlanResultWithAgent {
+  // Grounding check: every fact must name a source; drop the rest and say how many.
+  const v = ctx.begin("verify", "Verifying claims");
+  let checked = 0;
+  let dropped = 0;
+  for (const c of r.cards) {
+    const before = c.facts.length;
+    c.facts = c.facts.filter((f) => typeof f.source === "string" && f.source.trim().length > 0 && f.source !== "—");
+    checked += before;
+    dropped += before - c.facts.length;
+  }
+  if (r.them && r.draftMessage.toLowerCase().includes(r.them.area.toLowerCase())) {
+    r.draftMessage = r.draftMessage.split(r.them.area).join("[their area]");
+    dropped++;
+  }
+  r.cards = r.cards.slice(0, MAX_CARDS);
+  r.sources = [...ctx.sources.entries()].map(([name, asOf]) => ({ name, asOf })).sort((a, b) => a.name.localeCompare(b.name));
+  r.unknowns = [...new Set(ctx.unknowns)];
+  v("done", `${checked} facts checked · ${dropped} dropped without a source · ${r.sources.length} sources with as-of times`);
+  return r;
+}
+
+async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: string; them: Place; themTyped: string }): Promise<PlanResultWithAgent> {
+  const { ask, when, begin, unknowns, sources } = ctx;
+  const area = roundToArea(ctx.them.location);
+  const themArea = { area: ctx.themTyped.replace(/\b\w/g, (c) => c.toUpperCase()), center: area.center, radiusM: area.radiusM };
+  const who = ask.themWho;
+
+  const endCompare = begin("compare", "Comparing central hubs by TfL journey time", "TfL Journey Planner");
+  const fp = await fairPoint(ctx.you, { ...ctx.them.location, id: ctx.them.id ?? undefined }, when);
+  const best = fp.ranked[0];
+  if (best) addSource(sources, "TfL Journey Planner", best.a.fetchedAt);
+  endCompare(best ? "done" : "failed", best
+    ? `${fp.compared} hubs compared (${fp.calls} journeys${fp.failed ? `; no TfL time for ${fp.failedHubs.join(", ")}` : ""}) · ${best.hub.name} fairest: you ${best.a.minutes} min, ${who} ${best.b.minutes} min${fp.ranked[1] ? ` · next ${fp.ranked[1].hub.name} (${fp.ranked[1].a.minutes}/${fp.ranked[1].b.minutes})` : ""}`
+    : `${fp.compared} hubs tried, no TfL journey times came back`);
+  const result: PlanResultWithAgent = { ...ctx.base, intent: "meet_halfway", you: { lat: ctx.you.lat, lng: ctx.you.lng }, them: themArea };
+  if (best && fp.failed) unknowns.push(`TfL didn't return times for ${fp.failedHubs.join(", ")}, so ${fp.failed > 1 ? "those hubs weren't" : "that hub wasn't"} compared.`);
+  if (!best) {
+    unknowns.push("TfL journey times didn't come back, so I couldn't pick a fair middle. Try again in a minute.");
+    for (const [id, label] of [["venues", "Finding places near the middle"], ["lines", "Checking line status"], ["weather", "Checking the forecast"]]) begin(id, label)("skipped", "Needs a middle point first");
+    result.headline = "Couldn't get TfL journey times right now.";
+    return finish(ctx, result);
+  }
+  result.middle = { name: best.hub.name, location: { lat: best.hub.lat, lng: best.hub.lng } };
+  const kind: OsmKind = ask.category === "cafe" ? "cafe" : ask.category === "restaurant" ? "restaurant" : "pub";
+  if (!ask.category) unknowns.push(`You didn't say what kind of place, so these are ${kind === "pub" ? "pubs and bars" : kind}s.`);
+  const lineIds = [...new Set([...best.a.lines, ...best.b.lines].map((l) => l.id))];
+
+  const endVenues = begin("venues", `Finding ${kind === "pub" ? "pubs and bars" : kind + "s"} near ${best.hub.name}`, "OSM Overpass");
+  const endLines = begin("lines", "Checking line status", "TfL");
+  const endWeather = begin("weather", "Checking the forecast", "Open-Meteo");
+  const [osm, ls, wx] = await Promise.all([
+    findPlaces(kind, result.middle.location, 500).then((r) => {
+      const pk = venuePick(r, when);
+      endVenues(pk.picks.length ? "done" : "failed", `${r.places.length} found within 500 m (${r.source}${r.live ? "" : ", live call " + (r.note?.match(/Overpass (\w+)/)?.[1] ?? "failed")}) · ${pk.closed} closed at ${londonClock(when.toISOString())} · ${pk.picks.length} kept`);
+      return { r, pk };
+    }),
+    lineStatus(lineIds).then((r) => {
+      endLines("error" in r ? "failed" : "done", "error" in r ? `TfL line status ${r.error}` : `${r.lines.length} line${r.lines.length === 1 ? "" : "s"}: ${r.lines.map((l) => `${l.name} ${l.status}`).join(", ") || "none used"}`);
+      return r;
+    }),
+    forecastAt(result.middle.location, when).then((r) => {
+      endWeather("error" in r ? "failed" : "done", "error" in r ? r.error : `${londonLabel(when)}: ${r.value}`);
+      return r;
+    }),
+  ]);
+  addSource(sources, osm.r.source, osm.r.asOf);
+  if (!osm.r.live && osm.r.note) unknowns.push(osm.r.note + ".");
+  if (!("error" in ls)) addSource(sources, "TfL Line Status", ls.fetchedAt);
+  else unknowns.push("Live line status didn't load.");
+  if (!("error" in wx)) addSource(sources, "Open-Meteo", wx.fetchedAt);
+  else unknowns.push(`Weather: ${wx.error}.`);
+  unknowns.push("Line status is as of now, not for the time of the plan.");
+  unknowns.push("Prices: none of our sources lists them" + (ask.budgetGBP ? `, so I can't check £${ask.budgetGBP}.` : "."));
+  unknowns.push("How busy or noisy it'll be: no source has this.");
+
+  const day = londonDayShort(when);
+  const tflFact = fact("Travel", `TfL planner: you ${best.a.minutes} min, ${who} ${best.b.minutes} min to ${best.hub.name}, arriving by ${londonClock(when.toISOString())}`, "confirmed", "TfL", best.a.fetchedAt);
+  const lf = lineFacts(lineIds, ls);
+  const wf = weatherFact(wx, when);
+  const themPath = trimPathStart(best.b.path, 500, metresBetween);
+  result.cards = osm.pk.picks.map(({ p, h }): PlanCard => {
+    const walk = walkMinutes(metresBetween(result.middle!.location, p.location));
+    const addr = addressOf(p.tags);
+    const legs: Leg[] = [
+      { who: "you", minutes: best.a.minutes, summary: `${best.a.summary} · then ~${walk} min walk (estimate)`, path: best.a.path },
+      { who: "them", minutes: best.b.minutes, summary: `${best.b.summary} · then ~${walk} min walk (estimate)`, path: themPath },
+    ];
+    if (h.state === "unknown") unknowns.push(`${p.tags.name}: opening hours not in OSM.`);
+    return {
+      id: `osm-${p.type}-${p.id}`,
+      kind: "venue",
+      name: p.tags.name,
+      subtitle: [kindLabel(p.tags), addr].filter(Boolean).join(" · "),
+      location: p.location,
+      legs,
+      facts: [
+        fact(`Open ${day}`, h.value, h.verdict, osm.r.source, osm.r.asOf),
+        tflFact,
+        ...lf,
+        wf,
+        fact("Price", ask.budgetGBP ? `Not listed, can't check £${ask.budgetGBP}` : "Not listed", "unknown", "OSM (no price tag)"),
+        stepFree(p.tags, osm.r.asOf, osm.r.source),
+      ],
+      why: `${Math.round(p.distanceM)} m from ${best.hub.name}, the fairest hub (${best.a.minutes} vs ${best.b.minutes} min)${h.verdict === "confirmed" ? "; hours recently checked in OSM" : ""}.`,
+      url: p.tags.website ?? p.tags["contact:website"] ?? osmUrl(p),
+    };
+  });
+  if (!result.cards.length) unknowns.push(`No open ${kind}s found within 500 m of ${best.hub.name} in OSM.`);
+  result.headline = `${best.hub.name} is the fair middle: you ${best.a.minutes} min, ${who} ${best.b.minutes}.`;
+  const top = result.cards[0];
+  const lineText = lf[0]?.value.replace(/ · now, as of .*/, "");
+  result.draftMessage = top
+    ? [
+        `${londonLabel(when)} at ${top.name}${addressOf(osm.pk.picks[0].p.tags) ? `, ${addressOf(osm.pk.picks[0].p.tags)}` : ""} (near ${best.hub.name} station)?`,
+        `TfL says about ${best.b.minutes} min for you and ${best.a.minutes} for me.`,
+        lineText ? `${lineText} right now.` : "",
+        !("error" in wx) ? `Forecast: ${wx.value}.` : "",
+        osmUrl(osm.pk.picks[0].p),
+      ].filter(Boolean).join(" ")
+    : `Shall we meet near ${best.hub.name} station, ${londonLabel(when)}? TfL says about ${best.b.minutes} min for you and ${best.a.minutes} for me.`;
+  return finish(ctx, result);
+}
+
+async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<PlanResultWithAgent> {
+  const { ask, when, begin, unknowns, sources } = ctx;
+  const maxMin = ask.maxMinutes ?? 30;
+  const result: PlanResultWithAgent = { ...ctx.base, intent: "near_me", you: ctx.you };
+  const lp = londonParts(when);
+  const venueKind: OsmKind | null = ask.category === "pub" || ask.category === "cafe" || ask.category === "restaurant" ? ask.category : null;
+  const t = londonClock(when.toISOString());
+  const endWeather = begin("weather", "Checking the forecast", "Open-Meteo");
+  const wxP = forecastAt(ctx.you, when).then((r) => {
+    endWeather("error" in r ? "failed" : "done", "error" in r ? r.error : `${londonLabel(when)}: ${r.value}`);
+    return r;
+  });
+
+  type Cand = { kind: "event"; e: SeedEvent } | { kind: "place"; p: OsmPlace; h: ReturnType<typeof hoursAt>; osm: OsmResult };
+  const cands: Cand[] = [];
+  let osm: OsmResult | null = null;
+  const endFind = begin("venues", venueKind ? `Finding ${venueKind}s near you` : "Finding events and free-entry places near you", venueKind ? "OSM Overpass" : "Luma seed + OSM Overpass");
+  if (venueKind) {
+    osm = await findPlaces(venueKind, ctx.you, 1200);
+    const pk = venuePick(osm, when);
+    for (const x of pk.picks.concat()) cands.push({ kind: "place", p: x.p, h: x.h, osm });
+    endFind(cands.length ? "done" : "failed", `${osm.places.length} ${venueKind}s within 1.2 km (${osm.source}) · ${pk.closed} closed at ${t}`);
+  } else {
+    const all = seedEventsOn(lp.date, when, (d) => londonParts(d).date);
+    const near = all.filter((e) => metresBetween(ctx.you, e) < 8000);
+    const blocked = ask.walkIn ? near.filter((e) => e.walkIn.rsvpRequired) : [];
+    const evs = near.filter((e) => !blocked.includes(e)).sort((a, b) => metresBetween(ctx.you, a) - metresBetween(ctx.you, b)).slice(0, 6);
+    for (const e of all) addSource(sources, e.source, e.asOf);
+    for (const e of evs) cands.push({ kind: "event", e });
+    osm = await findPlaces("free", ctx.you, 2500);
+    const open = osm.places.map((p) => ({ p, h: hoursAt(p.tags, when, p.location) })).filter((x) => x.h.state !== "closed");
+    const closed = osm.places.length - open.length;
+    for (const x of open.slice(0, 6)) cands.push({ kind: "place", p: x.p, h: x.h, osm });
+    endFind("done", `${all.length} seed events that day · ${near.length} within 8 km${ask.walkIn ? ` · ${blocked.length} dropped as RSVP-only` : ""} · ${osm.places.length} free-entry places within 2.5 km (${osm.source}), ${closed} closed at ${t}`);
+  }
+  if (osm) {
+    addSource(sources, osm.source, osm.asOf);
+    if (!osm.live && osm.note) unknowns.push(osm.note + ".");
+  }
+
+  const endTravel = begin("travel", `Checking TfL times to ${cands.length} options`, "TfL Journey Planner");
+  const trips = await Promise.all(cands.map((c) => journey(ctx.you, c.kind === "event" ? { lat: c.e.lat, lng: c.e.lng } : c.p.location, when)));
+  const scored = cands
+    .map((c, i) => ({ c, j: trips[i] }))
+    .filter((x): x is { c: Cand; j: Journey } => !("error" in x.j));
+  const failedTrips = cands.length - scored.length;
+  const within = scored.filter((x) => x.j.minutes <= maxMin);
+  endTravel(cands.length ? "done" : "skipped", `${scored.length} journeys back${failedTrips ? ` (${failedTrips} failed)` : ""} · ${within.length} within ${maxMin} min`);
+  if (scored[0]) addSource(sources, "TfL Journey Planner", scored[0].j.fetchedAt);
+  if (failedTrips) unknowns.push(`${failedTrips} option${failedTrips > 1 ? "s" : ""} skipped: TfL journey time didn't come back.`);
+
+  const walkScore = (c: Cand) => (c.kind === "place" ? (c.osm && c.p.tags.fee === "no" ? 0 : 1) : c.e.walkIn.verdict === "unknown" ? 1 : 2);
+  within.sort((a, b) =>
+    ask.walkIn || ask.free ? walkScore(a.c) - walkScore(b.c) || a.j.minutes - b.j.minutes : (a.c.kind === "event" ? 0 : 1) - (b.c.kind === "event" ? 0 : 1) || a.j.minutes - b.j.minutes,
+  );
+  const chosen = within.slice(0, MAX_CARDS);
+  const lineIds = [...new Set(chosen.flatMap((x) => x.j.lines.map((l) => l.id)))];
+  const endLines = begin("lines", "Checking line status", "TfL");
+  const ls = lineIds.length ? await lineStatus(lineIds) : null;
+  endLines(!lineIds.length ? "skipped" : ls && !("error" in ls) ? "done" : "failed", !lineIds.length ? "No TfL lines on these routes (walking or bus only)" : ls && !("error" in ls) ? ls.lines.map((l) => `${l.name} ${l.status}`).join(", ") : "Line status didn't load");
+  if (ls && !("error" in ls)) addSource(sources, "TfL Line Status", ls.fetchedAt);
+  const wx = await wxP;
+  if (!("error" in wx)) addSource(sources, "Open-Meteo", wx.fetchedAt);
+  const wf = weatherFact(wx, when);
+  const day = londonDayShort(when);
+
+  result.cards = chosen.map(({ c, j }): PlanCard => {
+    const leg: Leg = { who: "you", minutes: j.minutes, summary: j.summary, path: j.path };
+    const travel = fact("Travel", `TfL planner: ${j.minutes} min (${j.summary})`, "confirmed", "TfL", j.fetchedAt);
+    const lf = lineFacts(j.lines.map((l) => l.id), ls);
+    if (c.kind === "event") {
+      const e = c.e;
+      const s = londonClock(e.start);
+      const en = e.end ? londonClock(e.end) : null;
+      return {
+        id: `evt-${e.id}`,
+        kind: "event",
+        name: e.title,
+        subtitle: [`Event · ${s}${en ? `–${en}` : ""}`, e.place, e.organiser].filter(Boolean).join(" · "),
+        location: { lat: e.lat, lng: e.lng },
+        legs: [leg],
+        facts: [
+          fact("When", `${londonLabel(new Date(e.start))}${en ? `–${en}` : ""}`, "confirmed", e.source, e.asOf),
+          fact("Sign-up", e.walkIn.value, e.walkIn.verdict, e.source, e.asOf),
+          fact("Price", "Not in the listing", "unknown", e.source),
+          travel,
+          ...lf,
+          wf,
+        ],
+        why: `${j.minutes} min away by TfL; on ${day} in the ${e.source}${e.walkIn.verdict === "unknown" ? ", sign-up not stated" : ""}.`,
+        url: e.url,
+      };
+    }
+    const p = c.p;
+    const free = p.tags.fee === "no";
+    const addr = addressOf(p.tags);
+    return {
+      id: `osm-${p.type}-${p.id}`,
+      kind: "venue",
+      name: p.tags.name ?? kindLabel(p.tags),
+      subtitle: [kindLabel(p.tags), addr].filter(Boolean).join(" · "),
+      location: p.location,
+      legs: [leg],
+      facts: [
+        fact(`Open ${day}`, c.h.value, c.h.verdict, c.osm.source, c.osm.asOf),
+        ...(free
+          ? [fact("Entry", "Free (OSM fee=no)", "confirmed", c.osm.source, c.osm.asOf), fact("Sign-up", "Likely none: free entry, no ticket tag in OSM", "likely", c.osm.source, c.osm.asOf)]
+          : [fact("Price", "Not listed", "unknown", "OSM (no price tag)")]),
+        travel,
+        ...lf,
+        wf,
+        stepFree(p.tags, c.osm.asOf, c.osm.source),
+      ],
+      why: `${j.minutes} min away by TfL${free ? ", free entry" : ""}${c.h.state === "open" ? `, open at ${t}` : ", hours not listed"}.`,
+      url: p.tags.website ?? p.tags["contact:website"] ?? osmUrl(p),
+    };
+  });
+  for (const x of chosen) if (x.c.kind === "place" && x.c.h.state === "unknown") unknowns.push(`${x.c.p.tags.name ?? "A place"}: opening hours not in OSM.`);
+  if (chosen.some((x) => x.c.kind === "event")) unknowns.push("Event prices and whether you can walk in: the seed listings don't say.");
+  if (lineIds.length) unknowns.push("Line status is as of now, not for the time of the plan.");
+  unknowns.push("How busy it'll be: no source has this.");
+  const n = result.cards.length;
+  const what = ask.walkIn ? "walk-in option" : venueKind ? venueKind === "pub" ? "pub" : venueKind : "option";
+  result.headline = n
+    ? `${n} ${what}${n > 1 ? "s" : ""} within ${maxMin} min of ${ctx.youName ?? "you"}, ${londonLabel(when)}.`
+    : `Nothing open in our data within ${maxMin} min of ${ctx.youName ?? "you"} at ${londonLabel(when)}.`;
+  result.draftMessage = n
+    ? `${londonLabel(when)}: ` + result.cards.map((c) => `${c.name} (${c.legs[0].minutes} min by TfL)${c.url ? ` ${c.url}` : ""}`).join("; ")
+    : "";
+  return finish(ctx, result);
+}

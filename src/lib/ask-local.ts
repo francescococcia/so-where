@@ -238,3 +238,157 @@ export function sessionTitlesAt(row: Pick<VenueRow, "name">): string[] {
     .filter((s) => s.venue_name && mentionedIn(s.venue_name, [row]).length)
     .map((s) => s.title);
 }
+
+// ---------------------------------------------------------------------------------------------
+// "So where?" plan intent: rules first (no network). Gemini, when configured, only fills gaps.
+// ---------------------------------------------------------------------------------------------
+
+export type PlanCategory = "pub" | "cafe" | "restaurant" | "event";
+export type PlanAsk = {
+  intent: "meet_halfway" | "near_me" | null;
+  youPlace: string | null;
+  themPlace: string | null;
+  themWho: string; // "her" | "him" | "them" | a first name
+  date: string | null; // YYYY-MM-DD (London), null when the ask names no day
+  time: string | null; // HH:MM (London), null when the ask names no time
+  dayPhrase: string | null;
+  category: PlanCategory | null;
+  budgetGBP: number | null;
+  walkIn: boolean;
+  free: boolean;
+  maxMinutes: number | null;
+  signals: string[]; // which rules fired, shown in the "parse" step
+};
+
+const PLACE_STOP =
+  /\s+(?:and|but|so|then|who|which|for|with|tomorrow|tonight|today|this|next|later|after|before|in the|morning|afternoon|evening|on\s+(?:mon|tue|wed|thu|fri|sat|sun)\w*|(?:at|around|about|by|from)\s+\d)\b.*$/i;
+const ELEPHANT = /elephant\s+(?:and|&)\s+castle/gi;
+
+function cleanPlace(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  let s = raw.replace(ELEPHANT, "Elephant & Castle").replace(PLACE_STOP, "");
+  s = s.replace(/^(?:the\s+)?(?:area\s+(?:of|around)\s+)/i, "").replace(/\s+(?:station|area|way|ish)$/i, "").trim();
+  s = s.replace(/^(?:around|near|in|at)\s+/i, "").trim();
+  if (!s || s.length < 3 || /^(me|here|home|work|the office|you|him|her|them)$/i.test(s)) return null;
+  return s.length > 40 ? null : s;
+}
+
+const YOU_RE = /\b(?:i'?m|i am|im)\s+(?:currently\s+|now\s+|based\s+|staying\s+)?(?:at|in|near|around|by|over in|coming from|leaving from|starting from|starting at|working at|working in)\s+([^,.;!?]+)/i;
+const THEM_PRONOUN_RE = /\b(she|he|they)(?:'s|'re| is| are| lives| works| will be| 'll be|'ll be)\s+(?:currently\s+|now\s+|based\s+|staying\s+)?(?:at|in|near|around|by|over in|based in|coming from|from|out in)\s+([^,.;!?]+)/i;
+const THEM_NAME_RE = /\b([A-Z][a-z]{1,15})(?:'s| is| lives| works| will be)\s+(?:currently\s+|now\s+|based\s+)?(?:at|in|near|around|by|over in|coming from|from)\s+([^,.;!?]+)/;
+const WITH_FROM_RE = /\bwith\s+(?:my\s+\w+\s+|([A-Z][a-z]{1,15})\s+)?(?:who'?s\s+|who is\s+)?(?:in|from|at|near|around)\s+([A-Z][^,.;!?]+)/;
+const BETWEEN_RE = /\bbetween\s+([A-Z][^,.;!?]+?)\s+and\s+([A-Z][^,.;!?]+)/;
+const NEAR_PLACE_RE = /\b(?:near|around|in|by)\s+((?:[A-Z][\w'&.-]*)(?:\s+(?:[A-Z&][\w'&.-]*|and\s+Castle))*)/;
+
+const NEAR_ME_RE = /\bnear (?:me|here|us)\b|\bnearby\b|\baround (?:me|here)\b|\bclose (?:to|by) (?:me|here)\b|what'?s on|\bwhats on\b|things to do|anything (?:on|happening)|\bwalk[- ]?in\b|\bwalk into\b|\bdrop[- ]in\b|\bjust (?:turn|show) up\b/i;
+const HALFWAY_RE = /half[- ]?way|in the middle|middle ground|meet(?:ing)? (?:in )?between|\bbetween\b|fair(?:est)? (?:spot|place|middle)|\bmeet (?:up )?(?:with )?\w+|\bmeet\b/i;
+const SOCIAL_RE = /\b(?:date|friend|mate|colleague|partner|girlfriend|boyfriend|she|he|they|her|him)\b|\bwith (?:my )?[A-Z]?[a-z]+\b/;
+const WALKIN_RE = /walk[- ]?in|walk into|drop[- ]in|just (?:turn|show) up|no (?:registration|sign[- ]?ups?|tickets?|rsvp|booking)|without (?:registering|registration|booking|a ticket|signing up)|don'?t (?:need|have) to (?:register|book|sign up)/i;
+
+function categoryOf(q: string): PlanCategory | null {
+  if (/\bpubs?\b|\bdrinks?\b|\bpints?\b|\bbeers?\b|\bbar\b|\bwine\b/i.test(q)) return "pub";
+  if (/\bcoffee\b|\bcaf[eé]s?\b|\bbrunch\b|\bbreakfast\b|\btea\b/i.test(q)) return "cafe";
+  if (/\bdinner\b|\blunch\b|\brestaurants?\b|\bsomewhere to eat\b|\bfood\b|\bbite\b/i.test(q)) return "restaurant";
+  if (/\bevents?\b|what'?s on|whats on|things to do|\bgigs?\b|exhibitions?|museums?|galler(?:y|ies)|walk[- ]?in|walk into|happening/i.test(q)) return "event";
+  return null;
+}
+
+function whoOf(q: string): string {
+  const pron = /\b(she|he|they)(?:'s|'re| is| are| lives| works)\b/i.exec(q)?.[1]?.toLowerCase();
+  if (pron) return pron === "she" ? "her" : pron === "he" ? "him" : "them";
+  const name = /\bwith ([A-Z][a-z]{1,15})\b/.exec(q)?.[1] ?? THEM_NAME_RE.exec(q)?.[1];
+  if (name && !/^(The|My|Me|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|London)$/.test(name)) return name;
+  if (/\b(she|her|girlfriend|wife)\b/i.test(q)) return "her";
+  if (/\b(he|him|boyfriend|husband)\b/i.test(q)) return "him";
+  return "them";
+}
+
+function timeOf(q: string, category: PlanCategory | null): string | null {
+  const morningish = /\bmorning\b|\bbreakfast\b|\bbrunch\b|\bam\b/i.test(q) || category === "cafe";
+  const toHH = (h: number, mer?: string) => {
+    if (mer) return mer.toLowerCase() === "pm" ? (h % 12) + 12 : h % 12;
+    if (h >= 13) return h;
+    if (h === 12) return 12;
+    if (h <= 6) return h + 12;
+    return morningish ? h : h + 12;
+  };
+  let m = /\b(\d{1,2})[:.](\d{2})\s*(am|pm)?\b/i.exec(q);
+  if (m && Number(m[1]) <= 23) return `${String(toHH(Number(m[1]), m[3])).padStart(2, "0")}:${m[2]}`;
+  m = /\b(\d{1,2})\s*(am|pm)\b/i.exec(q);
+  if (m && Number(m[1]) <= 12) return `${String(toHH(Number(m[1]), m[2])).padStart(2, "0")}:00`;
+  m = /\b(?:at|around|about|by|from|for)\s+(?:half (?:past )?)?(\d{1,2})(?!\s*(?:min|mins|minutes|people|of us|quid|pounds|£|%|\/|th|st|nd|rd))\b/i.exec(q);
+  if (m && Number(m[1]) >= 1 && Number(m[1]) <= 23) return `${String(toHH(Number(m[1]))).padStart(2, "0")}:${/half/i.test(m[0]) ? "30" : "00"}`;
+  if (/\bnoon\b|\bmidday\b/i.test(q)) return "12:00";
+  if (/\bbreakfast\b/i.test(q)) return "09:00";
+  if (/\bmorning\b/i.test(q)) return "10:00";
+  if (/\blunch(?:time)?\b/i.test(q)) return "12:30";
+  if (/\bafternoon\b/i.test(q)) return "15:00";
+  if (/\bafter work\b/i.test(q)) return "18:00";
+  if (/\bevening\b|\btonight\b|\bdinner\b/i.test(q)) return "19:00";
+  return null;
+}
+
+/** Rules-only parse of a "where shall we meet / what's on" ask. `today` is a London YYYY-MM-DD. */
+export function parsePlanAsk(raw: string, today = londonToday()): PlanAsk {
+  const q = raw.replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim();
+  const signals: string[] = [];
+  let youPlace: string | null = null;
+  let themPlace: string | null = null;
+  const between = BETWEEN_RE.exec(q);
+  if (between) {
+    youPlace = cleanPlace(between[1]);
+    themPlace = cleanPlace(between[2]);
+    signals.push("between A and B");
+  }
+  if (!youPlace) {
+    const m = YOU_RE.exec(q);
+    youPlace = cleanPlace(m?.[1]);
+    if (youPlace) signals.push(`you: "${youPlace}"`);
+  }
+  if (!themPlace) {
+    const m = THEM_PRONOUN_RE.exec(q) ?? THEM_NAME_RE.exec(q);
+    const n = m ? null : WITH_FROM_RE.exec(q);
+    themPlace = cleanPlace(m?.[2] ?? n?.[2]);
+    if (themPlace) signals.push("other person's place found");
+  }
+  const category = categoryOf(q);
+  const walkIn = WALKIN_RE.test(q);
+  const free = /\bfree\b/i.test(q);
+  const near = NEAR_ME_RE.test(q);
+  let intent: PlanAsk["intent"] = null;
+  if (themPlace || between) intent = "meet_halfway";
+  else if (near) intent = "near_me";
+  else if (HALFWAY_RE.test(q) || SOCIAL_RE.test(q)) intent = "meet_halfway";
+  else if (category || youPlace) intent = "near_me";
+  if (intent === "near_me" && !youPlace) {
+    const m = NEAR_PLACE_RE.exec(q);
+    const p = cleanPlace(m?.[1]);
+    if (p && !/^(Saturday|Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|London)$/i.test(p)) youPlace = p;
+  }
+  if (intent) signals.unshift(`intent ${intent}`);
+  const when = resolveWhen(q, today);
+  const time = timeOf(q, category);
+  const budget = /£\s?(\d{1,4}(?:\.\d{1,2})?)/.exec(q) ?? /\b(\d{1,4})\s?(?:quid|pounds|gbp)\b/i.exec(q);
+  const maxM = /\bwithin\s+(\d{1,3})\s*(?:min|mins|minutes)\b/i.exec(q) ?? /\b(\d{1,3})\s*(?:min|mins|minutes)\s+(?:away|from me|walk)\b/i.exec(q);
+  if (when) signals.push(`day ${when.from}`);
+  if (time) signals.push(`time ${time}`);
+  if (category) signals.push(`category ${category}`);
+  if (budget) signals.push(`budget £${budget[1]}`);
+  if (walkIn) signals.push("walk-in");
+  if (free) signals.push("free");
+  return {
+    intent,
+    youPlace,
+    themPlace,
+    themWho: whoOf(q),
+    date: when ? when.from : null,
+    time,
+    dayPhrase: when?.phrase ?? null,
+    category,
+    budgetGBP: budget ? Number(budget[1]) : null,
+    walkIn,
+    free,
+    maxMinutes: maxM ? Number(maxM[1]) : null,
+    signals,
+  };
+}

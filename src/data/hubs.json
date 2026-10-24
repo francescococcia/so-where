@@ -1,0 +1,90 @@
+{
+  "source": "TfL StopPoint Search API",
+  "fetched_at": "2026-10-24T18:31:54.672Z",
+  "hubs": [
+    {
+      "name": "Borough",
+      "id": "940GZZLUBOR",
+      "tflName": "Borough Underground Station",
+      "lat": 51.501199,
+      "lng": -0.09337
+    },
+    {
+      "name": "London Bridge",
+      "id": "HUBLBG",
+      "tflName": "London Bridge",
+      "lat": 51.505881,
+      "lng": -0.086807
+    },
+    {
+      "name": "Bank",
+      "id": "HUBBAN",
+      "tflName": "Bank",
+      "lat": 51.513395,
+      "lng": -0.089095
+    },
+    {
+      "name": "Liverpool Street",
+      "id": "HUBLST",
+      "tflName": "Liverpool Street",
+      "lat": 51.51794,
+      "lng": -0.083162
+    },
+    {
+      "name": "Farringdon",
+      "id": "HUBZFD",
+      "tflName": "Farringdon",
+      "lat": 51.520214,
+      "lng": -0.105054
+    },
+    {
+      "name": "King's Cross St. Pancras",
+      "id": "HUBKGX",
+      "tflName": "King's Cross & St Pancras International",
+      "lat": 51.531683,
+      "lng": -0.123538
+    },
+    {
+      "name": "Tottenham Court Road",
+      "id": "HUBTCR",
+      "tflName": "Tottenham Court Road",
+      "lat": 51.516018,
+      "lng": -0.130888
+    },
+    {
+      "name": "Oxford Circus",
+      "id": "940GZZLUOXC",
+      "tflName": "Oxford Circus Underground Station",
+      "lat": 51.515224,
+      "lng": -0.141903
+    },
+    {
+      "name": "Leicester Square",
+      "id": "940GZZLULSQ",
+      "tflName": "Leicester Square Underground Station",
+      "lat": 51.511386,
+      "lng": -0.128426
+    },
+    {
+      "name": "Waterloo",
+      "id": "HUBWAT",
+      "tflName": "Waterloo",
+      "lat": 51.504269,
+      "lng": -0.113356
+    },
+    {
+      "name": "Victoria",
+      "id": "HUBVIC",
+      "tflName": "Victoria",
+      "lat": 51.495812,
+      "lng": -0.143826
+    },
+    {
+      "name": "Elephant & Castle",
+      "id": "HUBEPH",
+      "tflName": "Elephant & Castle",
+      "lat": 51.494505,
+      "lng": -0.099185
+    }
+  ]
+}
