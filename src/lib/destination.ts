@@ -20,7 +20,47 @@ export type Destination = {
   free: boolean;
   signUp: boolean | null; // "sign-up needed" → true, "no sign-up" → false
   priceText: string | null;
+  /** Set by the planner (eventDates): the event's day(s) and whether it's still to come, on now, or over. */
+  dates?: EventDates;
 };
+
+export type EventDates = { start: string; end: string | null; status: "upcoming" | "ongoing" | "past" };
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const DAY_MONTH_RE = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+(20\d{2}))?\b/gi;
+const iso = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+const dayBefore = (a: string, days: number) => new Date(Date.parse(`${a}T12:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+
+/** "on Fri 23 Oct until Sun 25 Oct at 12:00–16:30" → {start, end, status} against today (London).
+ *  A day+month without a year is this year unless that's over two months ago (then next year), so a
+ *  poster for something that just happened reads as past, not as next year. Weekday words are ignored. */
+export function eventDates(text: string, today: string, nowClock?: string, endTime?: string | null): EventDates | null {
+  const ty = Number(today.slice(0, 4));
+  const found: string[] = [];
+  for (const m of text.matchAll(DAY_MONTH_RE)) {
+    const d = Number(m[1]);
+    const mo = MONTHS.indexOf(m[2].toLowerCase());
+    if (d < 1 || d > 31 || mo < 0) continue;
+    let y = m[3] ? Number(m[3]) : ty;
+    if (!m[3] && iso(y, mo, d) < dayBefore(today, 60)) y += 1;
+    let v = iso(y, mo, d);
+    if (found[0] && v < found[0] && !m[3]) v = iso(y + 1, mo, d); // 30 Dec – 2 Jan
+    found.push(v);
+    if (found.length === 2) break;
+  }
+  if (!found.length) return null;
+  const start = found[0];
+  const end = found[1] && found[1] > start ? found[1] : null;
+  const last = end ?? start;
+  const over = last < today || (last === today && !!endTime && !!nowClock && nowClock >= endTime);
+  // Multi-day and already started → on now (plan for today); single-day today → still to come.
+  return { start, end, status: over ? "past" : end && start <= today ? "ongoing" : "upcoming" };
+}
+
+/** "2026-10-23" → "Fri 23 Oct". */
+export function shortDay(isoDay: string): string {
+  const d = new Date(`${isoDay}T12:00:00Z`);
+  return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getUTCDay()]} ${d.getUTCDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()]}`;
+}
 
 const GO_TO_RE = /^\s*(?:please\s+|can you\s+|could you\s+)*(?:(?:get|take|bring|route|send|direct)\s+(me|us|me and \w+|\w+ and me)\s+to|how (?:do|can|would) (i|we) get to|directions to|meet halfway for|meet (?:up )?halfway (?:at|for)|both get to)\s+/i;
 // The destination clause ends at the day / time / origin / sentence end.
@@ -68,7 +108,7 @@ export function parseDestination(raw: string): Destination | null {
   };
 }
 
-export type FoundPlace = { name: string; location: LatLng; address: string | null; tags: Record<string, string>; id: string | null; source: string; asOf: string; how: string; verdict: "confirmed" | "likely" };
+export type FoundPlace = { name: string; location: LatLng; address: string | null; tags: Record<string, string>; id: string | null; source: string; asOf: string; how: string; verdict: "confirmed" | "likely"; /** false: the venue itself wasn't found, only its street / area. */ pinned?: boolean };
 
 const UA = "SoWhere/0.1 (London meet-up planner; place lookup)";
 const nameScore = (a: string, b: string) => {
@@ -164,6 +204,19 @@ export async function resolveDestination(d: Pick<Destination, "venue" | "address
   if (g.confidence === "high" && g.best) {
     const e = g.best.entry;
     return { name: e.name, location: e.location, address: d.address, tags: { name: e.name }, id: e.id ? `tfl-${e.id}` : null, source: GAZETTEER_SOURCE, asOf: GAZETTEER_AS_OF, how: "station / area name", verdict: "likely" };
+  }
+  // The venue itself isn't on the map: fall back to its street or area ("Encode Hub, Shoreditch"), flagged unpinned.
+  const parts = (d.address ?? "").split(",").map((x) => x.trim()).filter((x) => x && !POSTCODE_RE.test(x) && !/^(?:greater\s+)?london$|^(?:uk|united kingdom|england|gb)$/i.test(x));
+  for (const part of parts) {
+    const gm = matchPlace(part);
+    if (gm.confidence === "high" && gm.best && IN_LONDON(gm.best.entry.location)) {
+      const e = gm.best.entry;
+      return { name: d.venue, location: e.location, address: d.address, tags: { name: d.venue }, id: null, source: GAZETTEER_SOURCE, asOf: GAZETTEER_AS_OF, how: `the ${e.name} area`, verdict: "likely", pinned: false };
+    }
+  }
+  if (parts.length) {
+    const st = await nominatim(parts[0], parts.slice(1).join(", ") || "London", near);
+    if (st && IN_LONDON(st.location)) return { ...st, name: d.venue, tags: { name: d.venue }, id: null, address: st.address ?? d.address, how: `the street address (${parts[0]})`, verdict: "likely", pinned: false };
   }
   return null;
 }

@@ -29,11 +29,11 @@ function activity(category: string | null | undefined, when: Date): string {
 
 const strip = (s: string) => s.replace(/\s+/g, " ").trim();
 
-export function meetDraft(o: { venue?: string; address?: string; hub: string; when: Date; category?: string | null; themMinutes: number; url?: string; now?: Date }): string {
+export function meetDraft(o: { venue?: string; address?: string; hub?: string; when: Date; category?: string | null; themMinutes: number; url?: string; now?: Date }): string {
   const when = friendlyWhen(o.when, o.now);
   const what = activity(o.category, o.when);
-  if (!o.venue) return strip(`Hey! Fancy ${what} ${when}? Somewhere near ${o.hub} station works out fair for both of us, about ${o.themMinutes} min for you 🙂`);
-  const place = `${o.venue}${o.address ? `, ${o.address}` : ""} (near ${o.hub} station)`;
+  if (!o.venue) return strip(`Hey! Fancy ${what} ${when}? ${o.hub ? `Somewhere near ${o.hub} station` : "Somewhere in the middle"} works out fair for both of us, about ${o.themMinutes} min for you 🙂`);
+  const place = `${o.venue}${o.address ? `, ${o.address}` : ""} ${o.hub ? ` (near ${o.hub} station)` : ""}`;
   return strip(`Hey! Fancy ${what} ${when}? How about ${place}? It's about ${o.themMinutes} min for you 🙂${o.url ? ` ${o.url}` : ""}`);
 }
 

@@ -12,6 +12,8 @@ export type PosterExtract = {
   area: string | null;
   /** YYYY-MM-DD (London), resolved against today when the poster says "Sat" / "this Friday". */
   date: string | null;
+  /** Last day (YYYY-MM-DD) of a multi-day event ("Fri 23 – Sun 25 Oct"), else null. */
+  endDate: string | null;
   /** HH:MM, 24 h. */
   startTime: string | null;
   endTime: string | null;
@@ -30,12 +32,12 @@ const SCHEMA = {
   type: "OBJECT",
   properties: {
     kind: { type: "STRING", enum: ["event", "venue", "menu", "other"] },
-    title: S, venueName: S, address: S, area: S, date: S, startTime: S, endTime: S, price: S, free: B, needsRegistration: B, url: S,
+    title: S, venueName: S, address: S, area: S, date: S, endDate: S, startTime: S, endTime: S, price: S, free: B, needsRegistration: B, url: S,
     confidence: { type: "NUMBER" },
     notes: S,
   },
   required: ["kind", "confidence"],
-  propertyOrdering: ["kind", "title", "venueName", "address", "area", "date", "startTime", "endTime", "price", "free", "needsRegistration", "url", "confidence", "notes"],
+  propertyOrdering: ["kind", "title", "venueName", "address", "area", "date", "endDate", "startTime", "endTime", "price", "free", "needsRegistration", "url", "confidence", "notes"],
 };
 
 const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -46,7 +48,7 @@ function prompt(today: string): string {
     `Today is ${wd} ${today} in London. Read this photo (an event poster, flyer, venue sign, shop front or menu in London) and fill the JSON fields.`,
     `kind: "event" for a dated happening, "venue" for a place sign/shop front, "menu" for a menu, else "other".`,
     `title: the event name (null for a plain venue). venueName: the place it's at. address: street + postcode exactly as printed, else null. area: London neighbourhood if printed or obvious from the address.`,
-    `date: YYYY-MM-DD. Resolve relative or partial dates against today: a weekday alone = the next one on or after today; a day+month without year = the next occurrence. If several dates, the next upcoming one (mention others in notes).`,
+    `date: YYYY-MM-DD. Resolve relative or partial dates against today: a weekday alone = the next one on or after today; a day+month without year = this year (even if it has just passed; never jump to next year for a date in the last two months). endDate: the last day of a multi-day event (e.g. "Fri 23 – Sun 25 Oct" → date 23rd, endDate 25th), else null. If several separate dates, the next upcoming one (mention others in notes).`,
     `startTime/endTime: HH:MM 24-hour ("7pm" = "19:00", "doors 7.30" = "19:30"). price: as printed e.g. "£8" or "£5–£10". free: true only if it says free/no charge. needsRegistration: true if it says register/sign up/book/RSVP/tickets required, false if "no booking needed"/"just turn up", else null.`,
     `url: a printed web address (add https://). confidence 0–1 for how sure you are of title+venue+date. notes: one short line of anything else useful (age limit, last entry), else null.`,
     `Use null for anything not visible. Never invent a venue, address or date.`,
@@ -73,10 +75,17 @@ export function cleanExtract(raw: unknown, today: string): PosterExtract {
   const kind = (["event", "venue", "menu", "other"] as const).find((k) => k === o.kind) ?? "other";
   let date = str(o.date, 10);
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) date = null;
-  // A poster's "31 Oct" read as last year: roll forward to the next occurrence (within a year).
-  if (date && date < today && date >= addDays(today, -366)) {
-    const next = `${Number(date.slice(0, 4)) + 1}${date.slice(4)}`;
-    if (next >= today && next <= addDays(today, 366)) date = next;
+  let endDate = str(o.endDate, 10);
+  if (endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || !date || endDate <= date || endDate > addDays(date, 31))) endDate = null;
+  // A poster's "31 Oct" read as last year: roll forward to the next occurrence (within a year). A date that
+  // has only just passed (the last two months) stays put, so "this weekend's" event reads as on / over.
+  if (date && date < addDays(today, -60) && date >= addDays(today, -366)) {
+    const bump = (d: string) => `${Number(d.slice(0, 4)) + 1}${d.slice(4)}`;
+    const next = bump(date);
+    if (next >= today && next <= addDays(today, 366)) {
+      date = next;
+      if (endDate) endDate = bump(endDate);
+    }
   }
   const url = str(o.url, 300);
   const conf = typeof o.confidence === "number" && Number.isFinite(o.confidence) ? Math.max(0, Math.min(1, o.confidence)) : 0;
@@ -87,6 +96,7 @@ export function cleanExtract(raw: unknown, today: string): PosterExtract {
     address: str(o.address, 200),
     area: str(o.area, 60),
     date,
+    endDate,
     startTime: clockOf(o.startTime),
     endTime: clockOf(o.endTime),
     price: str(o.price, 40),
@@ -150,7 +160,7 @@ const safe = (s: string) => s.replace(/[,;!?()[\]{}]/g, " ").replace(/\s+/g, " "
 export function buildSuggestedQuery(x: PosterExtract, context?: { query?: string | null } | null): string | null {
   const venue = x.venueName ? safe(x.venueName) : null;
   const addr = x.address ? x.address.replace(/[;!?()]/g, " ").replace(/\s+/g, " ").trim() : null;
-  const when = `${x.date ? ` on ${dayPhrase(x.date)}` : ""}${x.startTime ? ` at ${x.startTime}${x.endTime ? `–${x.endTime}` : ""}` : ""}`;
+  const when = `${x.date ? ` on ${dayPhrase(x.date)}${x.endDate ? ` until ${dayPhrase(x.endDate)}` : ""}` : ""}${x.startTime ? ` at ${x.startTime}${x.endTime ? `–${x.endTime}` : ""}` : ""}`;
   const extras = [x.free ? "free" : x.price ? x.price : null, x.needsRegistration === true ? "sign-up needed" : x.needsRegistration === false ? "no sign-up" : null].filter(Boolean);
   const tail = `${when}${extras.length ? ` (${extras.join(", ")})` : ""}`;
   const ctx = context?.query?.trim().replace(/\s+/g, " ").slice(0, 300);

@@ -109,6 +109,9 @@
     {"id": "dest-poster-halfway", "query": "Meet halfway for Jazz Night at The Vortex Jazz Club, 11 Gillett Square, N16 8AZ on Fri 30 Oct at 18:00. i'm at old street and she's in clapham", "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "weekday": "Fri", "time": "18:00", "themArea": "Clapham", "headlineMatch": "Vortex.*you \\d+ min, her \\d+", "destination": {"kind": "event", "facts": ["When", "Travel", "Weather"], "legs": 2}}},
     {"id": "dest-venue-from-station", "query": "how do I get to Tate Modern from Old Street tomorrow at 2pm", "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "time": "14:00", "headlineMatch": "^Tate Modern", "destination": {"kind": "venue", "facts": ["Open", "Travel", "Weather"], "legs": 1}}},
     {"id": "dest-needs-origin", "query": "Get me to Tate Modern tomorrow at 2pm", "expect": {"clarify": true, "missing": "my_location"}},
+    {"id": "server4-unit", "query": "(unit) event dates, area scrub, fair midpoints, blurbs (mocked)", "unit": "server4", "expect": {"clarify": false}},
+    {"id": "dest-poster-clarify-origin", "query": "Get me to Encode London Hackathon at Encode Hub on Sat 23 Oct at 12:00-16:30 (Student ticket, sign-up needed)", "answers": ["greenwich"], "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "clarifySteps": 1}},
+    {"id": "halfway-no-zero-middle", "query": "meet halfway for a drink tonight, I'm at Elephant and Castle and she's at Waterloo", "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "themArea": "Waterloo", "fairBoth": true}},
     {"id": "dest-unknown-place", "query": "Get me to Blorptastic Hall on Sat 31 Oct at 19:00", "you": {"lat": 51.5256, "lng": -0.0877}, "expect": {"clarify": false, "headlineMatch": "^Couldn't find Blorptastic Hall"}}
   ]
 }

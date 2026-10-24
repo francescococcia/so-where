@@ -13,6 +13,15 @@ import { backtrackPenalty, tidySegments, type LegSegment } from "@/lib/tfl";
 import { parsePlanAsk } from "@/lib/ask-local";
 import { parseDestination } from "@/lib/destination";
 import { buildSuggestedQuery, cleanExtract, type PosterExtract } from "@/lib/poster";
+import { eventDates } from "@/lib/destination";
+import { allStrings, scrubArea } from "@/lib/venue-area";
+import { meetDraft } from "@/lib/draft-message";
+import { fairScore, midpointStations } from "@/lib/tfl";
+import { STATIONS } from "@/lib/gazetteer";
+import { acceptRewrite, buildBlurb, type BlurbInput } from "@/lib/blurb";
+
+// Blurbs (Wikipedia / website / Gemini) are checked by the "server4" unit with mocks; the plan cases skip them.
+process.env.BLURBS ??= "off";
 
 function pinnedNow(hhmm: string): Date {
   const [hh, mm] = hhmm.split(":").map(Number);
@@ -22,14 +31,14 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number } };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number } };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
 // `unit`: in-process checks of a helper (no HTTP): "hours" parses OSM opening_hours, "segments" tidies stretches.
 type HoursUnit = { oh: string; date: string; at: string; state: "open" | "closed" | "unknown"; closesAt?: string };
-type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster"; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
+type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4"; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
 // `clock`: pin "now" to HH:MM London (today if still ahead, else tomorrow, so live TfL/forecast calls stay in the
 // future); `dayOffset` is then the plan's London date minus the pinned date.
 type Refined = PlanResultWithAgent & { reply?: string };
@@ -79,7 +88,7 @@ async function call(c: Case) {
 }
 
 type Chk = { name: string; pass: boolean; got?: unknown };
-function unitChecks(c: Case): Chk[] {
+async function unitChecks(c: Case): Promise<Chk[]> {
   const out: Chk[] = [];
   const add = (name: string, pass: boolean, got?: unknown) => out.push({ name, pass, ...(got !== undefined ? { got } : {}) });
   if (c.unit === "hours") {
@@ -134,7 +143,7 @@ function unitChecks(c: Case): Chk[] {
   if (c.unit === "poster") {
     // A synthetic extracted poster → suggestedQuery → the same fields back out of the plan parser.
     const today = "2026-10-24";
-    const base: PosterExtract = { kind: "event", title: "Jazz Night", venueName: "The Vortex Jazz Club", address: "11 Gillett Square, London N16 8AZ", area: "Dalston", date: "2026-10-31", startTime: "19:00", endTime: "23:00", price: "£12", free: false, needsRegistration: true, url: "https://vortexjazz.co.uk", confidence: 0.95, notes: null };
+    const base: PosterExtract = { kind: "event", title: "Jazz Night", venueName: "The Vortex Jazz Club", address: "11 Gillett Square, London N16 8AZ", area: "Dalston", date: "2026-10-31", startTime: "19:00", endTime: "23:00", price: "£12", free: false, needsRegistration: true, url: "https://vortexjazz.co.uk", confidence: 0.95, notes: null, endDate: null };
     const q = buildSuggestedQuery(base);
     add("event poster → 'Get me to <title> at <venue>, <address> on Sat 31 Oct at 19:00'", q === "Get me to Jazz Night at The Vortex Jazz Club, 11 Gillett Square, London N16 8AZ on Sat 31 Oct at 19:00–23:00 (£12, sign-up needed)", q);
     const d = q ? parseDestination(q) : null;
@@ -158,6 +167,55 @@ function unitChecks(c: Case): Chk[] {
     const ce = cleanExtract({ kind: "event", title: "X", date: "2025-10-31", startTime: "7.30", confidence: 3, url: "vortexjazz.co.uk" }, today);
     add("cleanExtract: past-year date rolls forward, 7.30 → 07:30, confidence clamped, url gets https", ce.date === "2026-10-31" && ce.startTime === "07:30" && ce.confidence === 1 && ce.url === "https://vortexjazz.co.uk", ce);
   }
+  if (c.unit === "server4") {
+    const today = "2026-10-25";
+    // Event dates: multi-day ongoing → today; wholly past → say so; upcoming keeps its own year.
+    const on = eventDates("on Fri 23 Oct until Sun 25 Oct at 12:00–16:30", today, "10:30", "16:30");
+    add("Fri 23 Oct until Sun 25 Oct, today 25 Oct 10:30 → ongoing", on?.status === "ongoing" && on.start === "2026-10-23" && on.end === "2026-10-25", on);
+    const done = eventDates("on Sat 23 Oct at 12:00", today, "10:30");
+    add("Sat 23 Oct (single day), today 25 Oct → past, same year (not 2027)", done?.status === "past" && done.start === "2026-10-23", done);
+    const late = eventDates("on Sun 25 Oct until Sun 25 Oct", today, "17:00", "16:30");
+    add("ends today 16:30, now 17:00 → past", late?.status === "past", late);
+    const up = eventDates("on Sat 31 Oct", today, "10:30");
+    add("Sat 31 Oct → upcoming 2026-10-31", up?.status === "upcoming" && up.start === "2026-10-31", up);
+    const pe: PosterExtract = { kind: "event", title: "Encode London Hackathon", venueName: "Encode Hub", address: null, area: "London", date: "2026-10-23", endDate: "2026-10-25", startTime: "12:00", endTime: "16:30", price: "Student ticket", free: false, needsRegistration: true, url: null, confidence: 0.9, notes: null };
+    const pq = buildSuggestedQuery(pe) ?? "";
+    add("multi-day poster → query says 'until Sun 25 Oct'", /on Fri 23 Oct until Sun 25 Oct/.test(pq), pq);
+    const kept = cleanExtract({ kind: "event", title: "X", date: "2026-10-23", endDate: "2026-10-25", confidence: 0.9 }, today);
+    add("cleanExtract keeps a just-passed date (no roll to next year) + endDate", kept.date === "2026-10-23" && kept.endDate === "2026-10-25", kept);
+    // Privacy copy: no placeholders, their area removed cleanly.
+    const scrubbed = scrubArea("How about Waterloo Tap, Sutton Walk (near Waterloo station)? 2 min from Waterloo", "Waterloo");
+    add("scrubArea: area gone, no '[' placeholder", !/waterloo/i.test(scrubbed) && !/[[\]]/.test(scrubbed), scrubbed);
+    const md = meetDraft({ venue: "Waterloo Tap", when: new Date("2026-10-29T19:00:00Z"), themMinutes: 0, category: "pub" });
+    add("meetDraft without a hub: no station clause, no '['", !/near .* station|\[/.test(md), md);
+    // Fairness: stations between the two starts are candidates, and a 0-minute "middle" loses to a balanced one.
+    const st = (n: string) => STATIONS.find((s) => s.name === n)!;
+    const mids = midpointStations(st("Elephant & Castle"), st("Waterloo")).map((h) => h.name);
+    add("midpointStations(E&C, Waterloo): stations in between, neither person's own", mids.length > 0 && !mids.includes("Waterloo") && !mids.includes("Elephant & Castle"), mids);
+    add("fairScore: 11 vs 14 beats 10 vs 0", fairScore({ worst: 14, gap: 3 }) < fairScore({ worst: 10, gap: 10 }), [fairScore({ worst: 14, gap: 3 }), fairScore({ worst: 10, gap: 10 })]);
+    add("allStrings finds nested strings", allStrings({ a: ["x", { b: "[their area]" }] }).some((x) => x.includes("[")));
+    // Blurbs: facts only, mocked network + Gemini.
+    const fake = (routes: Record<string, unknown>) => (async (u: string | URL | Request) => {
+      const url = String(u);
+      const hit = Object.entries(routes).find(([k]) => url.includes(k));
+      if (!hit) return new Response("nope", { status: 404 });
+      return typeof hit[1] === "string" ? new Response(hit[1], { headers: { "content-type": "text/html" } }) : Response.json(hit[1]);
+    }) as typeof fetch;
+    const inn: BlurbInput = { id: "osm-way-1", name: "George Inn", kind: "Pub", tags: { wikipedia: "en:George Inn, Southwark", outdoor_seating: "yes" }, location: { lat: 51.5045, lng: -0.0894 }, area: "near London Bridge", closesAt: "23:00" };
+    const wiki = { "rest_v1/page/summary/George_Inn": { type: "standard", extract: "The George Inn is a public house established in the medieval period on Borough High Street. It is the only surviving galleried coaching inn in London.", content_urls: { desktop: { page: "https://en.wikipedia.org/wiki/George_Inn,_Southwark" } } } };
+    let prompt = "";
+    const b1 = await buildBlurb(inn, "date", { fetch: fake(wiki), llm: async (p) => ((prompt = p), { text: "London's only surviving galleried coaching inn, with outdoor seating in its old courtyard.", bestFor: "a cosy date" }) });
+    add("blurb: Gemini rewrite + 'Best for' + Wikipedia pill", /galleried/.test(b1.text) && b1.bestFor === "Best for a cosy date" && b1.source.name === "Wikipedia" && /George_Inn/.test(b1.source.url), b1);
+    add("blurb prompt: facts only, forbids adding, no people/query", /ONLY/.test(prompt) && /do not add/i.test(prompt) && /galleried coaching inn/.test(prompt) && !/i'm at|she's|you:|them:/i.test(prompt), prompt.slice(0, 200));
+    const b2 = await buildBlurb({ ...inn, id: "osm-way-2" }, "date", { fetch: fake(wiki), llm: async () => ({ text: "Open since 1676, famous for its 12 ales.", bestFor: null }) });
+    add("blurb: rewrite with invented numbers rejected → Wikipedia sentence", !/1676|12 ales/.test(b2.text) && /^The George Inn is a public house/.test(b2.text) && !b2.bestFor, b2);
+    let calls = 0;
+    const b3 = await buildBlurb({ id: "osm-node-9", name: "The Kings Head", kind: "Pub", tags: {}, location: { lat: 51.5, lng: -0.11 }, area: "near Waterloo", closesAt: "23:00" }, "date", { fetch: fake({}), llm: async () => (calls++, { text: "x" }) });
+    add("blurb: no facts → template, no Gemini call, OSM pill", b3.text === "A local pub near Waterloo, open till 23:00." && calls === 0 && b3.source.name === "OpenStreetMap" && /node\/9$/.test(b3.source.url), { b3, calls });
+    const b4 = await buildBlurb({ id: "osm-node-10", name: "Bar Ten", kind: "Bar", tags: { website: "https://barten.example" }, location: { lat: 51.5, lng: -0.11 } }, "friends", { fetch: fake({ "barten.example": '<html><head><meta name="description" content="A tiny wine bar under the railway arches with candlelit tables."></head></html>' }), llm: null });
+    add("blurb: website meta description used, site pill", /railway arches/.test(b4.text) && b4.source.name === "barten.example", b4);
+    add("acceptRewrite rejects brackets and unknown numbers", !acceptRewrite("A pub [their area]", ["x"]) && !acceptRewrite("Serving since 1890 in style.", ["pub"]) && acceptRewrite("A friendly pub with a beer garden.", ["Has a beer garden"]));
+  }
   return out;
 }
 
@@ -177,6 +235,8 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
     add("no cards while clarifying", r.cards.length === 0, r.cards.length);
     return out;
   }
+  const placeholders = allStrings(r).filter((x) => /[[\]]/.test(x) && !/^https?:\/\//.test(x));
+  add("no '[…]' placeholder in any output string", placeholders.length === 0, placeholders.slice(0, 3));
   add("≤3 cards", r.cards.length <= 3, r.cards.length);
   if (e.minCards) add(`≥${e.minCards} card`, r.cards.length >= e.minCards, r.cards.length);
   const facts = r.cards.flatMap((x) => x.facts);
@@ -189,6 +249,11 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
     const area = (e.themArea ?? r.them?.area ?? "").toLowerCase();
     add("draftMessage has no 'them' area", !!r.draftMessage && !!area && !r.draftMessage.toLowerCase().includes(area), r.draftMessage);
     add("them is rounded to an area (radius ≥ 500 m)", !!r.them && r.them.radiusM >= 500);
+  }
+  if (e.fairBoth) {
+    // A "middle" on one person's doorstep isn't fair: it must sit between them, nobody at ~0 min.
+    add("middle is neither person's own station", !!r.middle && !["Waterloo", "Elephant & Castle"].includes(r.middle.name), r.middle?.name ?? null);
+    add("headline doesn't say anyone travels 0 min", !/\b0 min\b|, (?:her|him|them) 0\b/.test(r.headline), r.headline);
   }
   if (e.weekday) add(`day = ${e.weekday}`, londonDayShort(new Date(r.when)) === e.weekday, londonDayShort(new Date(r.when)));
   if (e.time) add(`time = ${e.time}`, londonClock(r.when) === e.time, londonClock(r.when));
@@ -320,7 +385,7 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
     let row;
     try {
       if (c.unit) {
-        const checks = unitChecks(c);
+        const checks = await unitChecks(c);
         const pass = checks.length > 0 && checks.every((x) => x.pass);
         const row = { id: c.id, query: c.query, pass, ms: 0, checks };
         if (pass) passed++;

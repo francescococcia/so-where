@@ -13,12 +13,14 @@ import { addressOf, hoursAt, kindLabel, osmUrl, type OsmKind, type OsmPlace, typ
 import { findVenues, mongoEventsNear } from "@/lib/mongo-venues";
 import { recordPlanRun, tieBreakByHistory } from "@/lib/plan-memory";
 import type { AgentStep, Clarify, Fact, LatLng, Leg, PlanCard, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
-import { fairPoint, journey, lineStatus, searchPlace, tidySegments, trimPathStart, trimSegmentsStart, type Journey, type LegSegment, type LineStatus, type Place } from "@/lib/tfl";
+import { fairPoint, HUBS, journey, lineStatus, searchPlace, tidySegments, trimPathStart, trimSegmentsStart, type Journey, type LegSegment, type LineStatus, type Place } from "@/lib/tfl";
 import { forecastAt, type Forecast } from "@/lib/weather";
 import { weatherDecision, weatherFitFact, weatherMode, weatherRank, type WeatherMode } from "@/lib/venue-weather";
 import { applyRefinements, clock12, cuisineLabel, cuisineMatch, cuisineOf, joinRefine, pickHub, prefRank, refineReply, seatingWish, splitRefine, type Pref, type RefinedAsk, type Refinement } from "@/lib/refine";
 import { goDraft, meetDraft, nearDraft } from "@/lib/draft-message";
-import { parseDestination, resolveDestination, type Destination } from "@/lib/destination";
+import { eventDates, parseDestination, resolveDestination, shortDay, type Destination } from "@/lib/destination";
+import type { Blurb } from "@/lib/blurb";
+import { mentionsArea, sameArea, scrubArea, venueArea } from "@/lib/venue-area";
 
 export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string; /** Refine only: the result on screen, so "is it open?" answers without replanning. Echoed, never stored. */ result?: PlanResultWithAgent }; refine?: string;
   /** Refine only: the place the user has selected (a card), so "other Italian places in the area" searches around it and excludes it. Never stored. */
@@ -79,6 +81,15 @@ async function resolveTyped(typed: string): Promise<Resolved> {
   return { place: t.place, readAs: null, suggestions, confidence: "low" };
 }
 
+/** "Get me to <venue> …": the rest of the ask (day, time, who / where) parsed as a near-me or halfway plan. */
+function destModeAsk(dest: Destination, today: string): PlanAsk {
+  // "… from Old Street tomorrow" → your start.
+  const rest = (dest.rest || "").replace(/^\s*from\s+(.+?)(?=\s+(?:on|at|by|for|around|tomorrow|tonight|today|this|next)\b|\s*[,;.!?]|$)/i, "i'm at $1");
+  const d = parsePlanAsk(rest, today);
+  const halfway = dest.withThem || !!d.themPlace;
+  return { ...d, intent: halfway ? "meet_halfway" : "near_me", category: dest.title ? "event" : d.category, free: d.free || dest.free, signals: [`fixed destination (${dest.title ? "event" : "place"})`, ...d.signals] };
+}
+
 /** Which slot the next clarify answer fills: mirrors the clarify order in runPlan. */
 async function pendingSlot(base: PlanAsk, reqYou: LatLng | undefined): Promise<"them" | "you" | null> {
   const unresolved = async (p: string | null) => !!p && !(await resolveTyped(p)).place;
@@ -96,7 +107,10 @@ async function pendingSlot(base: PlanAsk, reqYou: LatLng | undefined): Promise<"
  *  as the result's `query`, so resending it with the next answer never loses an earlier one. */
 async function mergeAnswer(prevQuery: string, answer: string, today: string, reqYou: LatLng | undefined): Promise<{ ask: PlanAsk; text: string }> {
   const a = answer.replace(/[;]/g, ",").trim().replace(/[.!?]+$/, "");
-  const base = parsePlanAsk(prevQuery, today);
+  // A fixed-destination ask ("Get me to X at Y …") has no intent of its own: its answer is still your start
+  // (or theirs), so read it the same way runPlan does.
+  const pd = parseDestination(splitRefine(prevQuery).base);
+  const base = pd ? destModeAsk(pd, today) : parsePlanAsk(prevQuery, today);
   const slot = base.intent ? await pendingSlot(base, reqYou) : null;
   if (!slot) {
     const text = `${prevQuery}. ${a}`;
@@ -195,7 +209,9 @@ function closingSoon(h: ReturnType<typeof hoursAt>): Hrs {
 const soon = (h: Hrs) => (h.soon ? 1 : 0);
 /** Per-card opening-hours fields for the UI (intersection type: plan-types.ts is unchanged). */
 export type CardHours = { openAtPlan: boolean | null; closesAt: string | null; closingSoon: boolean; hoursKnown: boolean };
-export type PlanCardWithHours = PlanCard & CardHours;
+/** `area`: the venue's own neighbourhood / nearest station ("South Bank · near Waterloo").
+ *  `blurb`: a short description from Wikipedia / Wikidata / OSM / the venue's site (see blurb.ts), when ready. */
+export type PlanCardWithHours = PlanCard & CardHours & { area?: string; blurb?: Blurb };
 const cardHours = (h: Hrs): CardHours => ({ openAtPlan: h.state === "unknown" ? null : h.state === "open", closesAt: h.closesAt ?? null, closingSoon: !!h.soon, hoursKnown: h.state !== "unknown" });
 /** Open places, minus the ones shutting within the hour (kept only when nothing else is open). */
 function openEnough<T extends { h: Hrs }>(rows: T[]): { keep: T[]; soonDropped: number } {
@@ -404,11 +420,16 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
   // "Get me to <title> at <venue>, <address> on Sat 31 Oct at 19:00": the destination is fixed (no hub search).
   const dest = parseDestination(split.base);
   if (dest) {
-    // "… from Old Street tomorrow" → your start.
-    const rest = (dest.rest || "").replace(/^\s*from\s+(.+?)(?=\s+(?:on|at|by|for|around|tomorrow|tonight|today|this|next)\b|\s*[,;.!?]|$)/i, "i'm at $1");
-    const d = parsePlanAsk(rest, today);
-    const halfway = dest.withThem || !!d.themPlace;
-    ask = { ...d, intent: halfway ? "meet_halfway" : "near_me", category: dest.title ? "event" : d.category, free: d.free || dest.free, signals: [`fixed destination (${dest.title ? "event" : "place"})`, ...d.signals] };
+    ask = destModeAsk(dest, today);
+    // The event's own day(s): past → plan the trip for now and say it's over; multi-day and on → today.
+    const ev = eventDates(dest.rest || "", today, londonClock(now.toISOString()), dest.endTime);
+    if (ev) {
+      dest.dates = ev;
+      if (ev.status === "past") Object.assign(ask, { date: null, time: null });
+      else if (ev.status === "ongoing") Object.assign(ask, { date: today, time: ask.time && ask.time > londonClock(now.toISOString()) ? ask.time : null });
+      else ask.date = ev.start;
+      ask.signals.push(`event ${ev.status}${ev.end ? ` (${ev.start}→${ev.end})` : ` (${ev.start})`}`);
+    }
   }
   if (!dest && process.env.GEMINI_API_KEY && (!ask.intent || (ask.intent === "meet_halfway" && (!ask.themPlace || !ask.youPlace)) || !ask.category)) {
     const g = await geminiFill(split.base, ask, today);
@@ -491,6 +512,12 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
   return nearMe({ ask, text, when, base, begin, unknowns, sources, you: origin, youName: youPlace?.name, now });
 }
 
+/** The venue's own area for the card ("South Bank · near Waterloo"); from OSM tags + nearest station only. */
+const areaOf = (tags: Record<string, string>, p: LatLng): { area?: string } => {
+  const a = venueArea(tags, p);
+  return a ? { area: a } : {};
+};
+
 type Ctx = {
   ask: PlanAsk;
   text: string;
@@ -513,8 +540,9 @@ async function finish(ctx: Ctx, r: PlanResultWithAgent): Promise<PlanResultWithA
     checked += before;
     dropped += before - c.facts.length;
   }
-  if (r.them && r.draftMessage.toLowerCase().includes(r.them.area.toLowerCase())) {
-    r.draftMessage = r.draftMessage.split(r.them.area).join("[their area]");
+  // Their area never goes in the message, and no placeholder ever reaches the screen.
+  if (r.them && mentionsArea(r.draftMessage, r.them.area)) {
+    r.draftMessage = scrubArea(r.draftMessage, r.them.area);
     dropped++;
   }
   r.cards = r.cards.slice(0, MAX_CARDS);
@@ -525,6 +553,17 @@ async function finish(ctx: Ctx, r: PlanResultWithAgent): Promise<PlanResultWithA
   // Started here but not awaited, so the answer isn't held up; the route awaits planRunWrite(r) after
   // sending the result and before ending the response, so serverless doesn't freeze the insert mid-flight.
   PLAN_RUN_WRITES.set(r, recordPlanRun(r, Date.now() - (RUN_STARTED.get(r.steps) ?? Date.now())));
+  return r;
+}
+
+/** OSM tags behind each card (for blurbs: wikipedia / wikidata / description …); request memory only. */
+const CARD_TAGS = new WeakMap<PlanCard, Record<string, string>>();
+export const cardTags = (c: PlanCard): Record<string, string> => CARD_TAGS.get(c) ?? {};
+
+/** A plan that failed outright, as a normal result with a friendly headline (the stream never ends empty). */
+export function failedResult(query: string, now = new Date()): PlanResultWithAgent {
+  const r = emptyResult(String(query ?? "").slice(0, 1500), now, undefined, [], ["Something went wrong on our side, not with your ask."]);
+  r.headline = "Sorry, I couldn't plan that just now. Try again in a moment, or rephrase it.";
   return r;
 }
 
@@ -582,6 +621,11 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   // Venues are ranked once the forecast is in, so the weather can decide indoor vs terrace.
   const wm = weatherMode(wx, londonClock(when.toISOString()));
   const osm = { r: osmR, pk: venuePick(osmR, when, wm, prefs, (ask as RefinedAsk).cuisine) };
+  // An in-between station (not a central hub) can be quiet: look a little wider before giving up.
+  if (!osm.pk.picks.length && !HUBS.some((h) => h.id === best.hub.id)) {
+    const wide = await findOpenVenues(kind, result.middle.location, 900, when, ask as RefinedAsk);
+    Object.assign(osm, { r: wide, pk: venuePick(wide, when, wm, prefs, (ask as RefinedAsk).cuisine) });
+  }
   endVenues(osm.pk.picks.length ? "done" : "failed", `${osmR.via ? `${osmR.via} · ${osmR.places.length} within 500 m` : `${osmR.places.length} found within 500 m (${osmR.source}${osmR.live ? "" : ", live call " + (osmR.note?.match(/Overpass (\w+)/)?.[1] ?? "failed")})`} · ${osm.pk.closed} closed at ${londonClock(when.toISOString())}${osm.pk.soonDropped ? ` · ${osm.pk.soonDropped} closing within the hour dropped` : ""} · ${osm.pk.picks.length} kept · ${weatherDecision(wm, osm.pk.picks.map((x) => x.p))}`, osmR.stepSource);
   addSource(sources, osm.r.source, osm.r.asOf);
   if ((osmR as { lateBars?: boolean }).lateBars) unknowns.push(`Few cafés near ${best.hub.name} are open at ${londonClock(when.toISOString())}, so bars open late are included.`);
@@ -615,6 +659,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
       kind: "venue",
       name: p.tags.name,
       subtitle: [kindLabel(p.tags), addr].filter(Boolean).join(" · "),
+      ...areaOf(p.tags, p.location),
       location: p.location,
       legs,
       facts: [
@@ -633,12 +678,14 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
       ...cardHours(h),
     };
   });
+  result.cards.forEach((c, i) => CARD_TAGS.set(c, osm.pk.picks[i].p.tags));
   if (!result.cards.length) unknowns.push(`No open ${kind}s found within 500 m of ${best.hub.name} in OSM.`);
   const hubWhy = hp.why === "closer_you" ? "is closer to you" : hp.why === "closer_them" ? `is closer to ${who}` : hp.why === "different" ? "is the next fairest middle" : "is the fair middle";
   result.headline = `${best.hub.name} ${hubWhy}: you ${best.a.minutes} min, ${who} ${best.b.minutes}.`;
   const top = osm.pk.picks[0]?.p;
   // Short, friendly, paste-ready: no line status or forecast; their journey time only, never their area.
-  result.draftMessage = meetDraft({ venue: top?.tags.name, address: (top && addressOf(top.tags)) || undefined, hub: best.hub.name, when, category: ask.category, themMinutes: best.b.minutes, url: top ? (top.tags.website ?? top.tags["contact:website"] ?? osmUrl(top)) : undefined, now: ctx.now });
+  // The hub's name only when it isn't their own area (the message goes to them; their area is never in it).
+  result.draftMessage = meetDraft({ venue: top?.tags.name, address: (top && addressOf(top.tags)) || undefined, hub: sameArea(best.hub.name, themArea.area) ? undefined : best.hub.name, when, category: ask.category, themMinutes: best.b.minutes, url: top ? (top.tags.website ?? top.tags["contact:website"] ?? osmUrl(top)) : undefined, now: ctx.now });
   return finish(ctx, result);
 }
 
@@ -756,6 +803,7 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
       kind: "venue",
       name: p.tags.name ?? kindLabel(p.tags),
       subtitle: [kindLabel(p.tags), addr].filter(Boolean).join(" · "),
+      ...areaOf(p.tags, p.location),
       location: p.location,
       legs: [leg],
       facts: [
@@ -775,6 +823,10 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
       url: p.tags.website ?? p.tags["contact:website"] ?? osmUrl(p),
       ...cardHours(c.h),
     };
+  });
+  result.cards.forEach((card, i) => {
+    const c = chosen[i].c;
+    if (c.kind === "place") CARD_TAGS.set(card, c.p.tags);
   });
   for (const x of chosen) if (x.c.kind === "place" && x.c.h.state === "unknown") unknowns.push(`${x.c.p.tags.name ?? "A place"}: opening hours not in OSM.`);
   if (chosen.some((x) => x.c.kind === "event")) unknowns.push("Event prices and whether you can walk in: the seed listings don't say.");
@@ -810,12 +862,17 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
     addSource(sources, "OSM Nominatim", new Date().toISOString());
     for (const [id, label] of [["travel", "Checking TfL journeys"], ["lines", "Checking line status"], ["weather", "Checking the forecast"]]) begin(id, label)("skipped", "Needs the place first");
     unknowns.push(`Couldn't place "${dest.venue}": add the street or postcode and try again.`);
-    result.headline = `Couldn't find ${dest.venue} on the map.`;
+    result.headline = `Couldn't find ${dest.venue} on the map. Add the street or postcode and I'll route you there.`;
     return finish(ctx, result);
   }
   addSource(sources, found.source, found.asOf);
   endPlace("done", `${found.name} · ${found.how}${found.address ? ` · ${found.address}` : ""} · destination fixed, no middle search`, found.source);
-  if (found.verdict !== "confirmed") unknowns.push(`${found.name}: placed at ${found.how}, not an exact map pin.`);
+  if (found.pinned === false) unknowns.push(`Couldn't pin ${dest.venue} exactly, so this goes to ${found.how}.`);
+  else if (found.verdict !== "confirmed") unknowns.push(`${found.name}: placed at ${found.how}, not an exact map pin.`);
+  const ev = dest.dates;
+  const span = ev ? (ev.end ? `${shortDay(ev.start)} – ${shortDay(ev.end)}` : shortDay(ev.start)) : null;
+  if (ev?.status === "ongoing" && ev.end) unknowns.push(`${dest.title ?? found.name} runs until ${shortDay(ev.end)}${dest.endTime ? ` ${dest.endTime}` : ""}, so this is planned for today.`);
+  if (ev?.status === "past") unknowns.push(`${dest.title ?? found.name} was ${span}, so it's already over; the trip is planned for now in case you still want to go.`);
 
   const t = londonClock(when.toISOString());
   const endTravel = begin("travel", ctx.them ? "Checking TfL journeys for both of you" : "Checking your TfL journey", "TfL Journey Planner");
@@ -848,7 +905,7 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
   const h = tags.opening_hours ? closingSoon(hoursAt(tags, when, found.location)) : null;
   const facts: Fact[] = [];
   if (isEvent) {
-    facts.push(fact("When", `${londonLabel(when)}${dest.endTime ? `–${dest.endTime}` : ""}`, "likely", "Your ask"));
+    facts.push(fact("When", ev?.end || ev?.status === "past" ? `${span}${dest.endTime ? `, until ${dest.endTime}` : ""}${ev.status === "past" ? " (over)" : ""}` : `${londonLabel(when)}${dest.endTime ? `–${dest.endTime}` : ""}`, "likely", "Your ask"));
     unknowns.push(`${dest.title}: date, time and entry are as given (e.g. on the poster), not checked against a listing.`);
   } else if (h) facts.push(fact(`Open ${londonDayShort(when)}`, h.value, h.verdict, found.source, found.asOf));
   else unknowns.push(`${found.name}: opening hours not listed.`);
@@ -876,18 +933,21 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
     kind: isEvent ? "event" : "venue",
     name: isEvent ? dest.title! : found.name,
     subtitle: (isEvent ? [`${londonDayShort(when)} ${t}${dest.endTime ? `–${dest.endTime}` : ""}`, found.name, addr] : [kindLabel(tags), addr]).filter(Boolean).join(" · "),
+    ...areaOf(tags, found.location),
     location: found.location,
     legs,
     facts,
     why: `The place you named, so no middle search${a ? `: ${a.minutes} min for you` : ""}${b ? `, ${b.minutes} for ${who}` : ""}${!isEvent && h ? untilWhy(h) : ""}.`,
     ...(url ? { url } : {}),
     ...(isEvent
-      ? { openAtPlan: true, closesAt: dest.endTime, closingSoon: false, hoursKnown: !!dest.endTime }
+      ? { openAtPlan: ev?.status !== "past", closesAt: dest.endTime, closingSoon: false, hoursKnown: !!dest.endTime }
       : h ? cardHours(h) : { openAtPlan: null, closesAt: null, closingSoon: false, hoursKnown: false }),
   };
   result.cards = [card];
+  CARD_TAGS.set(card, tags);
   const label = isEvent ? `${dest.title} at ${found.name}` : found.name;
-  result.headline = `${label}, ${londonLabel(when)}: ${a ? `you ${a.minutes} min` : "no TfL time for you"}${ctx.them ? `, ${who} ${b ? b.minutes : "?"}` : ""}.`;
+  const trip = `${a ? `you ${a.minutes} min` : "no TfL time for you"}${ctx.them ? `, ${who} ${b ? b.minutes : "?"}` : ""}`;
+  result.headline = ev?.status === "past" ? `${label} was ${span}, so it's already over. Getting there now: ${trip}.` : `${label}, ${londonLabel(when)}${ev?.status === "ongoing" ? " (on now)" : ""}: ${trip}.`;
   result.draftMessage = goDraft({ title: dest.title ?? undefined, venue: found.name, address: addr ?? undefined, when, themMinutes: ctx.them ? b?.minutes : undefined, url, now: ctx.now });
   return finish(ctx, result);
 }

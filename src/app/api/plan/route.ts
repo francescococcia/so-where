@@ -5,8 +5,12 @@
 // that same result comes back unchanged with `reply` (no replan unless the place is closed) →
 // the same result plus `reply` (one sentence) and `query` (accumulated ask to send as previous.query next turn).
 // `Accept: application/x-ndjson`: {"type":"step",...} lines then one {"type":"result"} or {"type":"clarify"}.
+// Cards may carry `blurb` {text, bestFor?, source:{name,url}} (top 3; see blurb.ts). Stream: attached to the result
+// when ready within ~600 ms, else sent after it as {"type":"blurbs","blurbs":{[cardId]: Blurb}} (≤2.5 s, may be absent).
+// The stream always ends with a result or clarify (a failure is a result with a friendly headline, plus {"type":"error"}).
 // Request bodies are never logged (they can hold someone's location).
-import { planRunWrite, runPlan, type PlanFocus, type PlanRequest, type PlanResultRefined } from "@/lib/plan";
+import { planBlurbs, type Blurb } from "@/lib/blurb";
+import { cardTags, failedResult, planRunWrite, runPlan, type PlanFocus, type PlanRequest, type PlanResultRefined } from "@/lib/plan";
 import type { AgentStep, PlanResultWithAgent } from "@/lib/plan-types";
 
 export const runtime = "nodejs";
@@ -51,6 +55,16 @@ function parseBody(raw: unknown): PlanRequest | null {
   };
 }
 
+const blurbsOn = () => process.env.BLURBS !== "off";
+/** Top-3 card blurbs, never throwing; {} when off, a clarify, or every card already has one (echoed refine). */
+function blurbsFor(r: PlanResultRefined): Promise<Record<string, Blurb>> {
+  if (!blurbsOn() || r.clarify || !r.cards.length || r.cards.slice(0, 3).every((c) => (c as { blurb?: Blurb }).blurb)) return Promise.resolve({});
+  return planBlurbs(r, cardTags).catch(() => ({}));
+}
+const attach = (r: PlanResultRefined, b: Record<string, Blurb>) => {
+  r.cards = r.cards.map((c) => (b[c.id] ? { ...c, blurb: b[c.id] } : c));
+};
+
 export async function POST(req: Request) {
   let body: PlanRequest | null = null;
   try {
@@ -64,6 +78,7 @@ export async function POST(req: Request) {
   if (!stream) {
     try {
       const r = await runPlan(body);
+      attach(r, await blurbsFor(r));
       await planRunWrite(r); // finish the plan_runs insert before the serverless function returns
       return Response.json(r, { headers: { "Cache-Control": "no-store" } });
     } catch {
@@ -75,15 +90,30 @@ export async function POST(req: Request) {
   const plan = body;
   const rs = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (o: unknown) => controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+      let ended = false;
+      const send = (o: { type: string; [k: string]: unknown }) => {
+        if (o.type === "result" || o.type === "clarify") ended = true;
+        controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+      };
       try {
         const r: PlanResultRefined = await runPlan(plan, (step: AgentStep) => send({ type: "step", step }));
         // `query` is the accumulated ask (earlier answers appended as "; them: X"): resend it as
         // previous.query with the next answer so a second clarify never loses the first answer.
         if (r.clarify) send({ type: "clarify", clarify: r.clarify, query: r.query, ...(r.reply ? { reply: r.reply } : {}) });
-        else send({ type: "result", result: r });
+        else {
+          const pending = blurbsFor(r);
+          const early = await Promise.race([pending, new Promise<null>((res) => setTimeout(() => res(null), 600))]);
+          if (early) attach(r, early);
+          send({ type: "result", result: r });
+          if (!early) {
+            const late = await pending;
+            if (Object.keys(late).length) send({ type: "blurbs", blurbs: late });
+          }
+        }
         await planRunWrite(r); // result already sent; keep the function alive until plan_runs is written
       } catch {
+        // Never end empty: a friendly result the UI can show, plus the error marker.
+        if (!ended) send({ type: "result", result: failedResult(plan.query) });
         send({ type: "error", error: "Planning failed" });
       } finally {
         controller.close();

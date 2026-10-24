@@ -5,6 +5,7 @@ import { metresBetween, walkMinutes } from "@/lib/geo";
 import { getJson } from "@/lib/http";
 import { londonParts } from "@/lib/london-time";
 import type { LatLng } from "@/lib/plan-types";
+import { STATIONS } from "@/lib/gazetteer";
 
 const BASE = "https://api.tfl.gov.uk";
 const key = () => (process.env.TFL_APP_KEY ? `app_key=${encodeURIComponent(process.env.TFL_APP_KEY)}` : "");
@@ -232,9 +233,41 @@ function atHubJourney(from: End, hub: Hub): Journey | null {
   return { minutes, summary: same ? `Already at ${hub.name} (walk)` : `Walk to ${hub.name} (~${minutes} min, estimate)`, lines: [], path: [], segments: same ? [] : [{ mode: "walking", to: hub.name, minutes, path: [], est: true }], fetchedAt: new Date().toISOString(), ms: 0 };
 }
 
-/** Fairest hub: minimise the worse of the two journey times, then the gap between them. */
-export async function fairPoint(a: End, b: End, arriveBy: Date, hubs: Hub[] = HUBS) {
+const RAIL = new Set(["tube", "elizabeth-line", "overground", "dlr", "national-rail"]);
+/** Up to `n` stations near the straight-line midpoint of a and b that aren't already a hub (≥ 400 m from one)
+ *  and aren't where either person starts (≥ 600 m), so a hub list built around central London still has a
+ *  genuinely in-between option when the two are close (Elephant & Castle ↔ Waterloo → Lambeth North). */
+export function midpointStations(a: LatLng, b: LatLng, hubs: Hub[] = HUBS, n = 3): Hub[] {
+  const mid = { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 };
+  const span = metresBetween(a, b);
+  return STATIONS.filter((s) => s.id && s.modes.some((m) => RAIL.has(m)))
+    .map((s) => ({ s, d: metresBetween(mid, s) }))
+    .filter(({ s, d }) => d <= Math.max(1200, span * 0.35) && metresBetween(a, s) >= 600 && metresBetween(b, s) >= 600 && hubs.every((h) => metresBetween(h, s) >= 400))
+    .sort((x, y) => x.d - y.d)
+    .slice(0, n)
+    .map(({ s }) => ({ name: s.name, id: s.id, tflName: s.name, lat: s.lat, lng: s.lng }));
+}
+
+/** One person barely travels (the "middle" is their own doorstep): not a fair meeting point. */
+const doorstep = (x: { worst: number; gap: number }) => x.worst - x.gap <= 2 && x.gap > 3;
+/** Fairness score: the longer trip, plus a flat penalty when one person barely travels at all (12 vs 0 is worse than 12 vs 9). */
+export const fairScore = (x: { worst: number; gap: number }) => x.worst + (doorstep(x) ? 10 : 0);
+
+/** Fairest hub: minimise the longer of the two journey times (doorstep middles penalised), then the gap.
+ *  When the best central hub is one person's doorstep, a few stations near the midpoint of the two starts join in. */
+export async function fairPoint(a: End, b: End, arriveBy: Date, hubsIn: Hub[] = HUBS) {
   const t0 = Date.now();
+  const first = await scoreHubs(a, b, arriveBy, hubsIn);
+  const quickest = [...first.ok].sort((x, y) => x.worst - y.worst || x.gap - y.gap)[0];
+  const extra = quickest && doorstep(quickest) ? midpointStations(a, b, hubsIn) : [];
+  const more = extra.length ? await scoreHubs(a, b, arriveBy, extra) : { ok: [], failed: 0, failedHubs: [] };
+  const ok = [...first.ok, ...more.ok];
+  ok.sort((x, y) => fairScore(x) - fairScore(y) || x.gap - y.gap || x.worst - y.worst);
+  const compared = hubsIn.length + extra.length;
+  return { ranked: ok, compared, failed: first.failed + more.failed, failedHubs: [...first.failedHubs, ...more.failedHubs], ms: Date.now() - t0, calls: compared * 2 };
+}
+
+async function scoreHubs(a: End, b: End, arriveBy: Date, hubs: Hub[]) {
   const rows = await Promise.all(
     hubs.map(async (hub) => {
       // One retry per leg: TfL times out on a few of the 24 calls, and a missing hub can change the answer.
@@ -259,8 +292,7 @@ export async function fairPoint(a: End, b: End, arriveBy: Date, hubs: Hub[] = HU
     }
     ok.push({ hub, a: ja, b: jb, worst: Math.max(ja.minutes, jb.minutes), gap: Math.abs(ja.minutes - jb.minutes) });
   }
-  ok.sort((x, y) => x.worst - y.worst || x.gap - y.gap);
-  return { ranked: ok, compared: hubs.length, failed, failedHubs, ms: Date.now() - t0, calls: hubs.length * 2 };
+  return { ok, failed, failedHubs };
 }
 
 export type LineStatus = { id: string; name: string; status: string; reason?: string; severity: number };
