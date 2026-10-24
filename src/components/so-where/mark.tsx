@@ -5,7 +5,7 @@ export function Mark({ className = "size-7" }: { className?: string }) {
       <rect x="0.5" y="0.5" width="31" height="31" rx="9" fill="#fff" stroke="var(--sw-border)" />
       <path d="M7 21 C 11 21, 12 11, 16 11 S 21 21, 25 21" fill="none" stroke="var(--sw-ink-3)" strokeWidth="2" strokeLinecap="round" strokeDasharray="0.1 4" />
       <circle cx="7" cy="21" r="2.8" fill="var(--sw-route-you)" />
-      <circle cx="25" cy="21" r="2.8" fill="var(--sw-amber)" />
+      <circle cx="25" cy="21" r="2.8" fill="var(--sw-route-them)" />
       <circle cx="16" cy="11" r="4.2" fill="var(--sw-signal)" stroke="#fff" strokeWidth="1" />
     </svg>
   );

@@ -93,24 +93,24 @@ const DASHES: number[][] = [
   [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5],
 ];
 
-const COLOR = { you: "#0e6e62", them: "#f59e0b" } as const; // you = teal ink, them = apricot (red is reserved for buses/errors)
-const ACCENT = "#0f9d8a";
+const COLOR = { you: "#e8590c", them: "#1478a3" } as const; // you = orange, them = sky (red is reserved for buses/errors)
+const ACCENT = "#ff6b2c";
 
 function addLayers(map: MLMap) {
   const before = map.getLayer("water-name") ? "water-name" : undefined;
   map.addSource("them-area", { type: "geojson", data: FC() });
-  map.addLayer({ id: "them-area-fill", type: "fill", source: "them-area", paint: { "fill-color": "#f59e0b", "fill-opacity": 0.1 } }, before);
-  map.addLayer({ id: "them-area-line", type: "line", source: "them-area", paint: { "line-color": "#d97706", "line-opacity": 0.75, "line-width": 1.6, "line-dasharray": [2, 2] } }, before);
+  map.addLayer({ id: "them-area-fill", type: "fill", source: "them-area", paint: { "fill-color": "#1478a3", "fill-opacity": 0.08 } }, before);
+  map.addLayer({ id: "them-area-line", type: "line", source: "them-area", paint: { "line-color": "#1478a3", "line-opacity": 0.6, "line-width": 1.6, "line-dasharray": [2, 2] } }, before);
 
   // Fair-middle halo: soft concentric "reach" rings, the inner one breathes.
   map.addSource("halo", { type: "geojson", data: FC() });
-  map.addLayer({ id: "halo-fill", type: "fill", source: "halo", paint: { "fill-color": "#5fc4b4", "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, ["interpolate", ["linear"], ["get", "r"], 250, 0.32, 600, 0.16, 1100, 0.07], 16, ["interpolate", ["linear"], ["get", "r"], 250, 0.14, 600, 0.05, 1100, 0.0]] } }, before);
-  map.addLayer({ id: "halo-ring", type: "line", source: "halo", paint: { "line-color": "#0b7a6c", "line-width": 1, "line-opacity": 0.4, "line-dasharray": [1, 2] } }, before);
+  map.addLayer({ id: "halo-fill", type: "fill", source: "halo", paint: { "fill-color": "#ff9a3c", "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, ["interpolate", ["linear"], ["get", "r"], 250, 0.32, 600, 0.16, 1100, 0.07], 16, ["interpolate", ["linear"], ["get", "r"], 250, 0.14, 600, 0.05, 1100, 0.0]] } }, before);
+  map.addLayer({ id: "halo-ring", type: "line", source: "halo", paint: { "line-color": "#cf4a0c", "line-width": 1, "line-opacity": 0.4, "line-dasharray": [1, 2] } }, before);
 
   // Candidate hubs the agent compares.
   map.addSource("hubs", { type: "geojson", data: FC(HUBS.map((h, i) => ({ type: "Feature", properties: { i, name: h.name }, geometry: { type: "Point", coordinates: [h.lng, h.lat] } }))) });
   map.addLayer({ id: "hubs-glow", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 18, "circle-color": ACCENT, "circle-opacity": 0.0, "circle-blur": 0.8, "circle-pitch-alignment": "map" } });
-  map.addLayer({ id: "hubs-dot", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#ffffff", "circle-stroke-color": "#0e6e62", "circle-stroke-width": 2, "circle-opacity": 0.9 } });
+  map.addLayer({ id: "hubs-dot", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#ffffff", "circle-stroke-color": "#e8590c", "circle-stroke-width": 2, "circle-opacity": 0.9 } });
   map.addLayer({ id: "hubs-lit", type: "circle", source: "hubs", layout: { visibility: "none" }, filter: ["==", ["get", "i"], -1], paint: { "circle-radius": 8, "circle-color": ACCENT, "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } });
   map.addLayer({ id: "hubs-label", type: "symbol", source: "hubs", layout: { visibility: "none", "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-offset": [0, 1.2], "text-anchor": "top" }, paint: { "text-color": "#15171c", "text-halo-color": "#fff", "text-halo-width": 1.6 } });
 

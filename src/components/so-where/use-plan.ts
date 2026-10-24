@@ -8,7 +8,12 @@ export type PlanStatus = "idle" | "running" | "result" | "clarify";
 
 export type PlanState = {
   status: PlanStatus;
+  /** What the user asked (shown); never the accumulated server query. */
   query: string;
+  /** Accumulated server query (result.query / clarify query): sent back as previous.query next turn. */
+  ask: string;
+  /** One-sentence agent reply for refine turns (server `reply`). */
+  reply: string | null;
   steps: AgentStep[];
   result: PlanResultWithAgent | null;
   clarify: Clarify | null;
@@ -19,7 +24,7 @@ export type PlanState = {
   elapsedMs: number;
 };
 
-const EMPTY: PlanState = { status: "idle", query: "", steps: [], result: null, clarify: null, example: false, exampleReason: null, elapsedMs: 0 };
+const EMPTY: PlanState = { status: "idle", query: "", ask: "", reply: null, steps: [], result: null, clarify: null, example: false, exampleReason: null, elapsedMs: 0 };
 
 type Previous = { query: string; answer: string };
 
@@ -66,23 +71,28 @@ export function usePlan() {
     }
     await replay(fx.steps, signal);
     const total = fx.steps.reduce((a, s) => a + (s.ms ?? 0), 0);
-    setState((s) => ({ ...s, status: "result", steps: fx.steps, result: { ...fx, query: query || fx.query }, clarify: null, elapsedMs: total }));
+    setState((s) => ({ ...s, status: "result", steps: fx.steps, result: { ...fx, query: query || fx.query }, ask: query || fx.query, clarify: null, elapsedMs: total }));
   }, [replay]);
 
   /** `you` is the device location, already rounded to ~100 m by the caller; it is only sent, never stored here. */
-  const submit = useCallback(async (query: string, previous?: Previous, you?: { lat: number; lng: number }) => {
+  /** opts.refine = previous accumulated query → POST {mode:"refine", query, previous:{query}}; opts.display = ask kept on screen. */
+  const submit = useCallback(async (query: string, previous?: Previous, you?: { lat: number; lng: number }, opts?: { refine?: string; display?: string }) => {
     ctrl.current?.abort();
     const ac = new AbortController();
     ctrl.current = ac;
     const t0 = performance.now();
-    setState({ ...EMPTY, status: "running", query: previous?.query ?? query });
+    const refine = opts?.refine?.trim() || undefined;
+    setState({ ...EMPTY, status: "running", query: opts?.display ?? previous?.query ?? query, ask: refine ?? previous?.query ?? query });
 
     let gotTerminal = false;
     try {
       const res = await fetch("/api/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
-        body: JSON.stringify({ ...(previous ? { query: previous.query, answer: previous.answer, previous } : { query }), ...(you ? { you } : {}) }),
+        body: JSON.stringify({
+          ...(refine ? { mode: "refine", query, previous: { query: refine } } : previous ? { query: previous.query, answer: previous.answer, previous } : { query }),
+          ...(you ? { you } : {}),
+        }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) throw new Error(`/api/plan answered ${res.status}`);
@@ -95,11 +105,13 @@ export function usePlan() {
           setState((s) => ({ ...s, steps: upsert(s.steps, msg.step as AgentStep) }));
         } else if (msg.type === "result" && msg.result) {
           gotTerminal = true;
-          const result = msg.result as PlanResultWithAgent;
+          const result = msg.result as PlanResultWithAgent & { reply?: string };
           setState((s) => ({
             ...s,
             status: "result",
             result,
+            ask: typeof result.query === "string" && result.query ? result.query : s.ask,
+            reply: typeof result.reply === "string" && result.reply ? result.reply : null,
             clarify: null,
             steps: result.steps?.length ? result.steps : s.steps,
             elapsedMs: performance.now() - t0,
@@ -107,7 +119,7 @@ export function usePlan() {
         } else if (msg.type === "clarify" && msg.clarify) {
           gotTerminal = true;
           // The server returns the cumulative query on clarify; keep it so the next answer goes back as previous:{query, answer}.
-          setState((s) => ({ ...s, status: "clarify", query: typeof msg.query === "string" ? msg.query : s.query, clarify: msg.clarify as Clarify, elapsedMs: performance.now() - t0 }));
+          setState((s) => ({ ...s, status: "clarify", ask: typeof msg.query === "string" ? msg.query : s.ask, reply: typeof msg.reply === "string" ? msg.reply : null, clarify: msg.clarify as Clarify, elapsedMs: performance.now() - t0 }));
         }
       };
 
@@ -130,13 +142,13 @@ export function usePlan() {
       if ((err as Error)?.name === "AbortError" || ac.signal.aborted) return;
       if (gotTerminal) return;
       const reason = err instanceof Error ? err.message : "planner unavailable";
-      const ask = previous?.query ?? query;
+      const ask = refine ?? previous?.query ?? query;
       const id = pickFixture(ask);
       // The coffee example has no friend location: show the clarify turn first.
       const needsClarify = !previous && id === "meet" && !/she'?s|he'?s|they'?re|friend'?s? (?:at|in)|around/i.test(ask);
       setState((s) => ({ ...s, steps: [] }));
       try {
-        await playFixture(id, ask, reason, ac.signal, { clarify: needsClarify });
+        await playFixture(id, opts?.display ?? ask, reason, ac.signal, { clarify: needsClarify });
       } catch {
         /* aborted */
       }

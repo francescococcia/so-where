@@ -71,7 +71,7 @@ export function SendPlanDialog({ open, onOpenChange, draft }: { open: boolean; o
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   rows={4}
-                  className="sw-field mt-4 w-full resize-none p-3.5 text-[16px] leading-6 text-ink caret-sky focus:bg-surface focus:shadow-[0_0_0_1.5px_var(--sw-sky),var(--sw-shadow-focus)] focus:outline-none"
+                  className="sw-field mt-4 w-full resize-none p-3.5 text-[16px] leading-6 text-ink caret-signal focus:bg-surface focus:shadow-[0_0_0_1.5px_var(--sw-signal),var(--sw-shadow-focus)] focus:outline-none"
                 />
                 <div className="mt-4 flex justify-end gap-2">
                   {canShare ? (

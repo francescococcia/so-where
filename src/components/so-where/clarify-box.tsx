@@ -16,7 +16,7 @@ export function ClarifyBox({ clarify, onAnswer, onLocate }: { clarify: Clarify; 
       aria-label="One question first"
       className="relative overflow-hidden rounded-[16px] bg-white/80 p-4 pt-5 shadow-e3 ring-1 ring-signal/25"
     >
-      <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-signal via-sky/60 to-amber/80" />
+      <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#ff9a3c] via-signal to-signal-strong" />
       <div className="flex items-start gap-2.5">
         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-sky-soft text-sky-ink" aria-hidden><MessageCircleQuestion className="size-[18px]" /></span>
         <h2 className="pt-1 text-[17px] font-semibold leading-6 tracking-[-0.01em] text-ink">{clarify.question}</h2>
@@ -58,7 +58,7 @@ export function ClarifyBox({ clarify, onAnswer, onLocate }: { clarify: Clarify; 
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Or type it…"
-          className="sw-field h-11 min-w-0 flex-1 px-3 text-[16px] text-ink caret-sky placeholder:text-ink-3 focus:bg-surface focus:shadow-[0_0_0_1.5px_var(--sw-sky),var(--sw-shadow-focus)] focus:outline-none"
+          className="sw-field h-11 min-w-0 flex-1 px-3 text-[16px] text-ink caret-signal placeholder:text-ink-3 focus:bg-surface focus:shadow-[0_0_0_1.5px_var(--sw-signal),var(--sw-shadow-focus)] focus:outline-none"
         />
         <button type="submit" aria-label="Answer" className="sw-btn sw-btn-primary size-11 shrink-0 rounded-[12px]" disabled={!text.trim()}>
           <ArrowRight className="size-5" aria-hidden />

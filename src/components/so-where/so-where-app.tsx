@@ -77,7 +77,7 @@ function Filters({ f }: { f: PlanResultWithAgent["filters"] }) {
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 + i * 0.04 }}
-          className={cn("inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-medium", it.on ? "bg-sky-wash text-sky-ink ring-1 ring-sky/20" : "border border-dashed border-control text-ink-3")}
+          className={cn("inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-medium", it.on ? "bg-signal-soft text-signal-ink ring-1 ring-signal/25" : "border border-dashed border-control text-ink-3")}
         >
           {it.on ? <Check className="size-3.5" strokeWidth={2.6} aria-hidden /> : null}
           {it.label}
@@ -191,9 +191,9 @@ function RouteScan() {
           <path d="M24 64 C 90 64, 110 22, 180 24 S 270 66, 336 30" fill="none" stroke="var(--sw-control)" strokeWidth="3" strokeLinecap="round" />
           <path className="trace" d="M24 64 C 90 64, 110 22, 180 24 S 270 66, 336 30" fill="none" stroke="var(--sw-signal)" strokeWidth="3" strokeLinecap="round" />
           <circle cx="24" cy="64" r="6" fill="var(--sw-route-you)" stroke="#fff" strokeWidth="2.5" />
-          <circle cx="336" cy="30" r="6" fill="var(--sw-amber)" stroke="#fff" strokeWidth="2.5" />
+          <circle cx="336" cy="30" r="6" fill="var(--sw-route-them)" stroke="#fff" strokeWidth="2.5" />
         </svg>
-        <span className="dot absolute left-0 top-0 size-3 rounded-full bg-signal shadow-[0_0_0_4px_rgba(15,157,138,.25)]" style={{ offsetPath: "path('M24 64 C 90 64, 110 22, 180 24 S 270 66, 336 30')" } as React.CSSProperties} />
+        <span className="dot absolute left-0 top-0 size-3 rounded-full bg-signal shadow-[0_0_0_4px_rgba(255,107,44,.25)]" style={{ offsetPath: "path('M24 64 C 90 64, 110 22, 180 24 S 270 66, 336 30')" } as React.CSSProperties} />
       </div>
       <div className="sw-skel h-20 opacity-80" />
       <div className="sw-skel h-20 opacity-60" />
@@ -204,24 +204,6 @@ function RouteScan() {
 type Toast = { id: number; text: string };
 type Turn = { id: number; role: "user" | "agent"; text: string };
 
-const TIME_RE = /\b(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\b(?:at\s+)?([01]?\d|2[0-3]):([0-5]\d)\b|\bat\s+(\d{1,2})\b/i;
-
-/** Original ask + refinements. A new time replaces the old one; other tweaks stack. */
-function composeAsk(base: string, tweaks: string[]) {
-  let q = base.trim().replace(/[.\s]+$/, "");
-  const notes: string[] = [];
-  for (const t of tweaks) {
-    const m = t.match(TIME_RE);
-    if (m) {
-      q = q.replace(new RegExp(TIME_RE.source, "gi"), "").replace(/\s{2,}/g, " ").replace(/\s+([.,])/g, "$1").trim();
-      const time = m[3] ? `${m[1]}${m[2] ? `:${m[2]}` : ""}${m[3].toLowerCase()}` : m[4] ? `${m[4]}:${m[5]}` : `${m[6]}`;
-      q = `${q.replace(/[.\s]+$/, "")} at ${time}`;
-      const rest = t.replace(TIME_RE, "").replace(/\b(make it|change (?:it )?to|move (?:it )?to)\b/gi, "").replace(/[\s,.]+/g, " ").trim();
-      if (rest.length > 2) notes.push(rest);
-    } else notes.push(t.trim());
-  }
-  return notes.length ? `${q}. (refine: ${notes.join("; ")})` : `${q}.`;
-}
 
 function agentReply(prev: PlanResultWithAgent | null, next: PlanResultWithAgent) {
   const top = next.cards[0];
@@ -245,14 +227,14 @@ function MicButton({ listening, onClick, className, size = "md" }: { listening: 
       className={cn(
         "sw-btn relative shrink-0 rounded-full transition-colors",
         size === "md" ? "size-11" : "size-10",
-        listening ? "sw-mic-on bg-[linear-gradient(180deg,var(--sw-cta-a),var(--sw-cta-b))] text-[#2b1203]" : "text-ink-2 hover:bg-white/80 hover:text-ink",
+        listening ? "sw-mic-on bg-[linear-gradient(180deg,var(--sw-cta-a),var(--sw-cta-b))] text-white" : "text-ink-2 hover:bg-white/80 hover:text-ink",
         className
       )}
     >
       {listening ? (
         <span className="flex h-4 items-center gap-[3px]" aria-hidden>
           {[0, 1, 2, 3].map((i) => (
-            <motion.span key={i} className="w-[3px] rounded-full bg-[#2b1203]" animate={{ height: [5, 15, 7, 12, 5] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.12, ease: "easeInOut" }} />
+            <motion.span key={i} className="w-[3px] rounded-full bg-white" animate={{ height: [5, 15, 7, 12, 5] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.12, ease: "easeInOut" }} />
           ))}
         </span>
       ) : (
@@ -329,7 +311,6 @@ export function SoWhereApp() {
   const [pending, setPending] = useState<null | "ask" | "chat">(null);
   const pendingTimer = useRef<number | null>(null);
   const baseAsk = useRef("");
-  const tweaks = useRef<string[]>([]);
   const awaitingReply = useRef(false);
   const toastTimer = useRef<number | null>(null);
   const say = useCallback((text: string) => {
@@ -416,7 +397,7 @@ export function SoWhereApp() {
     if (result) {
       if (awaitingReply.current) {
         awaitingReply.current = false;
-        const text = agentReply(shown, result);
+        const text = state.reply || agentReply(shown, result);
         setTurns((t) => [...t, { id: Date.now(), role: "agent", text }]);
       }
       setShown(result);
@@ -427,6 +408,10 @@ export function SoWhereApp() {
   }, [result]);
   useEffect(() => {
     if (status === "clarify" || status === "idle") setRefining(false);
+    if (status === "clarify" && awaitingReply.current) {
+      awaitingReply.current = false;
+      if (state.reply) setTurns((t) => [...t, { id: Date.now(), role: "agent", text: state.reply! }]);
+    }
   }, [status]);
 
   const ask = useCallback(
@@ -438,7 +423,6 @@ export function SoWhereApp() {
       setShown(null);
       setTurns([]);
       baseAsk.current = text;
-      tweaks.current = [];
       awaitingReply.current = false;
       submit(text, undefined, you ?? undefined);
     },
@@ -470,18 +454,17 @@ export function SoWhereApp() {
       const text = extra.trim();
       if (!text) return;
       if (!baseAsk.current) baseAsk.current = state.query || query;
-      if (!baseAsk.current) return;
-      tweaks.current = [...tweaks.current, text];
-      const next = composeAsk(baseAsk.current, tweaks.current);
-      setQuery(next);
+      // Server refine mode: send only the short refinement + the accumulated query from the last result.
+      const prev = state.ask || state.result?.query || baseAsk.current;
+      if (!prev) return;
       setRefining(true);
       setDetailId(null);
       setTurns((t) => [...t, { id: Date.now(), role: "user", text: label ?? text }]);
       awaitingReply.current = true;
-      submit(next, undefined, you ?? undefined);
+      submit(text, undefined, you ?? undefined, { refine: prev, display: baseAsk.current });
       scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [state.query, query, submit, you]
+    [state.query, state.ask, state.result, query, submit, you]
   );
 
   // Voice: fill the box live; after a final result, send after a short pause unless cancelled.
@@ -622,7 +605,7 @@ export function SoWhereApp() {
                     }
                   }}
                   placeholder="Date Thursday at 7, I'm at Old Street, she's around Clapham…"
-                  className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink caret-sky transition-[height] duration-200 placeholder:text-ink-3 focus:outline-none"
+                  className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal transition-[height] duration-200 placeholder:text-ink-3 focus:outline-none"
                 />
                 {speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : null}
                 <motion.button
@@ -636,7 +619,7 @@ export function SoWhereApp() {
                   transition={{ type: "spring", stiffness: 520, damping: 26 }}
                   className="sw-btn sw-btn-primary size-11 shrink-0 rounded-[12px] transition-[box-shadow,background-color,color] "
                 >
-                  {status === "running" ? <span className="size-4 animate-spin rounded-full border-2 border-[#2b1203]/25 border-t-[#2b1203]" aria-hidden /> : <ArrowRight className="size-5" aria-hidden />}
+                  {status === "running" ? <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden /> : <ArrowRight className="size-5" aria-hidden />}
                 </motion.button>
               </motion.div>
               <div className="mt-2 flex items-center gap-2">
@@ -660,7 +643,7 @@ export function SoWhereApp() {
             <div className="mt-4 flex flex-col gap-4">
               {state.steps.length ? <AgentSteps steps={state.steps} finished={finished} elapsedMs={state.elapsedMs} /> : null}
 
-              {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={(answer) => submit(answer, { query: state.query, answer }, you ?? undefined)} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
+              {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={(answer) => submit(answer, { query: state.ask || state.query, answer }, you ?? undefined, { display: baseAsk.current || state.query })} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
 
               {view ? (
                 <motion.div key="results" className="flex flex-col gap-4" initial={{ opacity: 0 }} animate={{ opacity: refining && status === "running" ? 0.55 : 1 }} transition={{ duration: 0.3 }} aria-busy={status === "running"}>
@@ -737,7 +720,7 @@ export function SoWhereApp() {
                     placeholder={speech.listening && voiceTarget.current === "chat" ? "Listening…" : "Cheaper, quieter, make it 8pm…"}
                     autoComplete="off"
                     enterKeyHint="send"
-                    className="min-w-0 flex-1 bg-transparent py-2 text-[16px] leading-6 text-ink caret-sky placeholder:text-ink-3 focus:outline-none"
+                    className="min-w-0 flex-1 bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal placeholder:text-ink-3 focus:outline-none"
                   />
                   {speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : null}
                   <motion.button
@@ -748,7 +731,7 @@ export function SoWhereApp() {
                     whileTap={{ scale: 0.9 }}
                     className="sw-btn sw-btn-primary size-10 shrink-0 rounded-full"
                   >
-                    {status === "running" ? <span className="size-4 animate-spin rounded-full border-2 border-[#2b1203]/25 border-t-[#2b1203]" aria-hidden /> : <ArrowUp className="size-[18px]" aria-hidden />}
+                    {status === "running" ? <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden /> : <ArrowUp className="size-[18px]" aria-hidden />}
                   </motion.button>
                 </form>
                 <AnimatePresence>{pending === "chat" ? <PendingSend ms={PENDING_MS} onCancel={cancelPending} /> : null}</AnimatePresence>

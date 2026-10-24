@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { animate, AnimatePresence, motion, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from "motion/react";
-import { Accessibility, ArrowUpRight, Banknote, ChevronDown, Clock, CloudSun, Globe, HelpCircle, Map as MapIcon, Navigation, Send, TrainFront, X } from "lucide-react";
+import { Accessibility, ArrowUpRight, Banknote, ChevronDown, Clock, CloudSun, Globe, HelpCircle, Map as MapIcon, Navigation, Send, Sparkles, TrainFront, X } from "lucide-react";
 import type { Fact, PlanCard as Card, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { VerdictChip } from "./verdict-chip";
@@ -10,6 +10,7 @@ import { fmtAsOf, fmtTime, gmapsDirections } from "./format";
 import { WeatherIcon, weatherKind } from "./fact-icon";
 import { ROUTE, splitSubtitle } from "./plan-card";
 import { JourneySentence } from "./journey";
+import { PhotoHero, RatingSlot, placeMeta, whyHere } from "./place-photo";
 import { costAnswer, findFact, kindLabel, noTime, openAnswer, priceFact, shortUnknown } from "./answers";
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -32,7 +33,7 @@ function Row({ icon: Icon, label, fact }: { icon: typeof Clock; label: string; f
         <span className="min-w-0">
           <span className="block text-[13.5px] leading-5 text-ink"><span className="text-ink-3">{fact?.label ?? label} </span>{fact?.value ?? "—"}</span>
           {fact ? (
-            <span className={cn("num mt-0.5 h-5 items-center rounded-full bg-sky-wash px-2 font-mono text-[10.5px] text-sky-ink", show ? "inline-flex" : "hidden group-hover/row:inline-flex group-focus-visible/row:inline-flex")}>
+            <span className={cn("num mt-0.5 h-5 items-center rounded-full bg-sunk px-2 font-mono text-[10.5px] text-ink-2", show ? "inline-flex" : "hidden group-hover/row:inline-flex group-focus-visible/row:inline-flex")}>
               {fact.source}
               {fact.asOf ? ` · ${fmtAsOf(fact.asOf)}` : ""}
             </span>
@@ -79,8 +80,6 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
   const { lat, lng } = card.location;
   const osm = `https://www.openstreetmap.org/?mlat=${lat.toFixed(5)}&mlon=${lng.toFixed(5)}#map=18/${lat.toFixed(5)}/${lng.toFixed(5)}`;
   const citymapper = `https://citymapper.com/directions?endcoord=${lat.toFixed(5)}%2C${lng.toFixed(5)}&endname=${encodeURIComponent(card.name)}`;
-  // The pitch line only when it says something the tiles don't (travel time / opening).
-  const why = card.why && !/\bmin(ute)?s?\b|\bopen\b|\bwalk\b/i.test(card.why) ? card.why : null;
   const tiles: { label: string; value: string; dot?: string; tone?: string }[] = [
     ...card.legs.map((l) => ({ label: l.who === "you" ? "You" : "Them", value: `${l.minutes} min`, dot: ROUTE[l.who] })),
     ...(open.state === true ? [{ label: "Open at", value: fmtTime(result.when), tone: "text-ok" }] : open.state === false ? [{ label: "Closed at", value: fmtTime(result.when), tone: "text-amber-ink" }] : []),
@@ -89,14 +88,24 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-1.5 pr-10">
-          {label ? <span className="inline-flex h-6 items-center rounded-full bg-signal-soft px-2.5 text-[12px] font-semibold text-signal-ink">{label}</span> : null}
-          {example ? <span className="inline-flex h-6 items-center rounded-full bg-likely-bg px-2 text-[12px] font-semibold text-likely">Example</span> : null}
+      {/* Header: Google-Maps-style place card */}
+      <div className="flex flex-col gap-2.5">
+        <motion.div initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.45, ease }} className="pr-10 max-sm:pr-0">
+          <PhotoHero card={card} />
+        </motion.div>
+        <div>
+          <h2 className="text-[24px] font-bold leading-[1.1] tracking-[-0.025em] text-ink">{card.name}</h2>
+          <RatingSlot rating={(card as Card & { rating?: { value: number; count: number; source: string } }).rating} />
+          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13.5px] text-ink-2">
+            <span>{[placeMeta(result, card) || label, cost.fact && !/not listed/i.test(cost.text) ? cost.text : ""].filter(Boolean).join(" · ")}</span>
+            {example ? <span className="inline-flex h-5 items-center rounded-full bg-likely-bg px-2 text-[11.5px] font-semibold text-likely">Example</span> : null}
+          </p>
+          {address ? <p className="mt-0.5 text-[12.5px] text-ink-3">{address}</p> : null}
+          <motion.p {...item(0)} className="mt-2.5 flex gap-2 rounded-[12px] bg-signal-soft px-3 py-2 text-[13.5px] leading-5 text-ink">
+            <Sparkles className="mt-[3px] size-3.5 shrink-0 text-signal-ink" aria-hidden />
+            <span><span className="font-semibold text-signal-ink">Why here: </span>{whyHere(result, card)}</span>
+          </motion.p>
         </div>
-        <h2 className="mt-2 text-[24px] font-bold leading-[1.1] tracking-[-0.025em] text-ink">{card.name}</h2>
-        {address ? <p className="mt-1 text-[13.5px] text-ink-2">{address}</p> : null}
       </div>
 
       {/* Two actions */}
@@ -130,7 +139,6 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
         ))}
       </motion.ul>
 
-      {why ? <motion.p {...item(5)} className="text-[13.5px] leading-5 text-ink-2">{why}</motion.p> : null}
 
       {/* Checks, closed by default */}
       <motion.div {...item(6)} className="overflow-hidden rounded-[14px] bg-white/55 ring-1 ring-white/80">

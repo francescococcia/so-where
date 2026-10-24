@@ -23,7 +23,7 @@ function whenText(iso: string) {
 }
 
 /** "(near London Bridge station)" from the server draft, else nothing. */
-function nearStation(result: PlanResult, card: PlanCard) {
+export function nearStation(result: PlanResult, card: PlanCard) {
   const m = result.draftMessage.match(/\(near ([^)]+?)(?: station)?\)/i) ?? card.why.match(/\bfrom ([A-Z][\w' ]+?) station\b/);
   return m ? m[1].trim() : result.middle?.name ?? "";
 }

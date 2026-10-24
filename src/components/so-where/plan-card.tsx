@@ -1,9 +1,10 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ArrowUpRight, Banknote, Clock } from "lucide-react";
+import { Banknote, Clock } from "lucide-react";
 import type { Fact, PlanCard as Card, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
+import { PhotoThumb } from "./place-photo";
 import { CountUp, useTilt } from "./motion-bits";
 import { JourneySentence } from "./journey";
 import { costAnswer, openAnswer } from "./answers";
@@ -102,10 +103,10 @@ export function PlanCard({
       <button type="button" onClick={onOpen} onFocus={() => onHover(true)} onBlur={() => onHover(false)} aria-label={`Open details for ${card.name}`} className="block w-full cursor-pointer rounded-[18px] text-left focus-visible:outline-offset-[-2px]">
         {/* ticket stub */}
         <div className="grid grid-cols-[64px_1fr]">
-          <motion.div layoutId={`rank-${card.id}`} className={cn("relative flex flex-col items-center justify-between py-3.5 font-mono", index === 0 ? "bg-signal-strong text-white" : "bg-sky-soft text-sky-ink")}>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] opacity-70">No.</span>
+          <motion.div layoutId={`rank-${card.id}`} className={cn("relative flex flex-col items-center justify-between py-3.5 font-mono", index === 0 ? "bg-signal-strong text-white" : "bg-signal-soft text-signal-ink")}>
+            <span className={cn("text-[10px] font-semibold uppercase tracking-[0.16em]", index === 0 ? "opacity-95" : "opacity-70")}>No.</span>
             <span className="num text-[30px] font-bold leading-none tracking-[-0.04em]">{String(index + 1).padStart(2, "0")}</span>
-            <span className="text-[9.5px] font-semibold uppercase tracking-[0.12em] opacity-70">{index === 0 ? "Best" : card.kind}</span>
+            <span className={cn("text-[9.5px] font-semibold uppercase tracking-[0.12em]", index === 0 ? "opacity-95" : "opacity-70")}>{index === 0 ? "Best" : card.kind}</span>
             {/* perforation */}
             <span className="sw-perf absolute -right-[5px] inset-y-0 w-[10px]" aria-hidden />
           </motion.div>
@@ -116,7 +117,7 @@ export function PlanCard({
                 <motion.h3 layoutId={`name-${card.id}`} className="text-[18.5px] font-bold leading-[1.15] tracking-[-0.02em] text-ink">{card.name}</motion.h3>
                 {address ? <p className="mt-0.5 truncate text-[12.5px] text-ink-3">{address}</p> : null}
               </div>
-              <ArrowUpRight className="mt-1 size-5 shrink-0 text-ink-3 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-ink" aria-hidden />
+              <PhotoThumb card={card} className="size-[60px] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-[1.03]" />
             </div>
 
             <ul className="mt-2.5 flex flex-col gap-1.5">

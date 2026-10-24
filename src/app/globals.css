@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 /*
-  So where? — "Thames teal & apricot", ui4 light pass
+  So where? — warm orange accent (ui7; teal retired), ui4 light pass
   Warm off-white ground, frosted-glass floating surfaces, soft warm shadows for depth.
-  Thames teal = brand accent and primary action. Apricot = warm highlight and "them".
+  Orange = brand accent and primary action (white on the deep end). Sky = "them" and agent info.
   Sky = focus/selection. Red is only for meaning: TfL bus legs, official line colours, errors.
 */
 :root {
@@ -25,26 +25,26 @@
   --sw-ink-3: #62656c;       /* ≥4.5:1 on white, raised and tint */
 
   /* brand + secondary */
-  --sw-signal: #0f9d8a;      /* Thames teal: brand accent (decoration, rings, lines) */
-  --sw-signal-strong: #0b7a6c; /* teal behind white text: 5.2:1 */
-  --sw-signal-ink: #0a6b5f;  /* teal as text: 6.4:1 on white */
-  --sw-signal-soft: #ddf3ef;
+  --sw-signal: #ff6b2c;      /* ui7 orange: brand accent (decoration, rings, lines; never small text) */
+  --sw-signal-strong: #cf4a0c; /* deep orange behind white text: 4.5:1 */
+  --sw-signal-ink: #b93d0a;  /* orange as text: 5.6:1 on white, 5.0:1 on soft */
+  --sw-signal-soft: #ffede0;
   --sw-amber: #f59e0b;       /* apricot: highlights, "them" route (never text) */
   --sw-amber-ink: #92400e;   /* apricot as text: 7.1:1 */
   --sw-amber-soft: #fef1d8;
   --sw-err: #c62828;         /* errors only */
   --sw-err-soft: #fdeceb;
-  --sw-sky: #1478a3;         /* secondary: you, selection, focus (4.9:1 on white) */
+  --sw-sky: #1478a3;         /* secondary: "them", agent info (4.9:1 on white) */
   --sw-sky-ink: #0b5878;     /* sky as text on sky-soft (7:1) */
   --sw-sky-soft: #e3f2f8;
   --sw-sky-wash: #f1f8fb;
   --sw-hi: #ffd23f;          /* highlighter: the fair middle, sparingly, never text */
   --sw-hi-soft: #fff5d1;
-  --sw-route-you: #0e6e62;   /* teal ink */
-  --sw-route-them: var(--sw-amber);
+  --sw-route-you: #e8590c;   /* orange */
+  --sw-route-them: var(--sw-sky);
 
   /* verdicts: pale tint + dark ink of the same hue */
-  --sw-ok-bg: #ddf3e4;   --sw-ok: #0f5a2e;
+  --sw-ok-bg: #ffede0;   --sw-ok: #b93d0a; /* "good" is orange now (5.0:1 on ok-bg) */
   --sw-likely-bg: #fcefc7; --sw-likely: #6b4a00;
   --sw-unknown-bg: #ecebe6; --sw-unknown: #45474d;
   --sw-fc-bg: #dcebfa;   --sw-fc: #0d4a85;
@@ -55,8 +55,8 @@
   --sw-shadow-3: 0 2px 4px rgba(74, 52, 30, 0.05), 0 10px 22px -6px rgba(74, 52, 30, 0.13), 0 24px 44px -18px rgba(74, 52, 30, 0.18);
   --sw-shadow-4: 0 2px 6px rgba(74, 52, 30, 0.05), 0 18px 40px -12px rgba(74, 52, 30, 0.18), 0 44px 90px -28px rgba(74, 52, 30, 0.26);
   --sw-shadow-inset: inset 0 1px 2px rgba(74, 52, 30, 0.07), inset 0 0 0 1px rgba(74, 52, 30, 0.02);
-  --sw-shadow-focus: 0 0 0 3px rgba(20, 120, 163, 0.28);
-  --sw-shadow-red: 0 1px 2px rgba(11, 122, 108, 0.22), 0 8px 18px -6px rgba(15, 157, 138, 0.45); /* accent glow (name kept for class compat) */
+  --sw-shadow-focus: 0 0 0 3px rgba(255, 107, 44, 0.3);
+  --sw-shadow-red: 0 1px 2px rgba(207, 74, 12, 0.22), 0 8px 18px -6px rgba(255, 107, 44, 0.45); /* accent glow (name kept for class compat) */
   --sw-shadow-accent: var(--sw-shadow-red);
 
   /* glass */
@@ -147,8 +147,8 @@
 body { margin: 0; -webkit-font-smoothing: antialiased; }
 a { color: inherit; text-decoration: none; }
 ::selection { background: var(--sw-hi); color: var(--sw-ink); }
-:focus-visible { outline: 2px solid var(--sw-sky); outline-offset: 2px; }
-textarea:focus-visible { outline: none; }
+:focus-visible { outline: 2px solid var(--sw-signal-strong); outline-offset: 2px; }
+textarea:focus-visible, .sw-field input:focus-visible { outline: none; } /* the .sw-field wrapper draws the focus ring */
 .num { font-variant-numeric: tabular-nums; }
 
 /* ---------- map markers (DOM, outside React) ---------- */
@@ -179,7 +179,7 @@ textarea:focus-visible { outline: none; }
 .maplibregl-ctrl-attrib { font: 400 11px/1.4 var(--font-schibsted), sans-serif !important; background: rgba(255,255,255,.85) !important; }
 .maplibregl-ctrl-group { border-radius: 12px !important; box-shadow: var(--sw-shadow-2) !important; overflow: hidden; }
 .maplibregl-ctrl-group button { transition: background-color var(--sw-dur-1) ease; }
-.maplibregl-ctrl-group button:hover { background-color: var(--sw-sky-wash) !important; }
+.maplibregl-ctrl-group button:hover { background-color: var(--sw-signal-soft) !important; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
@@ -209,7 +209,7 @@ textarea:focus-visible { outline: none; }
 .sw-pin-stem { display: block; width: 3px; height: 14px; background: #b9b2a5; border-radius: 0 0 2px 2px; box-shadow: 0 3px 4px rgba(74,52,30,.25); }
 .sw-pin.is-on .sw-pin-head { background: var(--sw-signal-strong); box-shadow: 0 0 0 4px var(--sw-hi), 0 12px 24px -4px rgba(74,52,30,.38); }
 .sw-pin.is-hover .sw-pin-body { transform: translateY(-5px) scale(1.14); }
-.sw-pin.is-hover .sw-pin-head { box-shadow: 0 0 0 5px rgba(15,157,138,.25), 0 0 22px 4px rgba(15,157,138,.45), 0 14px 26px -4px rgba(74,52,30,.4); }
+.sw-pin.is-hover .sw-pin-head { box-shadow: 0 0 0 5px rgba(255,107,44,.25), 0 0 22px 4px rgba(255,107,44,.45), 0 14px 26px -4px rgba(74,52,30,.4); }
 .sw-pin.is-dim { opacity: .55; }
 .sw-pin.is-hover { z-index: 8; }
 .sw-pin { transition: opacity .2s ease; }
@@ -226,7 +226,7 @@ textarea:focus-visible { outline: none; }
 
 /* agent scanning: radar sweep over the map */
 .sw-scan { background: radial-gradient(circle at 62% 50%, transparent 0 18%, rgba(244,241,234,0) 18%, rgba(74,52,30,.08) 70%); }
-.sw-scan::before { content: ""; position: absolute; left: 62%; top: 50%; width: 140vmax; height: 140vmax; margin: -70vmax 0 0 -70vmax; background: conic-gradient(from 0deg, rgba(15,157,138,0) 0deg, rgba(15,157,138,.16) 40deg, rgba(15,157,138,0) 41deg); animation: sw-sweep 2.8s linear infinite; }
+.sw-scan::before { content: ""; position: absolute; left: 62%; top: 50%; width: 140vmax; height: 140vmax; margin: -70vmax 0 0 -70vmax; background: conic-gradient(from 0deg, rgba(255,107,44,0) 0deg, rgba(255,107,44,.16) 40deg, rgba(255,107,44,0) 41deg); animation: sw-sweep 2.8s linear infinite; }
 @media (max-width: 1023px) { .sw-scan::before { left: 50%; } }
 
 /* timeline shimmer on the running step */
@@ -237,8 +237,8 @@ textarea:focus-visible { outline: none; }
 .sw-card { box-shadow: var(--sw-shadow-1); transition: box-shadow var(--sw-dur-2) var(--sw-ease-out); will-change: transform; }
 .sw-card:hover, .sw-card.is-hover, .sw-card:focus-within { box-shadow: var(--sw-shadow-3); }
 .sw-card:active { box-shadow: var(--sw-shadow-2); }
-.sw-card.is-on { box-shadow: 0 0 0 2px var(--sw-sky), 0 0 0 6px rgba(20,120,163,.12), var(--sw-shadow-2); }
-.sw-card.is-on:hover, .sw-card.is-on.is-hover { box-shadow: 0 0 0 2px var(--sw-sky), 0 0 0 6px rgba(20,120,163,.12), var(--sw-shadow-3); }
+.sw-card.is-on { box-shadow: 0 0 0 2px var(--sw-signal), 0 0 0 6px rgba(255,107,44,.14), var(--sw-shadow-2); }
+.sw-card.is-on:hover, .sw-card.is-on.is-hover { box-shadow: 0 0 0 2px var(--sw-signal), 0 0 0 6px rgba(255,107,44,.14), var(--sw-shadow-3); }
 
 /* bus-blind headline: faint roller lines */
 .sw-blind::after, .sw-blind-grain { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(180deg, rgba(74,52,30,.025) 0 1px, transparent 1px 4px); }
@@ -268,18 +268,18 @@ textarea:focus-visible { outline: none; }
   .sw-btn:active:not(:disabled)::after { opacity: .14; transform: scale(1.4); transition-duration: 60ms; }
   .sw-btn:hover:not(:disabled) { transform: translateY(-1px); }
   .sw-btn:active:not(:disabled) { transform: translateY(0) scale(.97); transition-duration: var(--sw-dur-1); }
-  .sw-btn:focus-visible { outline: none; box-shadow: var(--sw-shadow-focus), 0 0 0 1px var(--sw-sky); }
+  .sw-btn:focus-visible { outline: none; box-shadow: var(--sw-shadow-focus), 0 0 0 1px var(--sw-signal); }
   .sw-btn:disabled { cursor: not-allowed; transform: none; box-shadow: none; }
   .sw-btn[aria-busy="true"] { cursor: progress; }
 
   .sw-btn-primary { background: var(--sw-signal-strong); color: #fff; box-shadow: var(--sw-shadow-red); }
-  .sw-btn-primary:hover:not(:disabled) { background: var(--sw-signal-ink); box-shadow: 0 1px 2px rgba(11,122,108,.22), 0 12px 24px -8px rgba(15,157,138,.6); }
+  .sw-btn-primary:hover:not(:disabled) { background: var(--sw-signal-ink); box-shadow: 0 1px 2px rgba(207,74,12,.22), 0 12px 24px -8px rgba(255,107,44,.6); }
   .sw-btn-primary:focus-visible { box-shadow: var(--sw-shadow-focus), var(--sw-shadow-red); }
   .sw-btn-primary:disabled { background: var(--sw-sunk); color: var(--sw-ink-3); }
 
   .sw-btn-quiet { background: var(--sw-surface); color: var(--sw-ink); box-shadow: 0 0 0 1px var(--sw-border), var(--sw-shadow-1); }
   .sw-btn-quiet:hover:not(:disabled) { box-shadow: 0 0 0 1px var(--sw-control), var(--sw-shadow-2); }
-  .sw-btn-quiet:focus-visible { box-shadow: var(--sw-shadow-focus), 0 0 0 1px var(--sw-sky); }
+  .sw-btn-quiet:focus-visible { box-shadow: var(--sw-shadow-focus), 0 0 0 1px var(--sw-signal); }
   .sw-btn-quiet:disabled { color: var(--sw-ink-3); opacity: .6; }
 
   .sw-btn-ghost { background: transparent; color: var(--sw-ink-2); }
@@ -295,8 +295,8 @@ textarea:focus-visible { outline: none; }
   }
   .sw-chip:hover:not(:disabled) { color: var(--sw-ink); transform: translateY(-1px); box-shadow: 0 0 0 1px var(--sw-control), var(--sw-shadow-2); }
   .sw-chip:active:not(:disabled) { transform: scale(.96); box-shadow: 0 0 0 1px var(--sw-control), var(--sw-shadow-1); transition-duration: var(--sw-dur-1); }
-  .sw-chip:focus-visible { outline: none; box-shadow: var(--sw-shadow-focus), 0 0 0 1px var(--sw-sky); }
-  .sw-chip[aria-pressed="true"] { color: var(--sw-signal-ink); box-shadow: 0 0 0 1px rgba(15,157,138,.4), var(--sw-shadow-1); }
+  .sw-chip:focus-visible { outline: none; box-shadow: var(--sw-shadow-focus), 0 0 0 1px var(--sw-signal); }
+  .sw-chip[aria-pressed="true"] { color: var(--sw-signal-ink); box-shadow: 0 0 0 1px rgba(255,107,44,.45), var(--sw-shadow-1); }
   .sw-chip:disabled { cursor: not-allowed; opacity: .5; box-shadow: 0 0 0 1px var(--sw-border); }
   .sw-chip[aria-busy="true"] { cursor: progress; }
 
@@ -307,8 +307,8 @@ textarea:focus-visible { outline: none; }
     transition: box-shadow var(--sw-dur-3) var(--sw-ease-out), background-color var(--sw-dur-2) ease;
   }
   .sw-field:hover { box-shadow: var(--sw-shadow-inset), 0 0 0 1px var(--sw-control); }
-  .sw-field:focus-within { background: var(--sw-surface); box-shadow: 0 0 0 1.5px var(--sw-sky), var(--sw-shadow-focus), var(--sw-shadow-2); }
-  .sw-field.is-typing:focus-within { box-shadow: 0 0 0 1.5px var(--sw-sky), 0 0 0 5px rgba(20,120,163,.16), 0 10px 28px -10px rgba(20,120,163,.35); }
+  .sw-field:focus-within { background: var(--sw-surface); box-shadow: 0 0 0 1.5px var(--sw-signal), var(--sw-shadow-focus), var(--sw-shadow-2); }
+  .sw-field.is-typing:focus-within { box-shadow: 0 0 0 1.5px var(--sw-signal), 0 0 0 5px rgba(255,107,44,.16), 0 10px 28px -10px rgba(255,107,44,.35); }
 
   /* lifted surfaces */
   .sw-elev-1 { box-shadow: var(--sw-shadow-1); }
@@ -319,7 +319,7 @@ textarea:focus-visible { outline: none; }
 
 /* skeleton shimmer while the planner works */
 .sw-skel { background: linear-gradient(100deg, var(--sw-sunk) 30%, #f8f5ef 50%, var(--sw-sunk) 70%); background-size: 220% 100%; animation: sw-skel 1.4s linear infinite; border-radius: var(--sw-radius-md); }
-.sw-caret::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 1px; vertical-align: -2px; background: var(--sw-sky); animation: sw-caret .9s steps(1) infinite; }
+.sw-caret::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 1px; vertical-align: -2px; background: var(--sw-signal); animation: sw-caret .9s steps(1) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .sw-btn, .sw-chip, .sw-card { transition: none !important; }
@@ -327,7 +327,7 @@ textarea:focus-visible { outline: none; }
   .sw-skel { animation: none !important; }
 }
 
-/* ================= ui4: Thames teal, frosted glass, more motion ================= */
+/* ================= ui4: frosted glass, more motion (ui7: accents now orange) ================= */
 @keyframes sw-bounce { 0% { transform: translateY(-46px) scale(.7); opacity: 0 } 45% { transform: translateY(0) scale(1.08, .9); opacity: 1 } 62% { transform: translateY(-9px) scale(.97, 1.04) } 78% { transform: translateY(0) scale(1.03, .97) } 90% { transform: translateY(-2px) } 100% { transform: none; opacity: 1 } }
 @keyframes sw-mesh { 0% { transform: translate3d(-6%, -4%, 0) rotate(0deg) scale(1) } 50% { transform: translate3d(5%, 3%, 0) rotate(8deg) scale(1.08) } 100% { transform: translate3d(-6%, -4%, 0) rotate(0deg) scale(1) } }
 @keyframes sw-scanline { 0% { stroke-dashoffset: 260 } 100% { stroke-dashoffset: 0 } }
@@ -352,19 +352,19 @@ textarea:focus-visible { outline: none; }
   .sw-glass-card { background: var(--sw-surface); }
 }
 
-/* pins: teal enamel, drop + bounce; selected gets an apricot ring */
+/* pins: orange enamel, drop + bounce; selected gets an apricot ring */
 .sw-pin-head { background: var(--sw-signal-strong); }
 .sw-pin.is-on .sw-pin-head { background: var(--sw-signal-ink); box-shadow: 0 0 0 4px var(--sw-amber), 0 0 24px 2px rgba(245,158,11,.45), 0 12px 24px -4px rgba(74,52,30,.38); }
 .sw-pin-body { animation-name: sw-bounce; animation-duration: .9s; animation-timing-function: ease-out; }
 .sw-pin.is-hover .sw-pin-body { transform: translateY(-9px) scale(1.16); }
 
-/* fair middle: apricot dot, teal pulse rings */
+/* fair middle: apricot dot, orange pulse rings */
 .sw-mid i { border-color: var(--sw-signal); border-width: 2.5px; }
 .sw-mid b { background: var(--sw-amber); box-shadow: 0 0 0 1.5px rgba(146,64,14,.35), 0 8px 18px -4px rgba(74,52,30,.35); }
 
 /* empty-state mesh behind the headline */
 .sw-mesh { position: absolute; inset: -40% -20%; pointer-events: none; z-index: 0; filter: blur(28px); opacity: .75;
-  background: radial-gradient(38% 46% at 22% 40%, rgba(15,157,138,.30), transparent 70%), radial-gradient(34% 40% at 72% 30%, rgba(245,158,11,.28), transparent 70%), radial-gradient(36% 44% at 55% 80%, rgba(20,120,163,.22), transparent 70%);
+  background: radial-gradient(38% 46% at 22% 40%, rgba(255,107,44,.30), transparent 70%), radial-gradient(34% 40% at 72% 30%, rgba(245,158,11,.28), transparent 70%), radial-gradient(36% 44% at 55% 80%, rgba(20,120,163,.22), transparent 70%);
   animation: sw-mesh 14s ease-in-out infinite; will-change: transform; }
 
 /* loading: route-scanning skeleton */
@@ -386,12 +386,12 @@ textarea:focus-visible { outline: none; }
 
 /* ui5: primary CTAs — light neon orange with a warm glow (deep-ink text: 8.7:1 → 5.5:1 across the gradient) */
 :root {
-  --sw-cta-a: #ff9a3c;
-  --sw-cta-b: #ff6b2c;
-  --sw-cta-ink: #2b1203;
+  --sw-cta-a: #e2560f;   /* ui7: deep end of the #FF9A3C→#FF6B2C family so white text holds ≥4.5:1 mid-button */
+  --sw-cta-b: #c2410c;
+  --sw-cta-ink: #ffffff;
   --sw-cta-glow: 0 0 0 1px rgba(255,107,44,.35), 0 6px 22px -4px rgba(255,122,44,.42), 0 0 26px rgba(255,140,60,.28);
   --sw-cta-glow-hi: 0 0 0 1px rgba(255,107,44,.5), 0 10px 30px -4px rgba(255,112,40,.58), 0 0 36px rgba(255,140,60,.45);
-  --sw-cta-inner: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -2px 6px rgba(200,60,0,.18);
+  --sw-cta-inner: inset 0 1px 0 rgba(255,180,120,.55), inset 0 -2px 6px rgba(120,30,0,.22);
 }
 .sw-btn-primary {
   background: linear-gradient(180deg, var(--sw-cta-a) 0%, var(--sw-cta-b) 100%);
@@ -421,10 +421,22 @@ textarea:focus-visible { outline: none; }
   transition: box-shadow 0.2s ease;
 }
 button.sw-map-chip:hover { box-shadow: 0 0 0 1px rgba(74, 52, 30, 0.1), 0 2px 4px rgba(74, 52, 30, 0.08), 0 16px 30px -12px rgba(74, 52, 30, 0.42); }
-button.sw-map-chip:focus-visible { outline: 2px solid var(--sw-sky); outline-offset: 2px; }
+button.sw-map-chip:focus-visible { outline: 2px solid var(--sw-signal-strong); outline-offset: 2px; }
 @media (forced-colors: active) { .sw-map-chip { border: 1px solid CanvasText; } }
 
 /* ui6: mic recording ring */
 @keyframes sw-mic-ring { 0% { box-shadow: 0 0 0 0 rgba(255, 107, 44, 0.55); } 100% { box-shadow: 0 0 0 14px rgba(255, 107, 44, 0); } }
 .sw-mic-on { animation: sw-mic-ring 1.2s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .sw-mic-on { animation: none; box-shadow: 0 0 0 3px rgba(255, 107, 44, 0.5); } }
+
+/* ================= ui7: place photos ================= */
+.sw-photo-fallback {
+  background:
+    radial-gradient(120% 90% at 85% 10%, rgba(255, 210, 160, .55), transparent 55%),
+    radial-gradient(90% 80% at 10% 100%, rgba(150, 40, 0, .35), transparent 60%),
+    linear-gradient(135deg, #ff9a3c 0%, #ff6b2c 55%, #cf4a0c 100%);
+}
+.sw-photo-fallback::after { content: ""; position: absolute; inset: 0; opacity: .18; background-image: radial-gradient(rgba(255,255,255,.9) 1px, transparent 1.2px); background-size: 12px 12px; }
+.sw-photo-skel { background: linear-gradient(100deg, var(--sw-sunk) 30%, #f8f4ee 50%, var(--sw-sunk) 70%); background-size: 220% 100%; animation: sw-photo-skel 1.3s ease-in-out infinite; }
+@keyframes sw-photo-skel { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .sw-photo-skel { animation: none; } }
