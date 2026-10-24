@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { PhotoThumb } from "./place-photo";
 import { CountUp, useTilt } from "./motion-bits";
 import { JourneySentence } from "./journey";
-import { TONE_CLASS, costAnswer, openAnswer } from "./answers";
+import { TONE_CLASS, costAnswer, cuisineChip, openAnswer } from "./answers";
 import { WeatherIcon, weatherKind } from "./fact-icon";
 
 export const WHO = { you: "You", them: "Them" } as const;
@@ -72,8 +72,9 @@ export function PlanCard({
   const wx = card.facts.find((f) => weatherKind(f));
   const open = openAnswer(card, when);
   const cost = costAnswer(card);
-  const answers: { key: string; icon: typeof Clock; text: string; tone: string; v?: Verdict; wx?: Fact }[] = [
-    ...(card.kind === "event" && open.state === null ? [] : [{ key: "open", icon: Clock, text: open.text, tone: TONE_CLASS[open.tone], v: open.fact?.verdict }]),
+  const cuisine = cuisineChip(card);
+  const answers: { key: string; icon: typeof Clock; text: string; tone: string; sub?: string; dim?: boolean; v?: Verdict; wx?: Fact }[] = [
+    ...(card.kind === "event" && open.state === null ? [] : [{ key: "open", icon: Clock, text: open.text, tone: TONE_CLASS[open.tone], sub: open.sub, dim: open.tone === "unknown", v: open.fact?.verdict }]),
     ...(cost.fact && !/not listed/i.test(cost.text) ? [{ key: "cost", icon: Banknote, text: cost.text, tone: "text-sky-ink", v: cost.fact.verdict }] : []),
     ...(wx ? [{ key: "wx", icon: Clock, text: wx.value, tone: "", v: wx.verdict, wx }] : []),
   ];
@@ -113,7 +114,10 @@ export function PlanCard({
           <div className="min-w-0 px-4 pb-3.5 pt-3">
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <p className="truncate font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-signal-ink">{type}</p>
+                <p className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-signal-ink">{type}</span>
+                  {cuisine ? <CuisineChip {...cuisine} /> : null}
+                </p>
                 <motion.h3 layoutId={`name-${card.id}`} className="text-[18.5px] font-bold leading-[1.15] tracking-[-0.02em] text-ink">{card.name}</motion.h3>
                 {address ? <p className="mt-0.5 truncate text-[12.5px] text-ink-3">{address}</p> : null}
               </div>
@@ -136,7 +140,10 @@ export function PlanCard({
               {answers.map((a) => (
                 <li key={a.key} className={cn("flex items-center gap-2 text-[13px] leading-5 text-ink", a.wx && "-mx-1.5 rounded-[8px] bg-raised px-1.5 py-0.5")}>
                   {a.wx ? <WeatherIcon fact={a.wx} className="-ml-0.5 size-[18px]" /> : <a.icon className={cn("size-3.5 shrink-0", a.tone)} aria-hidden />}
-                  <span className="min-w-0 truncate font-medium">{a.text}</span>
+                  <span className={cn("min-w-0 truncate font-medium", a.dim && "text-ink-3", a.key === "open" && a.tone === "text-amber-ink" && "text-amber-ink")}>
+                    {a.text}
+                    {a.sub ? <span className="num font-normal text-ink-3"> · {a.sub}</span> : null}
+                  </span>
                   {a.v ? <span title={a.v} className={cn("ml-auto size-1.5 shrink-0 rounded-full", V_DOT[a.v])} aria-label={a.v} /> : null}
                 </li>
               ))}
@@ -157,5 +164,17 @@ export function PlanCard({
         </div>
       </button>
     </motion.article>
+  );
+}
+
+/** Small cuisine chip ("Italian"); dashed when the server only infers it from the name. */
+export function CuisineChip({ text, likely }: { text: string; likely?: boolean }) {
+  return (
+    <span
+      title={likely ? `${text}, going by the name` : `${text} (OSM cuisine tag)`}
+      className={cn("inline-flex h-[18px] shrink-0 items-center rounded-full px-1.5 text-[11px] font-semibold leading-none", likely ? "border border-dashed border-signal/45 text-signal-ink" : "bg-signal-soft text-signal-ink ring-1 ring-signal/20")}
+    >
+      {text}
+    </span>
   );
 }

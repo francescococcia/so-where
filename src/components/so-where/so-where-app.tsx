@@ -258,8 +258,8 @@ function PendingSend({ onCancel, ms }: { onCancel: () => void; ms: number }) {
 }
 
 /** Light chat trail: what you asked, what changed. */
-function Trail({ turns }: { turns: Turn[] }) {
-  if (!turns.length) return null;
+function Trail({ turns, typing }: { turns: Turn[]; typing?: boolean }) {
+  if (!turns.length && !typing) return null;
   return (
     <ol className="flex flex-col gap-1.5" aria-label="Conversation">
       <AnimatePresence initial={false}>
@@ -282,6 +282,13 @@ function Trail({ turns }: { turns: Turn[] }) {
             )}
           </motion.li>
         ))}
+        {typing ? (
+          <motion.li key="typing" layout initial={{ opacity: 0, y: 8, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.15 } }} transition={{ type: "spring", stiffness: 420, damping: 30 }} className="flex justify-start">
+            <span role="status" aria-label="Agent is thinking" className="sw-typing inline-flex h-8 items-center gap-1 rounded-[16px] rounded-bl-[6px] bg-white/85 px-3.5 shadow-e1 ring-1 ring-white/80">
+              <i /><i /><i />
+            </span>
+          </motion.li>
+        ) : null}
       </AnimatePresence>
     </ol>
   );
@@ -458,14 +465,18 @@ export function SoWhereApp() {
       // Server refine mode: send only the short refinement + the accumulated query from the last result.
       const prev = state.ask || state.result?.query || baseAsk.current;
       if (!prev) return;
+      // Focus = the place the follow-up is about: the open detail card, else the top card.
+      const cards = (state.result ?? shown)?.cards ?? [];
+      const fc = cards.find((c) => c.id === detailId) ?? cards[0];
+      const focus = fc ? { id: fc.id, name: fc.name, lat: fc.location.lat, lng: fc.location.lng } : undefined;
       setRefining(true);
       setDetailId(null);
       setTurns((t) => [...t, { id: Date.now(), role: "user", text: label ?? text }]);
       awaitingReply.current = true;
-      submit(text, undefined, you ?? undefined, { refine: prev, display: baseAsk.current });
+      submit(text, undefined, you ?? undefined, { refine: prev, display: baseAsk.current, focus });
       scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [state.query, state.ask, state.result, query, submit, you]
+    [state.query, state.ask, state.result, shown, detailId, query, submit, you]
   );
 
   // Voice: fill the box live; after a final result, send after a short pause unless cancelled.
@@ -646,9 +657,9 @@ export function SoWhereApp() {
 
               {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={(answer) => submit(answer, { query: state.ask || state.query, answer }, you ?? undefined, { display: baseAsk.current || state.query })} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
 
+              {view ? <Trail turns={turns} typing={refining && status === "running"} /> : null}
               {view ? (
                 <motion.div key="results" className="flex flex-col gap-4" initial={{ opacity: 0 }} animate={{ opacity: refining && status === "running" ? 0.55 : 1 }} transition={{ duration: 0.3 }} aria-busy={status === "running"}>
-                  <Trail turns={turns} />
                   <Blind key={view.headline} result={view} />
                   <Filters f={view.filters} />
 

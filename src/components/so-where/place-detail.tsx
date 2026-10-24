@@ -8,11 +8,11 @@ import { cn } from "@/lib/utils";
 import { VerdictChip } from "./verdict-chip";
 import { fmtAsOf, fmtTime, gmapsDirections } from "./format";
 import { WeatherIcon, weatherKind } from "./fact-icon";
-import { ROUTE, splitSubtitle } from "./plan-card";
+import { CuisineChip, ROUTE, splitSubtitle } from "./plan-card";
 import { JourneySentence } from "./journey";
 import { useActiveSeg } from "./vehicles";
 import { PhotoHero, RatingSlot, placeMeta, whyHere } from "./place-photo";
-import { TONE_CLASS, costAnswer, findFact, kindLabel, noTime, openAnswer, priceFact, shortUnknown } from "./answers";
+import { TONE_CLASS, costAnswer, cuisineChip, hoursRow, findFact, kindLabel, noTime, openAnswer, priceFact, shortUnknown } from "./answers";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 const item = (i: number) => ({ initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35, delay: 0.08 + i * 0.04, ease } });
@@ -81,6 +81,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
   const hours = hoursRaw && !noTime(hoursRaw.value) ? hoursRaw : undefined;
   const open = openAnswer(card, result.when);
   const cost = costAnswer(card);
+  const cuisine = cuisineChip(card);
   const lines = findFact(card, /train|lines?$|status/i);
   const travel = findFact(card, /^travel/i);
   const weather = findFact(card, /weather|forecast/i) ?? card.facts.find((f) => f !== lines && f !== travel && weatherKind(f));
@@ -103,6 +104,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
       const soon = open.text.match(/^Closes soon(?: · (.+))?$/);
       if (soon) return [{ label: "Closes soon", value: soon[1] ?? fmtTime(result.when), tone: TONE_CLASS.soon }];
       if (until) return [{ label: "Open until", value: until, tone: TONE_CLASS.ok }];
+      if (open.text === "Open 24 hours") return [{ label: "Open", value: "24 hours", tone: TONE_CLASS.ok }];
       if (open.state === true) return [{ label: "Open at", value: fmtTime(result.when), tone: TONE_CLASS.ok }];
       if (open.state === false) return [{ label: "Closed at", value: fmtTime(result.when), tone: TONE_CLASS.closed }];
       return card.kind === "venue" ? [{ label: "Hours", value: "Not listed", tone: TONE_CLASS.unknown }] : [];
@@ -122,6 +124,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
           <RatingSlot rating={(card as Card & { rating?: { value: number; count: number; source: string } }).rating} />
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13.5px] text-ink-2">
             <span>{[placeMeta(result, card) || label, cost.fact && !/not listed/i.test(cost.text) ? cost.text : ""].filter(Boolean).join(" · ")}</span>
+            {cuisine ? <CuisineChip {...cuisine} /> : null}
             {example ? <span className="inline-flex h-5 items-center rounded-full bg-likely-bg px-2 text-[11.5px] font-semibold text-likely">Example</span> : null}
           </p>
           {address ? <p className="mt-0.5 text-[12.5px] text-ink-3">{address}</p> : null}
@@ -168,7 +171,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
             <motion.div key="checks" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease }} className="overflow-hidden">
               <div className="border-t border-white/80 px-3.5 pb-3 pt-1">
                 <ul className="flex flex-col">
-                  <Row icon={Clock} label="Opening hours" fact={hours} />
+                  <Row icon={Clock} label="Hours" fact={hoursRow(hours)} />
                   {signup ? <Row icon={Clock} label="When" fact={signup} /> : null}
                   <Row icon={TrainFront} label="Trains" fact={lines ?? travel} />
                   {lines && travel && travel.value !== lines.value ? <Row icon={Navigation} label="Travel" fact={travel} /> : null}
