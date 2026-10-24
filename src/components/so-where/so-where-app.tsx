@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, CalendarDays, Check, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, LocateFixed, Loader2, Navigation, PencilLine, Send, X } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, LocateFixed, Loader2, Navigation, PencilLine, Send, X } from "lucide-react";
 import type { Fact, PlanResultWithAgent } from "@/lib/plan-types";
 import type { FixtureId } from "@/lib/plan-fixture";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ import { VerdictChip } from "./verdict-chip";
 import { WeatherIcon, weatherKind } from "./fact-icon";
 import { fmtAsOf, fmtWhen, gmapsDirections } from "./format";
 import { usePlan } from "./use-plan";
+import { CountUp } from "./motion-bits";
 import type { MapPadding } from "./plan-map";
 
 const PlanMap = dynamic(() => import("./plan-map"), {
@@ -71,11 +72,11 @@ function LiveStrip({ facts }: { facts: Fact[] }) {
         {facts.map((f, i) => (
           <motion.div
             key={f.label + f.value}
-            initial={{ opacity: 0, x: 12 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, x: 16, scale: 0.92 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 12 }}
-            transition={{ delay: 0.9 + i * 0.1, duration: 0.3 }}
-            className="flex items-center gap-2 rounded-full bg-surface/95 py-1.5 pl-2 pr-3 text-[12.5px] shadow-e3 ring-1 ring-line/70 backdrop-blur"
+            transition={{ delay: 0.9 + i * 0.1, type: "spring", stiffness: 380, damping: 26 }}
+            className="sw-glass-chip flex items-center gap-2 rounded-full py-1.5 pl-2 pr-3 text-[12.5px] shadow-e3 ring-1 ring-white/70"
           >
             {weatherKind(f) ? (
               <WeatherIcon fact={f} />
@@ -132,7 +133,7 @@ const LEGEND = [
 
 function HowWeAnswer() {
   return (
-    <section aria-label="How we answer" className="mt-6 rounded-[16px] bg-tint p-4 shadow-e1 ring-1 ring-line/60">
+    <section aria-label="How we answer" className="mt-6 rounded-[16px] bg-tint/70 p-4 shadow-e1 ring-1 ring-white/70">
       <h2 className="text-[13px] font-semibold text-ink">Every fact gets a verdict</h2>
       <ul className="mt-2 flex flex-col gap-0.5">
         {LEGEND.map((l, i) => (
@@ -159,22 +160,77 @@ function HowWeAnswer() {
 function Blind({ result }: { result: PlanResultWithAgent }) {
   const words = result.headline.split(" ");
   return (
-    <div className="sw-blind relative overflow-hidden rounded-[16px] bg-tint py-3 pb-4 pl-5 pr-4 text-ink shadow-e2 ring-1 ring-line/70 [perspective:600px]">
+    <div className="sw-blind relative overflow-hidden rounded-[16px] bg-tint/80 py-3 pb-4 pl-5 pr-4 text-ink shadow-e2 ring-1 ring-line/70 [perspective:600px]">
       <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 bg-signal" />
       <p className="num font-mono text-[11.5px] font-semibold uppercase tracking-[0.08em] text-signal-ink">
         {fmtWhen(result.when)} · {INTENT_LABEL[result.intent] ?? result.intent}
       </p>
       <h2 className="relative mt-1.5 text-[24px] font-bold leading-[1.15] tracking-[-0.02em] text-balance">
-        {words.map((w, i) => (
-          <motion.span key={i + w} className="inline-block origin-[50%_0%]" initial={{ opacity: 0, rotateX: -95, y: -4 }} animate={{ opacity: 1, rotateX: 0, y: 0 }} transition={{ delay: 0.08 + i * 0.045, type: "spring", stiffness: 380, damping: 22 }}>
-            {w}
-            {i < words.length - 1 ? "\u00a0" : ""}
-          </motion.span>
-        ))}
+        {words.map((w, i) => {
+          const m = /^(\D*)(\d{1,3})(\D*)$/.exec(w);
+          return (
+            <motion.span key={i + w} className="inline-block origin-[50%_0%]" initial={{ opacity: 0, rotateX: -95, y: -4 }} animate={{ opacity: 1, rotateX: 0, y: 0 }} transition={{ delay: 0.08 + i * 0.045, type: "spring", stiffness: 380, damping: 22 }}>
+              {m ? (
+                <>
+                  {m[1]}
+                  <CountUp value={Number(m[2])} delay={0.25 + i * 0.045} duration={1.1} className="num text-signal-ink" />
+                  {m[3]}
+                </>
+              ) : (
+                w
+              )}
+              {i < words.length - 1 ? "\u00a0" : ""}
+            </motion.span>
+          );
+        })}
       </h2>
     </div>
   );
 }
+
+const HERO = "Where shall we meet?".split(" ");
+
+function Hero() {
+  return (
+    <div className="relative mb-4 isolate">
+      <div aria-hidden className="pointer-events-none absolute -inset-x-5 -top-6 bottom-[-12px] -z-10 overflow-hidden rounded-[22px]">
+        <div className="sw-mesh" />
+      </div>
+      <h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.025em] text-ink" aria-label="Where shall we meet?">
+        {HERO.map((w, i) => (
+          <motion.span key={w + i} aria-hidden className="inline-block" initial={{ opacity: 0, y: 18, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ delay: 0.25 + i * 0.07, type: "spring", stiffness: 320, damping: 24 }}>
+            {i === HERO.length - 1 ? <span className="text-signal-ink">{w}</span> : w}
+            {i < HERO.length - 1 ? "\u00a0" : ""}
+          </motion.span>
+        ))}
+      </h1>
+      <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.45, ease: [0.22, 1, 0.36, 1] }} className="mt-2 text-[14.5px] leading-[22px] text-ink-2">
+        Ask like you&apos;d text a friend. We check travel times, opening hours, live trains and the weather, and tell you what we couldn&apos;t check.
+      </motion.p>
+    </div>
+  );
+}
+
+/** Loading: a little route being traced between two stops while the planner works. */
+function RouteScan() {
+  return (
+    <div className="flex flex-col gap-2.5" aria-hidden>
+      <div className="sw-glint relative h-[88px] overflow-hidden rounded-[16px] bg-white/60 shadow-e1 ring-1 ring-white/70">
+        <svg viewBox="0 0 360 88" className="sw-scanroute absolute inset-0 h-full w-full" preserveAspectRatio="none">
+          <path d="M24 64 C 90 64, 110 22, 180 24 S 270 66, 336 30" fill="none" stroke="var(--sw-control)" strokeWidth="3" strokeLinecap="round" />
+          <path className="trace" d="M24 64 C 90 64, 110 22, 180 24 S 270 66, 336 30" fill="none" stroke="var(--sw-signal)" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="24" cy="64" r="6" fill="var(--sw-route-you)" stroke="#fff" strokeWidth="2.5" />
+          <circle cx="336" cy="30" r="6" fill="var(--sw-amber)" stroke="#fff" strokeWidth="2.5" />
+        </svg>
+        <span className="dot absolute left-0 top-0 size-3 rounded-full bg-signal shadow-[0_0_0_4px_rgba(15,157,138,.25)]" style={{ offsetPath: "path('M24 64 C 90 64, 110 22, 180 24 S 270 66, 336 30')" } as React.CSSProperties} />
+      </div>
+      <div className="sw-skel h-20 opacity-80" />
+      <div className="sw-skel h-20 opacity-60" />
+    </div>
+  );
+}
+
+type Toast = { id: number; text: string };
 
 export function SoWhereApp({ testedN }: { testedN: number | null }) {
   const reduced = !!useReducedMotion();
@@ -192,6 +248,15 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
   const typeTimer = useRef<number | null>(null);
   const pulseTimer = useRef<number | null>(null);
   const [typing, setTyping] = useState(false);
+  const [refining, setRefining] = useState(false);
+  const [shown, setShown] = useState<PlanResultWithAgent | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const toastTimer = useRef<number | null>(null);
+  const say = useCallback((text: string) => {
+    setToast({ id: Date.now(), text });
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2400);
+  }, []);
 
   // Glow while text is going in (typed by hand or by a suggestion chip).
   const pulse = useCallback(() => {
@@ -267,13 +332,24 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
   useEffect(() => {
     setSelectedId(result?.cards[0]?.id ?? null);
     setDetailId(null);
+    if (result) {
+      setShown(result);
+      if (refining) say("Picks updated");
+    }
+    if (status !== "running") setRefining(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
+  useEffect(() => {
+    if (status === "clarify" || status === "idle") setRefining(false);
+  }, [status]);
 
   const ask = useCallback(
     (q: string) => {
       stopTyping();
       const text = q.trim();
       if (!text) return;
+      setRefining(false);
+      setShown(null);
       submit(text, undefined, you ?? undefined);
     },
     [submit, you, stopTyping]
@@ -292,11 +368,12 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
         const r = (n: number) => Math.round(n * 1000) / 1000;
         setYou({ lat: r(p.coords.latitude), lng: r(p.coords.longitude) });
         setLocating("idle");
+        say("Location on · rounded to ~100 m");
       },
       () => setLocating("denied"),
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
     );
-  }, [you]);
+  }, [you, say]);
 
   const refine = useCallback(
     (extra: string) => {
@@ -304,10 +381,12 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
       if (!base) return;
       const next = `${base.replace(/\s*\(refine:.*\)$/i, "")} (refine: ${extra})`;
       setQuery(next);
+      setRefining(true);
+      say(`Re-checking: ${extra}`);
       submit(next, undefined, you ?? undefined);
       scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [state.query, query, submit, you]
+    [state.query, query, submit, you, say]
   );
 
   const openDetail = useCallback((id: string) => {
@@ -325,6 +404,8 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
     inputRef.current?.select();
   };
 
+  // While a follow-up chip re-asks, keep the previous picks on screen (dimmed) so new results can animate into place.
+  const view = status === "result" ? result : refining ? shown : null;
   const selected = result?.cards.find((c) => c.id === selectedId) ?? result?.cards[0];
   const detail = result?.cards.find((c) => c.id === detailId) ?? null;
   const finished = status === "result" || status === "clarify";
@@ -332,17 +413,17 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
   return (
     <MotionConfig reducedMotion="user">
       <main className="relative min-h-dvh bg-ground lg:h-dvh lg:overflow-hidden">
-        <Header example={state.example} testedN={testedN} className="sticky top-0 z-20 bg-ground px-4 py-3 lg:hidden" />
+        <Header example={state.example} testedN={testedN} className="sticky top-0 z-20 bg-ground/75 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 lg:hidden" />
 
         {/* Map: on top on phones, full-bleed behind the panel on desktop */}
         <div className="relative h-[46svh] min-h-[300px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto">
-          <PlanMap result={result} selectedId={selectedId} hoverId={hoverId} focusId={detailId} scanning={status === "running"} onSelect={select} onHover={setHoverId} padding={padding} reduced={reduced} />
+          <PlanMap result={result ?? (refining ? shown : null)} selectedId={selectedId} hoverId={hoverId} focusId={detailId} scanning={status === "running"} onSelect={select} onHover={setHoverId} padding={padding} reduced={reduced} />
           <div className="pointer-events-none absolute right-3 top-3 z-10 lg:right-4 lg:top-4">
             <LiveStrip facts={liveFacts(result, selectedId)} />
           </div>
           {state.example ? (
             <div className="pointer-events-none absolute bottom-4 left-[476px] z-10 hidden lg:block">
-              <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-likely-bg px-2.5 text-[12px] font-semibold text-likely shadow-e3 ring-1 ring-likely/15">
+              <span className="sw-glass-chip inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold text-likely shadow-e3 ring-1 ring-white/70">
                 <FlaskConical className="size-3.5" aria-hidden /> Example<span className="max-sm:hidden"> data</span> · not live
               </span>
             </div>
@@ -350,18 +431,16 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
         </div>
 
         {/* Plan panel */}
-        <aside className="relative z-10 -mt-5 flex flex-col rounded-t-[22px] bg-surface shadow-[0_-12px_30px_-14px_rgba(74,52,30,0.22)] lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:mt-0 lg:w-[444px] lg:rounded-[22px] lg:shadow-e4 lg:ring-1 lg:ring-line/60">
+        <motion.aside
+          initial={{ opacity: 0, x: -28, scale: 0.985 }}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 220, damping: 28, delay: 0.05 }}
+          className="sw-glass relative z-10 -mt-5 flex flex-col rounded-t-[22px] lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:mt-0 lg:w-[444px] lg:rounded-[22px]"
+        >
           <div ref={scrollRef} className="flex-1 px-4 pb-6 pt-4 lg:overflow-y-auto lg:px-5 lg:pt-5">
             <Header example={state.example} testedN={testedN} className="mb-5 hidden lg:flex" />
 
-            {status === "idle" ? (
-              <div className="mb-4">
-                <h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.025em] text-ink">Where shall we meet?</h1>
-                <p className="mt-2 text-[14.5px] leading-[22px] text-ink-2">
-                  Ask like you&apos;d text a friend. We check travel times, opening hours, live trains and the weather, and tell you what we couldn&apos;t check.
-                </p>
-              </div>
-            ) : null}
+            {status === "idle" ? <Hero /> : null}
 
             {/* Ask */}
             <form
@@ -371,11 +450,14 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
               }}
             >
               <div className="-mx-1 mb-2.5 flex flex-wrap gap-1.5 px-1" role="group" aria-label="Quick starts">
-                {CHIPS.map((c) => {
+                {CHIPS.map((c, ci) => {
                   const on = activeChip === c.id;
                   return (
-                    <button
+                    <motion.button
                       key={c.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.92 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ delay: 0.35 + ci * 0.06, type: "spring", stiffness: 420, damping: 26 }}
                       type="button"
                       disabled={status === "running"}
                       onClick={() => {
@@ -385,10 +467,10 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                       aria-pressed={on}
                       className="sw-chip min-h-9 px-3 text-[13px] font-medium max-lg:min-h-11"
                     >
-                      {on ? <motion.span layoutId="chip-on" className="absolute inset-0 -z-10 rounded-full bg-sky-soft" transition={{ type: "spring", stiffness: 500, damping: 36 }} /> : null}
-                      <c.Icon className={cn("size-4 transition-colors", on ? "text-sky" : "text-ink-3")} aria-hidden />
+                      {on ? <motion.span layoutId="chip-on" className="absolute inset-0 -z-10 rounded-full bg-signal-soft" transition={{ type: "spring", stiffness: 500, damping: 36 }} /> : null}
+                      <c.Icon className={cn("size-4 transition-colors", on ? "text-signal-ink" : "text-ink-3")} aria-hidden />
                       <span>{c.label}</span>
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
@@ -434,9 +516,9 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                   onClick={locate}
                   aria-pressed={!!you}
                   aria-busy={locating === "busy"}
-                  className={cn("sw-chip min-h-9 shrink-0 px-3 text-[12.5px] font-semibold max-lg:min-h-11", you && "bg-sky-soft")}
+                  className={cn("sw-chip min-h-9 shrink-0 px-3 text-[12.5px] font-semibold max-lg:min-h-11", you && "bg-signal-soft")}
                 >
-                  {locating === "busy" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <LocateFixed className={cn("size-3.5", you ? "text-sky" : "text-ink-3")} aria-hidden />}
+                  {locating === "busy" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <LocateFixed className={cn("size-3.5", you ? "text-signal-ink" : "text-ink-3")} aria-hidden />}
                   {you ? "Using your location · ~100 m" : "Use my location"}
                   {you ? <X className="size-3.5" aria-label="Stop using location" /> : null}
                 </button>
@@ -462,35 +544,35 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
 
               {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={(answer) => submit(answer, { query: state.query, answer }, you ?? undefined)} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
 
-              {status === "result" && result ? (
-                <motion.div key={result.headline} className="flex flex-col gap-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                  <Blind result={result} />
-                  <Filters f={result.filters} />
+              {view ? (
+                <motion.div key="results" className="flex flex-col gap-4" initial={{ opacity: 0 }} animate={{ opacity: refining && status === "running" ? 0.55 : 1 }} transition={{ duration: 0.3 }} aria-busy={status === "running"}>
+                  <Blind key={view.headline} result={view} />
+                  <Filters f={view.filters} />
 
                   <div ref={(n) => { if (n) cardRefs.current.set("__results", n); }} className="scroll-mt-20 lg:scroll-mt-4">
                     <LayoutGroup>
                       <AnimatePresence mode="popLayout" initial={false}>
-                        {detail ? (
+                        {detail && result ? (
                           <PlaceDetail key="detail" card={detail} index={result.cards.indexOf(detail)} result={result} example={state.example} onClose={() => setDetailId(null)} onSend={() => setSendOpen(true)} />
                         ) : (
-                          <motion.div key="list" className="flex flex-col gap-3" exit={{ opacity: 0 }}>
-                            {result.cards.slice(0, 3).map((c, i) => (
-                              <PlanCard key={c.id} card={c} index={i} when={result.when} selected={c.id === selected?.id} hovered={c.id === hoverId} onOpen={() => openDetail(c.id)} onHover={(on) => setHoverId(on ? c.id : null)} />
+                          <motion.div key="list" layout className="flex flex-col gap-3" exit={{ opacity: 0 }}>
+                            {view.cards.slice(0, 3).map((c, i) => (
+                              <PlanCard key={c.id} card={c} index={i} when={view.when} selected={c.id === selected?.id} hovered={c.id === hoverId} onOpen={() => openDetail(c.id)} onHover={(on) => setHoverId(on ? c.id : null)} />
                             ))}
-                            {!result.cards.length ? <p className="rounded-[14px] bg-tint p-4 text-[14px] text-ink-2 shadow-e1">Nothing matched. Try a wider area or a different time.</p> : null}
+                            {!view.cards.length ? <p className="rounded-[14px] bg-tint p-4 text-[14px] text-ink-2 shadow-e1">Nothing matched. Try a wider area or a different time.</p> : null}
                           </motion.div>
                         )}
                       </AnimatePresence>
                     </LayoutGroup>
                   </div>
 
-                  <FollowUps intent={result.intent} onRefine={refine} disabled={false} />
+                  <FollowUps intent={view.intent} onRefine={refine} disabled={status === "running"} />
 
-                  {result.unknowns.length && !detail ? (
+                  {view.unknowns.length && !detail ? (
                     <section aria-label="Couldn't check" className="rounded-[14px] border border-dashed border-control bg-raised/60 p-3.5">
                       <h3 className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">Couldn&apos;t check</h3>
                       <ul className="mt-1.5 flex flex-col gap-1">
-                        {result.unknowns.map((u) => (
+                        {view.unknowns.map((u) => (
                           <li key={u} className="flex items-start gap-2 text-[13px] leading-5 text-ink-2">
                             <HelpCircle className="mt-0.5 size-3.5 shrink-0 text-unknown" aria-hidden />
                             {u}
@@ -502,20 +584,14 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
 
                   <footer className="text-[11.5px] leading-[17px] text-ink-3">
                     <p className="num font-mono">
-                      {result.sources.map((s) => `${s.name} ${fmtAsOf(s.asOf)}`).join(" · ")}
+                      {view.sources.map((s) => `${s.name} ${fmtAsOf(s.asOf)}`).join(" · ")}
                     </p>
                     <p className="mt-1">Map data © OpenStreetMap contributors · tiles OpenFreeMap · Powered by TfL Open Data · Weather: Open-Meteo (CC BY 4.0)</p>
                   </footer>
                 </motion.div>
               ) : null}
 
-              {status === "running" && !state.steps.length ? (
-                <div className="flex flex-col gap-2.5" aria-hidden>
-                  <div className="sw-skel h-11" />
-                  <div className="sw-skel h-24" />
-                  <div className="sw-skel h-24 opacity-70" />
-                </div>
-              ) : null}
+              {status === "running" && !refining ? <RouteScan /> : null}
             </div>
           </div>
 
@@ -527,9 +603,9 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 24, opacity: 0 }}
                 transition={{ delay: 0.3, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className="sticky bottom-0 flex gap-2 border-t border-rule bg-surface/95 px-4 py-3 shadow-[0_-10px_24px_-18px_rgba(74,52,30,0.35)] backdrop-blur lg:rounded-b-[22px] lg:px-5"
+                className="sticky bottom-0 flex gap-2 border-t border-white/70 bg-white/85 px-4 py-3 shadow-[0_-10px_24px_-18px_rgba(74,52,30,0.35)] backdrop-blur-xl backdrop-saturate-150 lg:rounded-b-[22px] lg:px-5"
               >
-                <button type="button" onClick={() => setSendOpen(true)} className="sw-btn sw-btn-primary min-h-11 flex-1 whitespace-nowrap rounded-[12px] px-4 text-[15px] font-semibold">
+                <button type="button" onClick={() => { setSendOpen(true); say("Draft ready · nothing is sent"); }} className="sw-btn sw-btn-primary min-h-11 flex-1 whitespace-nowrap rounded-[12px] px-4 text-[15px] font-semibold">
                   <Send className="size-4" aria-hidden /> Send plan
                 </button>
                 {selected ? (
@@ -543,7 +619,25 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
               </motion.div>
             ) : null}
           </AnimatePresence>
-        </aside>
+          {/* micro confirmations */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-[84px] z-30 flex justify-center" role="status" aria-live="polite">
+            <AnimatePresence>
+              {toast ? (
+                <motion.div
+                  key={toast.id}
+                  initial={{ opacity: 0, y: 14, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 480, damping: 30 }}
+                  className="sw-glass-chip inline-flex max-w-[90%] items-center gap-2 rounded-full px-3.5 py-2 text-[13px] font-semibold text-ink shadow-e3 ring-1 ring-white/70"
+                >
+                  <CheckCircle2 className="size-4 shrink-0 text-signal-ink" aria-hidden />
+                  <span className="truncate">{toast.text}</span>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+        </motion.aside>
 
         {result ? <SendPlanDialog open={sendOpen} onOpenChange={setSendOpen} draft={result.draftMessage} /> : null}
       </main>

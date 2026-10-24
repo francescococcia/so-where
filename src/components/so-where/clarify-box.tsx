@@ -14,9 +14,9 @@ export function ClarifyBox({ clarify, onAnswer, onLocate }: { clarify: Clarify; 
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       aria-label="One question first"
-      className="relative overflow-hidden rounded-[16px] bg-surface p-4 pt-5 shadow-e3 ring-1 ring-sky/25"
+      className="relative overflow-hidden rounded-[16px] bg-white/80 p-4 pt-5 shadow-e3 ring-1 ring-signal/25"
     >
-      <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky via-sky/60 to-signal/70" />
+      <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-signal via-sky/60 to-amber/80" />
       <div className="flex items-start gap-2.5">
         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-sky-soft text-sky-ink" aria-hidden><MessageCircleQuestion className="size-[18px]" /></span>
         <h2 className="pt-1 text-[17px] font-semibold leading-6 tracking-[-0.01em] text-ink">{clarify.question}</h2>

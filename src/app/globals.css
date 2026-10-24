@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 /*
-  So where? — "Portland stone & bus red", ui3 light pass
-  Warm off-white ground, white floating surfaces, soft warm shadows for depth.
-  Bus red = brand accent and primary action. Sky = secondary (you, focus, selection).
-  Highlighter yellow = the fair middle only. Ink is for text, never for big blocks.
+  So where? — "Thames teal & apricot", ui4 light pass
+  Warm off-white ground, frosted-glass floating surfaces, soft warm shadows for depth.
+  Thames teal = brand accent and primary action. Apricot = warm highlight and "them".
+  Sky = focus/selection. Red is only for meaning: TfL bus legs, official line colours, errors.
 */
 :root {
   color-scheme: light;
@@ -25,18 +25,23 @@
   --sw-ink-3: #62656c;       /* ≥4.5:1 on white, raised and tint */
 
   /* brand + secondary */
-  --sw-signal: #e1251b;      /* bus red: brand accent, pins, their route */
-  --sw-signal-strong: #cf2017; /* red behind white text: 5.0:1 */
-  --sw-signal-ink: #b81d14;  /* red as text */
-  --sw-signal-soft: #fdeae7;
+  --sw-signal: #0f9d8a;      /* Thames teal: brand accent (decoration, rings, lines) */
+  --sw-signal-strong: #0b7a6c; /* teal behind white text: 5.2:1 */
+  --sw-signal-ink: #0a6b5f;  /* teal as text: 6.4:1 on white */
+  --sw-signal-soft: #ddf3ef;
+  --sw-amber: #f59e0b;       /* apricot: highlights, "them" route (never text) */
+  --sw-amber-ink: #92400e;   /* apricot as text: 7.1:1 */
+  --sw-amber-soft: #fef1d8;
+  --sw-err: #c62828;         /* errors only */
+  --sw-err-soft: #fdeceb;
   --sw-sky: #1478a3;         /* secondary: you, selection, focus (4.9:1 on white) */
   --sw-sky-ink: #0b5878;     /* sky as text on sky-soft (7:1) */
   --sw-sky-soft: #e3f2f8;
   --sw-sky-wash: #f1f8fb;
   --sw-hi: #ffd23f;          /* highlighter: the fair middle, sparingly, never text */
   --sw-hi-soft: #fff5d1;
-  --sw-route-you: var(--sw-sky);
-  --sw-route-them: var(--sw-signal);
+  --sw-route-you: #0e6e62;   /* teal ink */
+  --sw-route-them: var(--sw-amber);
 
   /* verdicts: pale tint + dark ink of the same hue */
   --sw-ok-bg: #ddf3e4;   --sw-ok: #0f5a2e;
@@ -51,7 +56,15 @@
   --sw-shadow-4: 0 2px 6px rgba(74, 52, 30, 0.05), 0 18px 40px -12px rgba(74, 52, 30, 0.18), 0 44px 90px -28px rgba(74, 52, 30, 0.26);
   --sw-shadow-inset: inset 0 1px 2px rgba(74, 52, 30, 0.07), inset 0 0 0 1px rgba(74, 52, 30, 0.02);
   --sw-shadow-focus: 0 0 0 3px rgba(20, 120, 163, 0.28);
-  --sw-shadow-red: 0 1px 2px rgba(184, 29, 20, 0.2), 0 8px 18px -6px rgba(225, 37, 27, 0.45);
+  --sw-shadow-red: 0 1px 2px rgba(11, 122, 108, 0.22), 0 8px 18px -6px rgba(15, 157, 138, 0.45); /* accent glow (name kept for class compat) */
+  --sw-shadow-accent: var(--sw-shadow-red);
+
+  /* glass */
+  --sw-glass: rgba(255, 255, 255, 0.78);
+  --sw-glass-strong: rgba(255, 255, 255, 0.86);
+  --sw-glass-card: rgba(255, 255, 255, 0.82);
+  --sw-glass-blur: blur(18px) saturate(140%);
+  --sw-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
   --sw-shadow-float: var(--sw-shadow-3);
 
   /* shape */
@@ -94,6 +107,13 @@
   --color-signal-strong: var(--sw-signal-strong);
   --color-signal-ink: var(--sw-signal-ink);
   --color-signal-soft: var(--sw-signal-soft);
+  --color-amber: var(--sw-amber);
+  --color-amber-ink: var(--sw-amber-ink);
+  --color-amber-soft: var(--sw-amber-soft);
+  --color-err: var(--sw-err);
+  --color-err-soft: var(--sw-err-soft);
+  --color-you: var(--sw-route-you);
+  --color-them: var(--sw-route-them);
   --color-sky: var(--sw-sky);
   --color-sky-ink: var(--sw-sky-ink);
   --color-sky-soft: var(--sw-sky-soft);
@@ -114,6 +134,7 @@
   --shadow-e4: var(--sw-shadow-4);
   --shadow-focus: var(--sw-shadow-focus);
   --shadow-red: var(--sw-shadow-red);
+  --shadow-accent: var(--sw-shadow-red);
   --inset-shadow-well: var(--sw-shadow-inset);
   --radius-sw-sm: var(--sw-radius-sm);
   --radius-sw-md: var(--sw-radius-md);
@@ -148,8 +169,8 @@ textarea:focus-visible { outline: none; }
 .sw-tag small { display: block; font: 400 11.5px/1.35 var(--font-geist-mono), monospace; color: var(--sw-ink-3); margin-top: 1px; }
 
 .sw-you { position: relative; width: 22px; height: 22px; }
-.sw-you i { position: absolute; inset: 0; border-radius: 999px; background: rgba(20,120,163,.35); animation: sw-ping 2.2s var(--sw-ease-out) infinite; }
-.sw-you b { position: absolute; inset: 3px; border-radius: 999px; background: var(--sw-sky); border: 3px solid #fff; box-shadow: var(--sw-shadow-2); }
+.sw-you i { position: absolute; inset: 0; border-radius: 999px; background: rgba(14,110,98,.32); animation: sw-ping 2.2s var(--sw-ease-out) infinite; }
+.sw-you b { position: absolute; inset: 3px; border-radius: 999px; background: var(--sw-route-you); border: 3px solid #fff; box-shadow: var(--sw-shadow-2); }
 
 .sw-mid { position: relative; width: 26px; height: 26px; }
 .sw-mid i { position: absolute; inset: -14px; border-radius: 999px; background: var(--sw-hi); animation: sw-breathe 3.2s ease-in-out infinite; }
@@ -169,7 +190,7 @@ textarea:focus-visible { outline: none; }
 .sw-pin { position: relative; }
 .sw-pin .sw-tag { position: absolute; left: 30px; bottom: 14px; display: none; }
 .sw-pin.is-on .sw-tag, .sw-pin:hover .sw-tag { display: block; }
-.sw-area-tag { border: 1.5px dashed rgba(184, 29, 20, .55); }
+.sw-area-tag { border: 1.5px dashed rgba(217, 119, 6, .6); }
 
 /* ================= ui2: louder map + motion ================= */
 @keyframes sw-sweep { to { transform: rotate(360deg) } }
@@ -188,7 +209,7 @@ textarea:focus-visible { outline: none; }
 .sw-pin-stem { display: block; width: 3px; height: 14px; background: #b9b2a5; border-radius: 0 0 2px 2px; box-shadow: 0 3px 4px rgba(74,52,30,.25); }
 .sw-pin.is-on .sw-pin-head { background: var(--sw-signal-strong); box-shadow: 0 0 0 4px var(--sw-hi), 0 12px 24px -4px rgba(74,52,30,.38); }
 .sw-pin.is-hover .sw-pin-body { transform: translateY(-5px) scale(1.14); }
-.sw-pin.is-hover .sw-pin-head { box-shadow: 0 0 0 5px rgba(225,37,27,.22), 0 14px 26px -4px rgba(74,52,30,.4); }
+.sw-pin.is-hover .sw-pin-head { box-shadow: 0 0 0 5px rgba(15,157,138,.25), 0 0 22px 4px rgba(15,157,138,.45), 0 14px 26px -4px rgba(74,52,30,.4); }
 .sw-pin.is-dim { opacity: .55; }
 .sw-pin.is-hover { z-index: 8; }
 .sw-pin { transition: opacity .2s ease; }
@@ -205,7 +226,7 @@ textarea:focus-visible { outline: none; }
 
 /* agent scanning: radar sweep over the map */
 .sw-scan { background: radial-gradient(circle at 62% 50%, transparent 0 18%, rgba(244,241,234,0) 18%, rgba(74,52,30,.08) 70%); }
-.sw-scan::before { content: ""; position: absolute; left: 62%; top: 50%; width: 140vmax; height: 140vmax; margin: -70vmax 0 0 -70vmax; background: conic-gradient(from 0deg, rgba(225,37,27,.0) 0deg, rgba(225,37,27,.16) 40deg, rgba(225,37,27,0) 41deg); animation: sw-sweep 2.8s linear infinite; }
+.sw-scan::before { content: ""; position: absolute; left: 62%; top: 50%; width: 140vmax; height: 140vmax; margin: -70vmax 0 0 -70vmax; background: conic-gradient(from 0deg, rgba(15,157,138,0) 0deg, rgba(15,157,138,.16) 40deg, rgba(15,157,138,0) 41deg); animation: sw-sweep 2.8s linear infinite; }
 @media (max-width: 1023px) { .sw-scan::before { left: 50%; } }
 
 /* timeline shimmer on the running step */
@@ -252,7 +273,7 @@ textarea:focus-visible { outline: none; }
   .sw-btn[aria-busy="true"] { cursor: progress; }
 
   .sw-btn-primary { background: var(--sw-signal-strong); color: #fff; box-shadow: var(--sw-shadow-red); }
-  .sw-btn-primary:hover:not(:disabled) { background: var(--sw-signal); box-shadow: 0 1px 2px rgba(184,29,20,.2), 0 12px 24px -8px rgba(225,37,27,.55); }
+  .sw-btn-primary:hover:not(:disabled) { background: var(--sw-signal-ink); box-shadow: 0 1px 2px rgba(11,122,108,.22), 0 12px 24px -8px rgba(15,157,138,.6); }
   .sw-btn-primary:focus-visible { box-shadow: var(--sw-shadow-focus), var(--sw-shadow-red); }
   .sw-btn-primary:disabled { background: var(--sw-sunk); color: var(--sw-ink-3); }
 
@@ -268,14 +289,14 @@ textarea:focus-visible { outline: none; }
   .sw-chip {
     position: relative; overflow: hidden; isolation: isolate; cursor: pointer;
     display: inline-flex; align-items: center; gap: .375rem; border-radius: 999px;
-    background: var(--sw-surface); color: var(--sw-ink-2);
+    background: rgba(255,255,255,.86); color: var(--sw-ink-2);
     box-shadow: 0 0 0 1px var(--sw-border), var(--sw-shadow-1);
     transition: transform var(--sw-dur-2) var(--sw-ease-out), box-shadow var(--sw-dur-2) var(--sw-ease-out), background-color var(--sw-dur-1) ease, color var(--sw-dur-1) ease;
   }
   .sw-chip:hover:not(:disabled) { color: var(--sw-ink); transform: translateY(-1px); box-shadow: 0 0 0 1px var(--sw-control), var(--sw-shadow-2); }
   .sw-chip:active:not(:disabled) { transform: scale(.96); box-shadow: 0 0 0 1px var(--sw-control), var(--sw-shadow-1); transition-duration: var(--sw-dur-1); }
   .sw-chip:focus-visible { outline: none; box-shadow: var(--sw-shadow-focus), 0 0 0 1px var(--sw-sky); }
-  .sw-chip[aria-pressed="true"] { color: var(--sw-sky-ink); box-shadow: 0 0 0 1px rgba(20,120,163,.35), var(--sw-shadow-1); }
+  .sw-chip[aria-pressed="true"] { color: var(--sw-signal-ink); box-shadow: 0 0 0 1px rgba(15,157,138,.4), var(--sw-shadow-1); }
   .sw-chip:disabled { cursor: not-allowed; opacity: .5; box-shadow: 0 0 0 1px var(--sw-border); }
   .sw-chip[aria-busy="true"] { cursor: progress; }
 
@@ -304,4 +325,56 @@ textarea:focus-visible { outline: none; }
   .sw-btn, .sw-chip, .sw-card { transition: none !important; }
   .sw-btn:hover, .sw-btn:active, .sw-chip:hover, .sw-chip:active { transform: none !important; }
   .sw-skel { animation: none !important; }
+}
+
+/* ================= ui4: Thames teal, frosted glass, more motion ================= */
+@keyframes sw-bounce { 0% { transform: translateY(-46px) scale(.7); opacity: 0 } 45% { transform: translateY(0) scale(1.08, .9); opacity: 1 } 62% { transform: translateY(-9px) scale(.97, 1.04) } 78% { transform: translateY(0) scale(1.03, .97) } 90% { transform: translateY(-2px) } 100% { transform: none; opacity: 1 } }
+@keyframes sw-mesh { 0% { transform: translate3d(-6%, -4%, 0) rotate(0deg) scale(1) } 50% { transform: translate3d(5%, 3%, 0) rotate(8deg) scale(1.08) } 100% { transform: translate3d(-6%, -4%, 0) rotate(0deg) scale(1) } }
+@keyframes sw-scanline { 0% { stroke-dashoffset: 260 } 100% { stroke-dashoffset: 0 } }
+@keyframes sw-scan-dot { 0% { offset-distance: 0% } 100% { offset-distance: 100% } }
+@keyframes sw-glint { 0% { transform: translateX(-120%) } 100% { transform: translateX(220%) } }
+
+/* frosted glass: panel, floating map chips, callouts */
+.sw-glass { background: var(--sw-glass); -webkit-backdrop-filter: var(--sw-glass-blur); backdrop-filter: var(--sw-glass-blur); box-shadow: var(--sw-glass-edge), var(--sw-shadow-4); }
+.sw-glass-chip { background: var(--sw-glass-strong) !important; -webkit-backdrop-filter: var(--sw-glass-blur); backdrop-filter: var(--sw-glass-blur); }
+.sw-glass-card { background: var(--sw-glass-card); }
+.sw-tag, .sw-mid-tag { background: var(--sw-glass-strong); -webkit-backdrop-filter: var(--sw-glass-blur); backdrop-filter: var(--sw-glass-blur); box-shadow: inset 0 0 0 1px rgba(255,255,255,.7), var(--sw-shadow-float); }
+.sw-mid-tag { box-shadow: inset 3px 0 0 var(--sw-amber), inset 0 0 0 1px rgba(255,255,255,.7), var(--sw-shadow-3); }
+.sw-mid-tag em { color: var(--sw-amber-ink); }
+.maplibregl-ctrl-group { background: var(--sw-glass-strong) !important; -webkit-backdrop-filter: var(--sw-glass-blur); backdrop-filter: var(--sw-glass-blur); }
+.maplibregl-ctrl-group button + button { border-top-color: rgba(74,52,30,.1) !important; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sw-glass, .sw-glass-chip, .sw-tag, .sw-mid-tag, .maplibregl-ctrl-group { background: #fff !important; }
+  .sw-glass-card { background: var(--sw-surface); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .sw-glass, .sw-glass-chip, .sw-tag, .sw-mid-tag, .maplibregl-ctrl-group { background: #fff !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+  .sw-glass-card { background: var(--sw-surface); }
+}
+
+/* pins: teal enamel, drop + bounce; selected gets an apricot ring */
+.sw-pin-head { background: var(--sw-signal-strong); }
+.sw-pin.is-on .sw-pin-head { background: var(--sw-signal-ink); box-shadow: 0 0 0 4px var(--sw-amber), 0 0 24px 2px rgba(245,158,11,.45), 0 12px 24px -4px rgba(74,52,30,.38); }
+.sw-pin-body { animation-name: sw-bounce; animation-duration: .9s; animation-timing-function: ease-out; }
+.sw-pin.is-hover .sw-pin-body { transform: translateY(-9px) scale(1.16); }
+
+/* fair middle: apricot dot, teal pulse rings */
+.sw-mid i { border-color: var(--sw-signal); border-width: 2.5px; }
+.sw-mid b { background: var(--sw-amber); box-shadow: 0 0 0 1.5px rgba(146,64,14,.35), 0 8px 18px -4px rgba(74,52,30,.35); }
+
+/* empty-state mesh behind the headline */
+.sw-mesh { position: absolute; inset: -40% -20%; pointer-events: none; z-index: 0; filter: blur(28px); opacity: .75;
+  background: radial-gradient(38% 46% at 22% 40%, rgba(15,157,138,.30), transparent 70%), radial-gradient(34% 40% at 72% 30%, rgba(245,158,11,.28), transparent 70%), radial-gradient(36% 44% at 55% 80%, rgba(20,120,163,.22), transparent 70%);
+  animation: sw-mesh 14s ease-in-out infinite; will-change: transform; }
+
+/* loading: route-scanning skeleton */
+.sw-scanroute path.trace { stroke-dasharray: 8 6; animation: sw-scanline 1.6s linear infinite; }
+.sw-scanroute .dot { offset-rotate: 0deg; animation: sw-scan-dot 2.4s cubic-bezier(.65,0,.35,1) infinite alternate; }
+.sw-glint { position: relative; overflow: hidden; }
+.sw-glint::after { content: ""; position: absolute; inset: 0; width: 45%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.7), transparent); animation: sw-glint 1.5s ease-in-out infinite; }
+
+
+@media (prefers-reduced-motion: reduce) {
+  .sw-mesh, .sw-scanroute path.trace, .sw-scanroute .dot, .sw-glint::after { animation: none !important; }
+  .sw-pin-body { animation: none !important; }
 }

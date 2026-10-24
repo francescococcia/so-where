@@ -23,7 +23,7 @@ function Node({ status }: { status: AgentStep["status"] }) {
             <Check className="size-3.5" strokeWidth={3} />
           </motion.span>
         ) : status === "failed" ? (
-          <motion.span key="fail" initial={{ scale: 0.2 }} animate={{ scale: [1.3, 1] }} transition={{ duration: 0.35 }} className="grid size-6 place-items-center rounded-full bg-signal text-white">
+          <motion.span key="fail" initial={{ scale: 0.2 }} animate={{ scale: [1.3, 1] }} transition={{ duration: 0.35 }} className="grid size-6 place-items-center rounded-full bg-err text-white">
             <X className="size-3.5" strokeWidth={3} />
           </motion.span>
         ) : (
@@ -50,7 +50,7 @@ function Timeline({ steps }: { steps: AgentStep[] }) {
             <Node status={s.status} />
             <div className="min-w-0 flex-1 pt-0.5">
               <div className="flex items-baseline justify-between gap-3">
-                <span className={cn("text-[13.5px] font-semibold leading-5", s.status === "running" ? "sw-shimmer text-ink" : s.status === "failed" ? "text-signal-ink" : "text-ink")}>{s.label}</span>
+                <span className={cn("text-[13.5px] font-semibold leading-5", s.status === "running" ? "sw-shimmer text-ink" : s.status === "failed" ? "text-err" : "text-ink")}>{s.label}</span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   {s.source && s.source !== "—" ? <span className="rounded-md bg-sky-wash px-1.5 ring-1 ring-sky/15 py-px font-mono text-[10px] font-medium text-sky-ink">{s.source}</span> : null}
                   {s.ms != null && s.status !== "running" ? <span className="num font-mono text-[10px] text-ink-3">{s.ms} ms</span> : null}
@@ -93,12 +93,12 @@ export function AgentSteps({ steps, finished, elapsedMs }: { steps: AgentStep[];
   const ms = elapsedMs || steps.reduce((a, s) => a + (s.ms ?? 0), 0);
 
   return (
-    <motion.section layout aria-label="What the planner checked" aria-live="polite" className={cn("overflow-hidden rounded-[16px] transition-shadow duration-300", finished ? "bg-raised shadow-e1 ring-1 ring-line/70" : "bg-surface shadow-e3 ring-1 ring-sky/30")}>
+    <motion.section layout aria-label="What the planner checked" aria-live="polite" className={cn("overflow-hidden rounded-[16px] transition-shadow duration-300", finished ? "bg-white/60 shadow-e1 ring-1 ring-line/70" : "bg-white/80 shadow-e3 ring-1 ring-signal/30")}>
       {finished ? (
         <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-11 w-full cursor-pointer items-center gap-2.5 px-3.5 text-left text-[13px] text-ink-2 transition-colors duration-200 hover:bg-sky-wash hover:text-ink focus-visible:outline-offset-[-2px] active:bg-sky-soft">
           <span className="flex shrink-0 items-center gap-[3px]" aria-hidden>
             {steps.map((s, k) => (
-              <motion.span key={s.id} initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ delay: k * 0.04 }} className={cn("h-3.5 w-1.5 rounded-full", s.status === "done" ? "bg-ok" : s.status === "failed" ? "bg-signal" : "bg-control")} />
+              <motion.span key={s.id} initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ delay: k * 0.04 }} className={cn("h-3.5 w-1.5 rounded-full", s.status === "done" ? "bg-ok" : s.status === "failed" ? "bg-err" : "bg-control")} />
             ))}
           </span>
           <span className="num min-w-0 truncate whitespace-nowrap font-semibold text-ink">

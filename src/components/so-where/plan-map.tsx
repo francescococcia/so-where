@@ -93,24 +93,25 @@ const DASHES: number[][] = [
   [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5],
 ];
 
-const COLOR = { you: "#1478a3", them: "#e1251b" } as const; // you = sky (secondary), them = bus red
+const COLOR = { you: "#0e6e62", them: "#f59e0b" } as const; // you = teal ink, them = apricot (red is reserved for buses/errors)
+const ACCENT = "#0f9d8a";
 
 function addLayers(map: MLMap) {
   const before = map.getLayer("water-name") ? "water-name" : undefined;
   map.addSource("them-area", { type: "geojson", data: FC() });
-  map.addLayer({ id: "them-area-fill", type: "fill", source: "them-area", paint: { "fill-color": "#e1251b", "fill-opacity": 0.09 } }, before);
-  map.addLayer({ id: "them-area-line", type: "line", source: "them-area", paint: { "line-color": "#b81d14", "line-opacity": 0.7, "line-width": 1.6, "line-dasharray": [2, 2] } }, before);
+  map.addLayer({ id: "them-area-fill", type: "fill", source: "them-area", paint: { "fill-color": "#f59e0b", "fill-opacity": 0.1 } }, before);
+  map.addLayer({ id: "them-area-line", type: "line", source: "them-area", paint: { "line-color": "#d97706", "line-opacity": 0.75, "line-width": 1.6, "line-dasharray": [2, 2] } }, before);
 
   // Fair-middle halo: soft concentric "reach" rings, the inner one breathes.
   map.addSource("halo", { type: "geojson", data: FC() });
-  map.addLayer({ id: "halo-fill", type: "fill", source: "halo", paint: { "fill-color": "#ffd23f", "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, ["interpolate", ["linear"], ["get", "r"], 250, 0.32, 600, 0.16, 1100, 0.07], 16, ["interpolate", ["linear"], ["get", "r"], 250, 0.14, 600, 0.05, 1100, 0.0]] } }, before);
-  map.addLayer({ id: "halo-ring", type: "line", source: "halo", paint: { "line-color": "#c79a00", "line-width": 1, "line-opacity": 0.45, "line-dasharray": [1, 2] } }, before);
+  map.addLayer({ id: "halo-fill", type: "fill", source: "halo", paint: { "fill-color": "#5fc4b4", "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, ["interpolate", ["linear"], ["get", "r"], 250, 0.32, 600, 0.16, 1100, 0.07], 16, ["interpolate", ["linear"], ["get", "r"], 250, 0.14, 600, 0.05, 1100, 0.0]] } }, before);
+  map.addLayer({ id: "halo-ring", type: "line", source: "halo", paint: { "line-color": "#0b7a6c", "line-width": 1, "line-opacity": 0.4, "line-dasharray": [1, 2] } }, before);
 
   // Candidate hubs the agent compares.
   map.addSource("hubs", { type: "geojson", data: FC(HUBS.map((h, i) => ({ type: "Feature", properties: { i, name: h.name }, geometry: { type: "Point", coordinates: [h.lng, h.lat] } }))) });
-  map.addLayer({ id: "hubs-glow", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 18, "circle-color": "#e1251b", "circle-opacity": 0.0, "circle-blur": 0.8, "circle-pitch-alignment": "map" } });
-  map.addLayer({ id: "hubs-dot", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#ffffff", "circle-stroke-color": "#1478a3", "circle-stroke-width": 2, "circle-opacity": 0.9 } });
-  map.addLayer({ id: "hubs-lit", type: "circle", source: "hubs", layout: { visibility: "none" }, filter: ["==", ["get", "i"], -1], paint: { "circle-radius": 8, "circle-color": "#e1251b", "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } });
+  map.addLayer({ id: "hubs-glow", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 18, "circle-color": ACCENT, "circle-opacity": 0.0, "circle-blur": 0.8, "circle-pitch-alignment": "map" } });
+  map.addLayer({ id: "hubs-dot", type: "circle", source: "hubs", layout: { visibility: "none" }, paint: { "circle-radius": 5, "circle-color": "#ffffff", "circle-stroke-color": "#0e6e62", "circle-stroke-width": 2, "circle-opacity": 0.9 } });
+  map.addLayer({ id: "hubs-lit", type: "circle", source: "hubs", layout: { visibility: "none" }, filter: ["==", ["get", "i"], -1], paint: { "circle-radius": 8, "circle-color": ACCENT, "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } });
   map.addLayer({ id: "hubs-label", type: "symbol", source: "hubs", layout: { visibility: "none", "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-offset": [0, 1.2], "text-anchor": "top" }, paint: { "text-color": "#15171c", "text-halo-color": "#fff", "text-halo-width": 1.6 } });
 
   // Per-person halo underneath (so you can still tell whose route is whose)…
@@ -126,6 +127,10 @@ function addLayers(map: MLMap) {
   map.addLayer({ id: "legs-bus", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "bus"], layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4.5, "line-dasharray": [2.2, 1.2] } });
   map.addLayer({ id: "legs-rail", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "rail"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4.5 } });
   map.addLayer({ id: "legs-flow", type: "line", source: "route-legs", filter: ["==", ["get", "kind"], "rail"], layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 1.6, "line-opacity": 0.85, "line-dasharray": DASHES[0] } });
+  // A small traveller dot per person, gliding along their route once it's drawn.
+  map.addSource("route-dots", { type: "geojson", data: FC() });
+  map.addLayer({ id: "dots-glow", type: "circle", source: "route-dots", paint: { "circle-radius": 10, "circle-color": ["get", "color"], "circle-opacity": 0.22, "circle-blur": 0.4, "circle-pitch-alignment": "map" } });
+  map.addLayer({ id: "dots-core", type: "circle", source: "route-dots", paint: { "circle-radius": 4.5, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2, "circle-pitch-alignment": "map" } });
   map.addLayer({ id: "legs-label", type: "symbol", source: "route-legs", filter: ["all", ["==", ["get", "kind"], "bus"], ["!=", ["get", "label"], ""]], layout: { "symbol-placement": "line-center", "text-field": ["get", "label"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-keep-upright": true }, paint: { "text-color": "#ffffff", "text-halo-color": "#DC241F", "text-halo-width": 2.4 } });
 }
 
@@ -164,6 +169,8 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
   reducedRef.current = reduced;
   const scanRef = useRef(scanning);
   scanRef.current = scanning;
+  const trail = useRef<{ you: [number, number][]; them: [number, number][] } | null>(null);
+  const drawn = useRef(false);
 
   useEffect(() => {
     if (!box.current) return;
@@ -206,6 +213,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     let dashI = 0;
     let scanT = 0;
     let scanI = 0;
+    let dotT = 0;
     const loop = (now: number) => {
       const dt = Math.min(64, now - last);
       last = now;
@@ -216,6 +224,20 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
           dashT = 0;
           dashI = (dashI + 1) % DASHES.length;
           if (map.getLayer("legs-flow")) map.setPaintProperty("legs-flow", "line-dasharray", DASHES[dashI]);
+        }
+        // traveller dots ~30 fps, one lap every ~7 s (them slightly offset)
+        dotT += dt;
+        if (dotT > 33 && trail.current && drawn.current) {
+          dotT = 0;
+          const feats: GeoJSON.Feature[] = [];
+          (["you", "them"] as const).forEach((who, k) => {
+            const c = trail.current![who];
+            if (c.length < 2) return;
+            const ph = ((now / 7000 + k * 0.37) % 1);
+            const at = partial(c, ph);
+            feats.push({ type: "Feature", properties: { color: COLOR[who] }, geometry: { type: "Point", coordinates: at[at.length - 1] } });
+          });
+          (map.getSource("route-dots") as GeoJSONSource | undefined)?.setData(FC(feats));
         }
         // idle orbit: only when nobody's touching the map and no camera move is running
         const idle = now - userBusy.current > 7000 && !flying.current && !map.isMoving();
@@ -385,6 +407,9 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     const legs: Record<"you" | "them", Leg | undefined> = { you: card?.legs.find((l) => l.who === "you"), them: card?.legs.find((l) => l.who === "them") };
     const st = { you: legs.you ? legStretches(legs.you) : [], them: legs.them ? legStretches(legs.them) : [] };
     const full = { you: st.you.flatMap((s) => s.coords), them: st.them.flatMap((s) => s.coords) };
+    trail.current = full;
+    drawn.current = false;
+    (map.getSource("route-dots") as GeoJSONSource | undefined)?.setData(FC());
     const set = (t: number) => {
       const tt = { you: easeInOut(Math.min(1, t)), them: easeInOut(Math.min(1, Math.max(0, t - 0.12) / 0.88)) };
       (map.getSource("route-you") as GeoJSONSource | undefined)?.setData(line(partial(full.you, tt.you)));
@@ -393,7 +418,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     };
     if (reduced) {
       set(1);
-      return;
+      return; // no traveller dots with reduced motion
     }
     set(0);
     const delay = 700;
@@ -403,6 +428,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
       const t = (now - t0 - delay) / dur;
       set(Math.max(0, t));
       if (t < 1) draw.current = requestAnimationFrame(tick);
+      else drawn.current = true;
     };
     draw.current = requestAnimationFrame(tick);
     return () => {

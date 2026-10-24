@@ -51,7 +51,7 @@ function Row({ icon: Icon, label, fact, fallback }: { icon: typeof Clock; label:
 function Answer({ icon: Icon, q, children, tone = "plain", fact, i }: { icon: typeof Clock; q: string; children: React.ReactNode; tone?: "ok" | "warn" | "plain" | "unknown"; fact?: Fact; i: number }) {
   return (
     <motion.div {...item(i)} className="grid grid-cols-[40px_1fr] items-start gap-3 py-3">
-      <span className={cn("grid size-10 place-items-center rounded-[12px] shadow-e1", { ok: "bg-ok-bg text-ok", warn: "bg-signal-soft text-signal-ink", plain: "bg-sky-soft text-sky-ink", unknown: "bg-unknown-bg text-unknown" }[tone])}>
+      <span className={cn("grid size-10 place-items-center rounded-[12px] shadow-e1", { ok: "bg-ok-bg text-ok", warn: "bg-amber-soft text-amber-ink", plain: "bg-sky-soft text-sky-ink", unknown: "bg-unknown-bg text-unknown" }[tone])}>
         <Icon className="size-5" aria-hidden />
       </span>
       <div className="min-w-0">
@@ -103,7 +103,7 @@ export function PlaceDetail({
     <motion.section
       layoutId={`place-${card.id}`}
       transition={{ type: "spring", stiffness: 300, damping: 32 }}
-      className="relative overflow-hidden rounded-[20px] bg-surface shadow-e3 ring-1 ring-line/70"
+      className="relative overflow-hidden rounded-[20px] sw-glass-card shadow-e3 ring-1 ring-line/70"
       aria-label={`${card.name} details`}
     >
       {/* Blind header */}
@@ -117,7 +117,7 @@ export function PlaceDetail({
           {example ? <span className="ml-auto rounded-full bg-likely-bg px-2 py-0.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-likely">Example data</span> : null}
         </div>
         <div className="relative mt-2 flex items-end gap-3">
-          <motion.div layoutId={`rank-${card.id}`} className={cn("grid size-14 shrink-0 place-items-center rounded-[12px] font-mono text-[28px] font-bold tracking-[-0.04em]", index === 0 ? "bg-signal-strong text-white shadow-red" : "bg-sky-soft text-sky-ink shadow-e1")}>
+          <motion.div layoutId={`rank-${card.id}`} className={cn("grid size-14 shrink-0 place-items-center rounded-[12px] font-mono text-[28px] font-bold tracking-[-0.04em]", index === 0 ? "bg-signal-strong text-white shadow-accent" : "bg-sky-soft text-sky-ink shadow-e1")}>
             {String(index + 1).padStart(2, "0")}
           </motion.div>
           <div className="min-w-0">

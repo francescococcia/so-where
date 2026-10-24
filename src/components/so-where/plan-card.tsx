@@ -72,7 +72,7 @@ export function PlanCard({
   const open = openAnswer(card, when);
   const cost = costAnswer(card);
   const answers: { key: string; icon: typeof Clock; text: string; tone: string; v?: Verdict; wx?: Fact }[] = [
-    { key: "open", icon: Clock, text: open.text, tone: open.state === true ? "text-ok" : open.state === false ? "text-signal-ink" : "text-unknown", v: open.fact?.verdict },
+    { key: "open", icon: Clock, text: open.text, tone: open.state === true ? "text-ok" : open.state === false ? "text-amber-ink" : "text-unknown", v: open.fact?.verdict },
     ...(cost.fact && !/not listed/i.test(cost.text) ? [{ key: "cost", icon: Banknote, text: cost.text, tone: "text-sky-ink", v: cost.fact.verdict }] : []),
     ...(wx ? [{ key: "wx", icon: Clock, text: wx.value, tone: "", v: wx.verdict, wx }] : []),
   ];
@@ -83,7 +83,7 @@ export function PlanCard({
       layoutId={`place-${card.id}`}
       initial={{ opacity: 0, y: 26, rotateX: -8 }}
       animate={{ opacity: 1, y: 0, rotateX: 0 }}
-      transition={{ type: "spring", stiffness: 260, damping: 26, delay: 0.25 + 0.09 * index }}
+      transition={{ type: "spring", stiffness: 260, damping: 26, delay: 0.25 + 0.09 * index, layout: { type: "spring", stiffness: 380, damping: 34 } }}
       whileHover={{ y: -3 }}
       whileTap={{ scale: 0.985, y: -1 }}
       style={tilt.style}
@@ -94,7 +94,7 @@ export function PlanCard({
       }}
       onPointerEnter={() => onHover(true)}
       className={cn(
-        "sw-card group relative overflow-hidden rounded-[18px] bg-surface [transform-style:preserve-3d]",
+        "sw-card sw-glass-card group relative overflow-hidden rounded-[18px] [transform-style:preserve-3d]",
         selected ? "is-on" : "ring-1 ring-line/70",
         hovered && "is-hover"
       )}

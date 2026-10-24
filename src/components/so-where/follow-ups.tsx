@@ -23,7 +23,7 @@ const NEAR = [
 export function FollowUps({ intent, onRefine, disabled }: { intent: Intent; onRefine: (extra: string) => void; disabled?: boolean }) {
   const items = intent === "near_me" ? NEAR : MEET;
   return (
-    <section aria-label="Refine the plan" className="rounded-[16px] bg-sky-wash p-3 ring-1 ring-sky/15">
+    <section aria-label="Refine the plan" className="rounded-[16px] bg-sky-wash/70 p-3 ring-1 ring-sky/15">
       <p className="flex items-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">
         <Sparkles className="size-3.5 text-sky" aria-hidden /> <span className="text-sky-ink">Steer the agent</span>
       </p>
