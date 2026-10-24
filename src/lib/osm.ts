@@ -10,7 +10,8 @@ import type { LatLng, Verdict } from "@/lib/plan-types";
 
 export type OsmKind = "pub" | "cafe" | "restaurant" | "free";
 export type OsmPlace = { type: string; id: number; location: LatLng; tags: Record<string, string>; distanceM: number };
-export type OsmResult = { places: OsmPlace[]; source: "OSM" | "OSM snapshot"; asOf: string; live: boolean; ms: number; note?: string };
+// source is "OSM", "OSM snapshot" or the MongoDB Atlas label; via/stepSource are set when MongoDB served the query.
+export type OsmResult = { places: OsmPlace[]; source: string; asOf: string; live: boolean; ms: number; note?: string; via?: string; stepSource?: string };
 
 const OVERPASS = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
 
@@ -21,7 +22,7 @@ const FILTERS: Record<OsmKind, string[]> = {
   free: ['["tourism"~"^(museum|gallery)$"]["fee"="no"]', '["amenity"~"^(marketplace|arts_centre)$"]["fee"="no"]'],
 };
 
-function matches(kind: OsmKind, t: Record<string, string>) {
+export function matches(kind: OsmKind, t: Record<string, string>) {
   if (kind === "pub") return /^(pub|bar)$/.test(t.amenity ?? "") && !!t.name;
   if (kind === "cafe") return t.amenity === "cafe" && !!t.name;
   if (kind === "restaurant") return t.amenity === "restaurant" && !!t.name;

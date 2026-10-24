@@ -8,7 +8,9 @@ import { seedEventsOn, type SeedEvent } from "@/lib/events";
 import { geminiFill } from "@/lib/gemini-intent";
 import { metresBetween, roundToArea, walkMinutes } from "@/lib/geo";
 import { londonClock, londonDayShort, londonLabel, londonParts, londonToUtc } from "@/lib/london-time";
-import { addressOf, findPlaces, hoursAt, kindLabel, osmUrl, type OsmKind, type OsmPlace, type OsmResult } from "@/lib/osm";
+import { addressOf, hoursAt, kindLabel, osmUrl, type OsmKind, type OsmPlace, type OsmResult } from "@/lib/osm";
+import { findVenues, mongoEventsNear } from "@/lib/mongo-venues";
+import { recordPlanRun, tieBreakByHistory } from "@/lib/plan-memory";
 import type { AgentStep, Clarify, Fact, LatLng, Leg, PlanCard, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import { fairPoint, journey, lineStatus, searchPlace, trimPathStart, type Journey, type LineStatus, type Place } from "@/lib/tfl";
 import { forecastAt, type Forecast } from "@/lib/weather";
@@ -24,16 +26,20 @@ const fact = (label: string, value: string, verdict: Verdict, source: string, as
 const validLatLng = (p: unknown): p is LatLng =>
   !!p && typeof p === "object" && Number.isFinite((p as LatLng).lat) && Number.isFinite((p as LatLng).lng) && Math.abs((p as LatLng).lat) <= 90 && Math.abs((p as LatLng).lng) <= 180;
 
+const RUN_STARTED = new WeakMap<AgentStep[], number>(); // steps array → run start, for plan_runs latency
+
 function stepper(emit?: StepSink) {
   const steps: AgentStep[] = [];
+  RUN_STARTED.set(steps, Date.now());
   const begin = (id: string, label: string, source?: string) => {
     const s: AgentStep = { id, label, status: "running", ...(source ? { source } : {}) };
     steps.push(s);
     emit?.({ ...s });
     const t0 = Date.now();
-    return (status: AgentStep["status"], detail?: string) => {
+    return (status: AgentStep["status"], detail?: string, source?: string) => {
       s.status = status;
       if (detail) s.detail = detail;
+      if (source) s.source = source;
       s.ms = Date.now() - t0;
       emit?.({ ...s });
     };
@@ -212,7 +218,7 @@ type Ctx = {
   sources: Sources;
 };
 
-function finish(ctx: Ctx, r: PlanResultWithAgent): PlanResultWithAgent {
+async function finish(ctx: Ctx, r: PlanResultWithAgent): Promise<PlanResultWithAgent> {
   // Grounding check: every fact must name a source; drop the rest and say how many.
   const v = ctx.begin("verify", "Verifying claims");
   let checked = 0;
@@ -231,6 +237,8 @@ function finish(ctx: Ctx, r: PlanResultWithAgent): PlanResultWithAgent {
   r.sources = [...ctx.sources.entries()].map(([name, asOf]) => ({ name, asOf })).sort((a, b) => a.name.localeCompare(b.name));
   r.unknowns = [...new Set(ctx.unknowns)];
   v("done", `${checked} facts checked · ${dropped} dropped without a source · ${r.sources.length} sources with as-of times`);
+  // Agent memory: anonymised run record in MongoDB plan_runs (no coordinates, typed places or query text).
+  await recordPlanRun(r, Date.now() - (RUN_STARTED.get(r.steps) ?? Date.now()));
   return r;
 }
 
@@ -242,10 +250,11 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
 
   const endCompare = begin("compare", "Comparing central hubs by TfL journey time", "TfL Journey Planner");
   const fp = await fairPoint(ctx.you, { ...ctx.them.location, id: ctx.them.id ?? undefined }, when);
+  const history = await tieBreakByHistory(fp.ranked);
   const best = fp.ranked[0];
   if (best) addSource(sources, "TfL Journey Planner", best.a.fetchedAt);
   endCompare(best ? "done" : "failed", best
-    ? `${fp.compared} hubs compared (${fp.calls} journeys${fp.failed ? `; no TfL time for ${fp.failedHubs.join(", ")}` : ""}) · ${best.hub.name} fairest: you ${best.a.minutes} min, ${who} ${best.b.minutes} min${fp.ranked[1] ? ` · next ${fp.ranked[1].hub.name} (${fp.ranked[1].a.minutes}/${fp.ranked[1].b.minutes})` : ""}`
+    ? `${fp.compared} hubs compared (${fp.calls} journeys${fp.failed ? `; no TfL time for ${fp.failedHubs.join(", ")}` : ""}) · ${best.hub.name} fairest: you ${best.a.minutes} min, ${who} ${best.b.minutes} min${fp.ranked[1] ? ` · next ${fp.ranked[1].hub.name} (${fp.ranked[1].a.minutes}/${fp.ranked[1].b.minutes})` : ""}${history ? ` · ${history}` : ""}`
     : `${fp.compared} hubs tried, no TfL journey times came back`);
   const result: PlanResultWithAgent = { ...ctx.base, intent: "meet_halfway", you: { lat: ctx.you.lat, lng: ctx.you.lng }, them: themArea };
   if (best && fp.failed) unknowns.push(`TfL didn't return times for ${fp.failedHubs.join(", ")}, so ${fp.failed > 1 ? "those hubs weren't" : "that hub wasn't"} compared.`);
@@ -264,9 +273,9 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   const endLines = begin("lines", "Checking line status", "TfL");
   const endWeather = begin("weather", "Checking the forecast", "Open-Meteo");
   const [osm, ls, wx] = await Promise.all([
-    findPlaces(kind, result.middle.location, 500).then((r) => {
+    findVenues(kind, result.middle.location, 500).then((r) => {
       const pk = venuePick(r, when);
-      endVenues(pk.picks.length ? "done" : "failed", `${r.places.length} found within 500 m (${r.source}${r.live ? "" : ", live call " + (r.note?.match(/Overpass (\w+)/)?.[1] ?? "failed")}) · ${pk.closed} closed at ${londonClock(when.toISOString())} · ${pk.picks.length} kept`);
+      endVenues(pk.picks.length ? "done" : "failed", `${r.via ? `${r.via} · ${r.places.length} within 500 m` : `${r.places.length} found within 500 m (${r.source}${r.live ? "" : ", live call " + (r.note?.match(/Overpass (\w+)/)?.[1] ?? "failed")})`} · ${pk.closed} closed at ${londonClock(when.toISOString())} · ${pk.picks.length} kept`, r.stepSource);
       return { r, pk };
     }),
     lineStatus(lineIds).then((r) => {
@@ -354,22 +363,24 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   let osm: OsmResult | null = null;
   const endFind = begin("venues", venueKind ? `Finding ${venueKind}s near you` : "Finding events and free-entry places near you", venueKind ? "OSM Overpass" : "Luma seed + OSM Overpass");
   if (venueKind) {
-    osm = await findPlaces(venueKind, ctx.you, 1200);
+    osm = await findVenues(venueKind, ctx.you, 1200);
     const pk = venuePick(osm, when);
     for (const x of pk.picks.concat()) cands.push({ kind: "place", p: x.p, h: x.h, osm });
-    endFind(cands.length ? "done" : "failed", `${osm.places.length} ${venueKind}s within 1.2 km (${osm.source}) · ${pk.closed} closed at ${t}`);
+    endFind(cands.length ? "done" : "failed", `${osm.via ? `${osm.via} · ` : ""}${osm.places.length} ${venueKind}s within 1.2 km (${osm.source}) · ${pk.closed} closed at ${t}`, osm.stepSource);
   } else {
     const all = seedEventsOn(lp.date, when, (d) => londonParts(d).date);
-    const near = all.filter((e) => metresBetween(ctx.you, e) < 8000);
+    const mev = await mongoEventsNear(ctx.you, 8000, when, lp.date, new Date(londonToUtc(lp.date, 23, 59).getTime() + 60_000), (d) => londonParts(d).date);
+    if (mev) addSource(sources, mev.source, mev.asOf);
+    const near = mev ? mev.events : all.filter((e) => metresBetween(ctx.you, e) < 8000);
     const blocked = ask.walkIn ? near.filter((e) => e.walkIn.rsvpRequired) : [];
     const evs = near.filter((e) => !blocked.includes(e)).sort((a, b) => metresBetween(ctx.you, a) - metresBetween(ctx.you, b)).slice(0, 6);
     for (const e of all) addSource(sources, e.source, e.asOf);
     for (const e of evs) cands.push({ kind: "event", e });
-    osm = await findPlaces("free", ctx.you, 2500);
+    osm = await findVenues("free", ctx.you, 2500);
     const open = osm.places.map((p) => ({ p, h: hoursAt(p.tags, when, p.location) })).filter((x) => x.h.state !== "closed");
     const closed = osm.places.length - open.length;
     for (const x of open.slice(0, 6)) cands.push({ kind: "place", p: x.p, h: x.h, osm });
-    endFind("done", `${all.length} seed events that day · ${near.length} within 8 km${ask.walkIn ? ` · ${blocked.length} dropped as RSVP-only` : ""} · ${osm.places.length} free-entry places within 2.5 km (${osm.source}), ${closed} closed at ${t}`);
+    endFind("done", `${mev ? `${mev.via} · ` : ""}${all.length} seed events that day · ${near.length} within 8 km${ask.walkIn ? ` · ${blocked.length} dropped as RSVP-only` : ""} · ${osm.places.length} free-entry places within 2.5 km (${osm.source}), ${closed} closed at ${t}`, mev?.stepSource ?? osm.stepSource);
   }
   if (osm) {
     addSource(sources, osm.source, osm.asOf);

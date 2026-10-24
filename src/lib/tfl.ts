@@ -1,6 +1,7 @@
 // TfL Unified API (no key needed; TFL_APP_KEY used when set): StopPoint search, Journey Planner, line status.
 import hubsDoc from "@/data/hubs.json";
 import { LONDON_AREAS } from "@/lib/areas";
+import { metresBetween, walkMinutes } from "@/lib/geo";
 import { getJson } from "@/lib/http";
 import { londonParts } from "@/lib/london-time";
 import type { LatLng } from "@/lib/plan-types";
@@ -98,13 +99,28 @@ export async function journey(from: End, to: End, arriveBy: Date): Promise<Journ
 
 export type HubScore = { hub: Hub; a: Journey; b: Journey; worst: number; gap: number };
 
+const AT_HUB_M = 400;
+/**
+ * Someone starting AT a hub (e.g. "I'm at Waterloo"): TfL returns no journey from a station to itself, which
+ * used to drop that hub from the comparison. Treat it as a walk instead: 0 min for the same station.
+ */
+function atHubJourney(from: End, hub: Hub): Journey | null {
+  const m = metresBetween(from, hub);
+  const same = (!!from.id && from.id === hub.id) || m < 150;
+  if (!same && m > AT_HUB_M) return null;
+  const minutes = same ? 0 : walkMinutes(m);
+  return { minutes, summary: same ? `Already at ${hub.name} (walk)` : `Walk to ${hub.name} (~${minutes} min, estimate)`, lines: [], path: [], fetchedAt: new Date().toISOString(), ms: 0 };
+}
+
 /** Fairest hub: minimise the worse of the two journey times, then the gap between them. */
 export async function fairPoint(a: End, b: End, arriveBy: Date, hubs: Hub[] = HUBS) {
   const t0 = Date.now();
   const rows = await Promise.all(
     hubs.map(async (hub) => {
       // One retry per leg: TfL times out on a few of the 24 calls, and a missing hub can change the answer.
-      const leg = async (from: LatLng) => {
+      const leg = async (from: End) => {
+        const here = atHubJourney(from, hub);
+        if (here) return here;
         const j = await journey(from, hub, arriveBy);
         return "error" in j ? journey(from, hub, arriveBy) : j;
       };
