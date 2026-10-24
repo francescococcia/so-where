@@ -83,7 +83,8 @@ function Ticker({ running }: { running: boolean }) {
 }
 
 /** The agent at work: a live timeline while it runs, a compact replayable strip once done. */
-export function AgentSteps({ steps, finished, elapsedMs }: { steps: AgentStep[]; finished: boolean; elapsedMs: number }) {
+/** `quiet`: the finished strip placed after the results, smaller and muted (provenance, not news). */
+export function AgentSteps({ steps, finished, elapsedMs, quiet = false }: { steps: AgentStep[]; finished: boolean; elapsedMs: number; quiet?: boolean }) {
   const [open, setOpen] = useState(!finished);
   useEffect(() => setOpen(!finished), [finished]);
   if (!steps.length) return null;
@@ -93,20 +94,20 @@ export function AgentSteps({ steps, finished, elapsedMs }: { steps: AgentStep[];
   const ms = elapsedMs || steps.reduce((a, s) => a + (s.ms ?? 0), 0);
 
   return (
-    <motion.section layout aria-label="What the planner checked" aria-live="polite" className={cn("overflow-hidden rounded-[16px] transition-shadow duration-300", finished ? "bg-white/60 shadow-e1 ring-1 ring-line/70" : "bg-white/80 shadow-e3 ring-1 ring-signal/30")}>
+    <motion.section layout aria-label="What the planner checked" aria-live="polite" className={cn("overflow-hidden transition-shadow duration-300", quiet ? "rounded-[12px] ring-1 ring-line/50" : "rounded-[16px]", !quiet && (finished ? "bg-white/60 shadow-e1 ring-1 ring-line/70" : "bg-white/80 shadow-e3 ring-1 ring-signal/30"))}>
       {finished ? (
-        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-11 w-full cursor-pointer items-center gap-2.5 px-3.5 text-left text-[13px] text-ink-2 transition-colors duration-200 hover:bg-sky-wash hover:text-ink focus-visible:outline-offset-[-2px] active:bg-sky-soft">
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className={cn("flex w-full cursor-pointer items-center text-left transition-colors", quiet ? "min-h-9 gap-2 px-3 text-[12px] text-ink-3 max-lg:min-h-11" : "min-h-11 gap-2.5 px-3.5 text-[13px] text-ink-2", "duration-200 hover:bg-sky-wash hover:text-ink focus-visible:outline-offset-[-2px] active:bg-sky-soft")}>
           <span className="flex shrink-0 items-center gap-[3px]" aria-hidden>
             {steps.map((s, k) => (
-              <motion.span key={s.id} initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ delay: k * 0.04 }} className={cn("h-3.5 w-1.5 rounded-full", s.status === "done" ? "bg-ok" : s.status === "failed" ? "bg-err" : "bg-control")} />
+              <motion.span key={s.id} initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ delay: k * 0.04 }} className={cn(quiet ? "h-2.5 w-1" : "h-3.5 w-1.5", "rounded-full", s.status === "done" ? "bg-ok" : s.status === "failed" ? "bg-err" : "bg-control")} />
             ))}
           </span>
-          <span className="num min-w-0 truncate whitespace-nowrap font-semibold text-ink">
+          <span className={cn("num min-w-0 truncate whitespace-nowrap", quiet ? "font-medium text-ink-3" : "font-semibold text-ink")}>
             {checks} checks · {fmtSeconds(ms)}
             {failed ? <span className="font-medium text-ink-3"> · {failed} couldn&apos;t</span> : null}
           </span>
-          <span className="ml-auto shrink-0 whitespace-nowrap text-[12px] font-medium text-ink-3">{open ? "Hide" : "How we got here"}</span>
-          <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} aria-hidden />
+          <span className={cn("ml-auto shrink-0 whitespace-nowrap font-medium text-ink-3", quiet ? "text-[11.5px]" : "text-[12px]")}>{open ? "Hide" : "How we got here"}</span>
+          <ChevronDown className={cn(quiet ? "size-3.5" : "size-4", "transition-transform duration-200", open && "rotate-180")} aria-hidden />
         </button>
       ) : (
         <div className="flex items-center gap-2 border-b border-sky/15 bg-sky-wash px-3.5 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-ink">

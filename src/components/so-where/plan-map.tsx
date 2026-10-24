@@ -7,6 +7,7 @@ import type { LatLng, Leg, PlanResultWithAgent } from "@/lib/plan-types";
 import hubsDoc from "@/data/hubs.json";
 import { SO_WHERE_STYLE } from "./map-style";
 import { legStretches, type MapStretch } from "./journey";
+import { findBuilding } from "./building-highlight";
 import { badge, buildTrack, clearActiveSeg, midpoints, sampleTrack, setActiveSeg, type Track, type Who } from "./vehicles";
 
 /** Idle view: the South Bank, tilted, so the 3D city is the first thing you see. */
@@ -99,6 +100,16 @@ const ACCENT = "#ff6b2c";
 
 function addLayers(map: MLMap) {
   const before = map.getLayer("water-name") ? "water-name" : undefined;
+  // Selected venue: its building lit in orange (separate extrusion, lighter cap, soft ground glow), or a ground ring.
+  const under = map.getLayer("building-3d") ? "building-3d" : before;
+  map.addSource("lit-ring", { type: "geojson", data: FC() });
+  map.addLayer({ id: "lit-ring-fill", type: "fill", source: "lit-ring", paint: { "fill-color": ACCENT, "fill-opacity": 0.16 } }, under);
+  map.addLayer({ id: "lit-ring-glow", type: "line", source: "lit-ring", paint: { "line-color": ACCENT, "line-width": 12, "line-blur": 9, "line-opacity": 0.45 } }, under);
+  map.addLayer({ id: "lit-ring-line", type: "line", source: "lit-ring", paint: { "line-color": "#e8590c", "line-width": 2 } }, under);
+  map.addSource("lit-bldg", { type: "geojson", data: FC() });
+  map.addLayer({ id: "lit-bldg-glow", type: "line", source: "lit-bldg", paint: { "line-color": ACCENT, "line-width": 14, "line-blur": 10, "line-opacity": 0.4 } }, under);
+  map.addLayer({ id: "lit-bldg-body", type: "fill-extrusion", source: "lit-bldg", paint: { "fill-extrusion-color": ACCENT, "fill-extrusion-base": ["get", "b"], "fill-extrusion-height": ["get", "h"], "fill-extrusion-opacity": 0.95, "fill-extrusion-vertical-gradient": true } }, before);
+  map.addLayer({ id: "lit-bldg-cap", type: "fill-extrusion", source: "lit-bldg", paint: { "fill-extrusion-color": "#ffc6a3", "fill-extrusion-base": ["get", "h"], "fill-extrusion-height": ["+", ["get", "h"], 0.7], "fill-extrusion-opacity": 0.95, "fill-extrusion-vertical-gradient": false } }, before);
   map.addSource("them-area", { type: "geojson", data: FC() });
   map.addLayer({ id: "them-area-fill", type: "fill", source: "them-area", paint: { "fill-color": "#1478a3", "fill-opacity": 0.08 } }, before);
   map.addLayer({ id: "them-area-line", type: "line", source: "them-area", paint: { "line-color": "#1478a3", "line-opacity": 0.6, "line-width": 1.6, "line-dasharray": [2, 2] } }, before);
@@ -412,7 +423,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
       if (had) fitRef.current?.();
       return;
     }
-    const o = { center: ll(card.location), zoom: 16.4, pitch: 60, bearing: map.getBearing() - 25, padding: pad() };
+    const o = { center: ll(card.location), zoom: 17, pitch: 62, bearing: map.getBearing() - 25, padding: pad() };
     if (reduced) map.jumpTo(o);
     else {
       flying.current = true;
@@ -421,6 +432,95 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId, ready]);
+
+  // Lit building: the selected venue's building rises in orange and breathes softly; others stay stone.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !map.getSource("lit-bldg")) return;
+    const card = focusId ? result?.cards.find((c) => c.id === focusId) : undefined;
+    const bldg = map.getSource("lit-bldg") as GeoJSONSource;
+    const ring = map.getSource("lit-ring") as GeoJSONSource;
+    const clear = () => {
+      bldg.setData(FC());
+      ring.setData(FC());
+      if (map.getLayer("building-3d")) map.setFilter("building-3d", null);
+      delete map.getContainer().dataset.lit;
+    };
+    clear();
+    if (!card) return;
+    let raf = 0;
+    let lit: string | number | null | undefined = null; // null = nothing yet
+    let t0 = 0;
+    const setK = (k: number) => {
+      const h: maplibregl.ExpressionSpecification = ["+", ["get", "b"], ["*", ["-", ["get", "h"], ["get", "b"]], k]];
+      map.setPaintProperty("lit-bldg-body", "fill-extrusion-height", h);
+      map.setPaintProperty("lit-bldg-cap", "fill-extrusion-base", h);
+      map.setPaintProperty("lit-bldg-cap", "fill-extrusion-height", ["+", h, 0.7]);
+    };
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      if (document.hidden) return;
+      const t = (now - t0) / 1000;
+      const rise = Math.min(1, t / 0.9);
+      setK(1 - Math.pow(1 - rise, 3));
+      const breathe = rise < 1 ? 0 : 0.5 - 0.5 * Math.cos(((t - 0.9) * Math.PI * 2) / 2.4);
+      map.setPaintProperty("lit-bldg-body", "fill-extrusion-opacity", 0.86 + 0.12 * breathe);
+      map.setPaintProperty("lit-bldg-glow", "line-opacity", 0.22 + 0.3 * breathe);
+      map.setPaintProperty("lit-ring-glow", "line-opacity", 0.25 + 0.35 * breathe);
+    };
+    const light = (final: boolean) => {
+      const b = findBuilding(map, card.location);
+      if (b) {
+        if (lit !== null && lit === b.id && b.id !== undefined) return true;
+        const fresh = lit === null;
+        lit = b.id;
+        map.getContainer().dataset.lit = b.inside ? "building" : `building-near-${b.distM}m`;
+        ring.setData(FC());
+        bldg.setData(FC([b.feature]));
+        // Hide the stone block underneath when the tiles carry ids, so the orange one can rise from the ground.
+        if (b.id !== undefined && map.getLayer("building-3d")) map.setFilter("building-3d", ["!=", ["id"], b.id]);
+        if (fresh) {
+          cancelAnimationFrame(raf);
+          if (reducedRef.current) {
+            setK(1);
+            map.setPaintProperty("lit-bldg-body", "fill-extrusion-opacity", 0.95);
+          } else {
+            t0 = performance.now();
+            raf = requestAnimationFrame(tick);
+          }
+        }
+        return true;
+      }
+      if (final && lit === null) {
+        // No footprint within ~25 m: a glowing ground ring instead.
+        ring.setData(FC([circle(card.location, 22)]));
+        map.getContainer().dataset.lit = "ring";
+        if (!reducedRef.current) {
+          t0 = performance.now() - 900;
+          raf = requestAnimationFrame(tick);
+        }
+      }
+      return false;
+    };
+    light(false);
+    // Tiles near the venue may still be loading while the camera flies in (and ambient motion means "idle" rarely
+    // fires): look again every 400 ms until found; after the flight plus ~2 s, settle for the ground ring.
+    let tries = 0;
+    const poll = window.setInterval(() => {
+      if (flying.current) return;
+      tries++;
+      const found = light(tries >= 5);
+      if (found || tries >= 5) window.clearInterval(poll);
+    }, 400);
+    if (process.env.NODE_ENV !== "production" || new URLSearchParams(location.search).has("debugmap")) (window as unknown as { __swmap?: MLMap }).__swmap = map;
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearInterval(poll);
+      clear();
+      setK(1);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId, result, ready]);
 
   // Routes: progressive draw on every selection; the flow layer keeps marching afterwards.
   useEffect(() => {

@@ -653,7 +653,8 @@ export function SoWhereApp() {
 
             {/* Live steps */}
             <div className="mt-4 flex flex-col gap-4">
-              {state.steps.length ? <AgentSteps steps={state.steps} finished={finished} elapsedMs={state.elapsedMs} /> : null}
+              {/* Live timeline while working; once results are in, the strip moves below the cards (quiet). */}
+              {state.steps.length && !(finished && view) ? <AgentSteps steps={state.steps} finished={finished} elapsedMs={state.elapsedMs} /> : null}
 
               {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={(answer) => submit(answer, { query: state.ask || state.query, answer }, you ?? undefined, { display: baseAsk.current || state.query })} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
 
@@ -689,6 +690,8 @@ export function SoWhereApp() {
                       </ul>
                     </section>
                   ) : null}
+
+                  {finished && state.steps.length ? <AgentSteps quiet steps={state.steps} finished elapsedMs={state.elapsedMs} /> : null}
 
                   <footer className="text-[11.5px] leading-[17px] text-ink-3">
                     <p className="num font-mono">
