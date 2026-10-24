@@ -11,6 +11,8 @@ import { londonToUtc } from "@/lib/london-time";
 import { hoursAt } from "@/lib/osm";
 import { backtrackPenalty, tidySegments, type LegSegment } from "@/lib/tfl";
 import { parsePlanAsk } from "@/lib/ask-local";
+import { parseDestination } from "@/lib/destination";
+import { buildSuggestedQuery, cleanExtract, type PosterExtract } from "@/lib/poster";
 
 function pinnedNow(hhmm: string): Date {
   const [hh, mm] = hhmm.split(":").map(Number);
@@ -20,23 +22,23 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number } };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
 // `unit`: in-process checks of a helper (no HTTP): "hours" parses OSM opening_hours, "segments" tidies stretches.
 type HoursUnit = { oh: string; date: string; at: string; state: "open" | "closed" | "unknown"; closesAt?: string };
-type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse"; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
+type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster"; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
 // `clock`: pin "now" to HH:MM London (today if still ahead, else tomorrow, so live TfL/forecast calls stay in the
 // future); `dayOffset` is then the plan's London date minus the pinned date.
 type Refined = PlanResultWithAgent & { reply?: string };
 const youMin = (r: PlanResultWithAgent) => r.cards[0]?.legs.find((l) => l.who === "you")?.minutes ?? null;
 
 const all = (JSON.parse(readFileSync("evals/plan-evals.json", "utf8")) as { cases: Case[] }).cases;
-// EVAL_ONLY=prefix runs a subset (last-run.json is then not written).
+// EVAL_ONLY=prefix[,prefix…] runs a subset (last-run.json is then not written).
 const only = process.env.EVAL_ONLY;
-const cases = only ? all.filter((c) => c.id.startsWith(only)) : all;
+const cases = only ? all.filter((c) => only.split(",").some((p) => c.id.startsWith(p))) : all;
 
 async function post(body: Record<string, unknown>) {
   const res = await POST(new Request("http://local/api/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
@@ -128,6 +130,33 @@ function unitChecks(c: Case): Chk[] {
       add(`"${q}" → ${st} (approx.)`, t(q).themPlace === st && !!t(q).themApprox, t(q).themPlace);
     for (const [q, st] of [["drinks with Sam, I'm at Bank, he's in East Ham", "East Ham"], ["Lunch with Mo, I'm in Soho, he's in West Hampstead", "West Hampstead"]] as const)
       add(`"${st}" stays a real place`, t(q).themPlace === st && !t(q).themApprox, t(q).themPlace);
+  }
+  if (c.unit === "poster") {
+    // A synthetic extracted poster → suggestedQuery → the same fields back out of the plan parser.
+    const today = "2026-10-24";
+    const base: PosterExtract = { kind: "event", title: "Jazz Night", venueName: "The Vortex Jazz Club", address: "11 Gillett Square, London N16 8AZ", area: "Dalston", date: "2026-10-31", startTime: "19:00", endTime: "23:00", price: "£12", free: false, needsRegistration: true, url: "https://vortexjazz.co.uk", confidence: 0.95, notes: null };
+    const q = buildSuggestedQuery(base);
+    add("event poster → 'Get me to <title> at <venue>, <address> on Sat 31 Oct at 19:00'", q === "Get me to Jazz Night at The Vortex Jazz Club, 11 Gillett Square, London N16 8AZ on Sat 31 Oct at 19:00–23:00 (£12, sign-up needed)", q);
+    const d = q ? parseDestination(q) : null;
+    const a = parsePlanAsk(d?.rest ?? "", today);
+    add("round-trip: title, venue, address, end time, price, sign-up", d?.title === "Jazz Night" && d.venue === "The Vortex Jazz Club" && /N16 8AZ/.test(d.address ?? "") && d.endTime === "23:00" && d.priceText === "£12" && d.signUp === true, d);
+    add("round-trip: date 2026-10-31, time 19:00", a.date === "2026-10-31" && a.time === "19:00", { date: a.date, time: a.time });
+    const h = buildSuggestedQuery(base, { query: "I'm at Old Street and Sam's in Clapham" });
+    const hd = h ? parseDestination(h) : null;
+    const ha = parsePlanAsk(hd?.rest ?? "", today);
+    add("with halfway context → 'Meet halfway for …' + both places", !!h?.startsWith("Meet halfway for Jazz Night at The Vortex Jazz Club") && hd?.withThem === true && !!ha.youPlace && !!ha.themPlace, { h, you: ha.youPlace, them: ha.themPlace });
+    const free = buildSuggestedQuery({ ...base, title: "Live on Sunday", venueName: "Borough Market", address: "8 Southwark St, SE1 1TL", date: "2026-11-06", startTime: "17:00", endTime: null, price: null, free: true, needsRegistration: false });
+    const fd = free ? parseDestination(free) : null;
+    add("title with 'on Sunday' doesn't cut the place; free + no sign-up kept", /^Live on\u2060? Sunday$/.test(fd?.title ?? "") && fd?.venue === "Borough Market" && fd?.free === true && fd?.signUp === false, { free, fd });
+    const venue = buildSuggestedQuery({ ...base, kind: "venue", title: null, date: null, startTime: null, endTime: null, price: null, needsRegistration: null });
+    add("venue sign → 'Get me to <venue>, <address>'", venue === "Get me to The Vortex Jazz Club, 11 Gillett Square, London N16 8AZ", venue);
+    add("nothing to route to → null", buildSuggestedQuery({ ...base, kind: "other", venueName: null, address: null, area: null }) === null);
+    const generic = ["meet halfway for coffee, i'm at bank and she's in camden", "get me to a pub near Angel", "directions to the nearest pub", "meet halfway for a drink at 7pm with Sam", "how do i get to the middle"].filter((q) => parseDestination(q));
+    add("category / search asks are not fixed destinations", generic.length === 0, generic);
+    const dd = parseDestination("meet halfway for dinner at Dishoom tonight, I'm at Bank, she's in Camden");
+    add("'dinner at Dishoom, I'm at …' → venue Dishoom, no title, people stay in rest", dd?.venue === "Dishoom" && dd.title === null && dd.address === null && /bank/i.test(dd.rest), dd);
+    const ce = cleanExtract({ kind: "event", title: "X", date: "2025-10-31", startTime: "7.30", confidence: 3, url: "vortexjazz.co.uk" }, today);
+    add("cleanExtract: past-year date rolls forward, 7.30 → 07:30, confidence clamped, url gets https", ce.date === "2026-10-31" && ce.startTime === "07:30" && ce.confidence === 1 && ce.url === "https://vortexjazz.co.uk", ce);
   }
   return out;
 }
@@ -258,6 +287,15 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
   if (e.onlyCuisine) {
     const hit = (x: Refined["cards"][number]) => x.facts.some((f) => f.label === "Cuisine" && f.verdict !== "unknown");
     add("with ≥1 cuisine match, every card matches", !r.cards.some(hit) || r.cards.every(hit), r.cards.map((x) => `${x.name}: ${x.facts.find((f) => f.label === "Cuisine")?.value}`));
+  }
+  if (e.destination) {
+    const d = e.destination;
+    add("fixed destination: no middle / hub search", !r.middle && !r.steps.some((s) => s.id === "compare" || s.id === "venues"), { middle: r.middle?.name, steps: r.steps.map((s) => s.id) });
+    add("one card: the place named", r.cards.length === 1, r.cards.map((x) => x.name));
+    if (d.kind) add(`card kind = ${d.kind}`, r.cards[0]?.kind === d.kind, r.cards[0]?.kind);
+    for (const l of d.facts ?? []) add(`card has a '${l}' fact`, !!r.cards[0]?.facts.some((f) => f.label === l || f.label.startsWith(`${l} `)), r.cards[0]?.facts.map((f) => f.label));
+    if (d.legs) add(`${d.legs} leg(s)`, r.cards[0]?.legs.length === d.legs, r.cards[0]?.legs.map((l) => l.who));
+    if (r.them) add("their area not in reply/draft/unknowns/steps' parse signals", ![r.draftMessage, r.reply ?? "", ...r.unknowns, r.steps.find((s) => s.id === "parse")?.detail ?? ""].some((t) => t.toLowerCase().includes(r.them!.area.toLowerCase())), null);
   }
   if (e.headlineMatch) add(`headline matches /${e.headlineMatch}/i`, new RegExp(e.headlineMatch, "i").test(r.headline), r.headline);
   if (e.approx) {

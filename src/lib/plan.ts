@@ -17,7 +17,8 @@ import { fairPoint, journey, lineStatus, searchPlace, tidySegments, trimPathStar
 import { forecastAt, type Forecast } from "@/lib/weather";
 import { weatherDecision, weatherFitFact, weatherMode, weatherRank, type WeatherMode } from "@/lib/venue-weather";
 import { applyRefinements, clock12, cuisineLabel, cuisineMatch, cuisineOf, joinRefine, pickHub, prefRank, refineReply, seatingWish, splitRefine, type Pref, type RefinedAsk, type Refinement } from "@/lib/refine";
-import { meetDraft, nearDraft } from "@/lib/draft-message";
+import { goDraft, meetDraft, nearDraft } from "@/lib/draft-message";
+import { parseDestination, resolveDestination, type Destination } from "@/lib/destination";
 
 export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string; /** Refine only: the result on screen, so "is it open?" answers without replanning. Echoed, never stored. */ result?: PlanResultWithAgent }; refine?: string;
   /** Refine only: the place the user has selected (a card), so "other Italian places in the area" searches around it and excludes it. Never stored. */
@@ -400,7 +401,16 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
   const split = splitRefine(text);
   let ask = split.refinements.length ? parsePlanAsk(split.base, today) : (merged?.ask ?? parsePlanAsk(text, today));
   let parseSource = "rules";
-  if (process.env.GEMINI_API_KEY && (!ask.intent || (ask.intent === "meet_halfway" && (!ask.themPlace || !ask.youPlace)) || !ask.category)) {
+  // "Get me to <title> at <venue>, <address> on Sat 31 Oct at 19:00": the destination is fixed (no hub search).
+  const dest = parseDestination(split.base);
+  if (dest) {
+    // "… from Old Street tomorrow" → your start.
+    const rest = (dest.rest || "").replace(/^\s*from\s+(.+?)(?=\s+(?:on|at|by|for|around|tomorrow|tonight|today|this|next)\b|\s*[,;.!?]|$)/i, "i'm at $1");
+    const d = parsePlanAsk(rest, today);
+    const halfway = dest.withThem || !!d.themPlace;
+    ask = { ...d, intent: halfway ? "meet_halfway" : "near_me", category: dest.title ? "event" : d.category, free: d.free || dest.free, signals: [`fixed destination (${dest.title ? "event" : "place"})`, ...d.signals] };
+  }
+  if (!dest && process.env.GEMINI_API_KEY && (!ask.intent || (ask.intent === "meet_halfway" && (!ask.themPlace || !ask.youPlace)) || !ask.category)) {
     const g = await geminiFill(split.base, ask, today);
     if (g.used && g.filled.length) {
       ask = g.ask;
@@ -471,11 +481,13 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
     if (!ask.themPlace) return clarify({ question: `Where's ${who === "them" ? "the other person" : who === "her" ? "she" : who === "him" ? "he" : who} coming from?`, missing: "them_location", suggestions: THEM_SUGGESTIONS });
     if (ask.youPlace && !youPlace) return clarify({ question: `${youR?.confidence === "medium" ? `Not sure which "${ask.youPlace}" you mean.` : `I couldn't find "${ask.youPlace}" on TfL.`} Which station are you nearest?`, missing: "my_location", suggestions: youR?.suggestions.length ? youR.suggestions : ME_SUGGESTIONS });
     if (!youPlace && !reqYou) return clarify({ question: "Where are you starting from?", missing: "my_location", suggestions: ME_SUGGESTIONS });
+    if (dest) return goTo({ ask, text, when, base, begin, unknowns, sources, dest, you: youPlace ? { ...youPlace.location, id: youPlace.id ?? undefined } : reqYou!, youName: youPlace?.name ?? "your location", them: themPlace!, themTyped: ask.themApprox ? `${ask.themApprox} (approx.)` : ask.themPlace!, now });
     return meetHalfway({ ask, text, when, base, begin, unknowns, sources, you: youPlace ? { ...youPlace.location, id: youPlace.id ?? undefined } : reqYou!, youName: youPlace?.name ?? "your location", them: themPlace!, themTyped: ask.themApprox ? `${ask.themApprox} (approx.)` : ask.themPlace!, now });
   }
   if (ask.youPlace && !youPlace && !reqYou) return clarify({ question: `${youR?.confidence === "medium" ? `Not sure which "${ask.youPlace}" you mean.` : `I couldn't find "${ask.youPlace}" on TfL.`} Which station are you nearest?`, missing: "my_location", suggestions: youR?.suggestions.length ? youR.suggestions : ME_SUGGESTIONS });
   const origin = youPlace?.location ?? reqYou;
   if (!origin) return clarify({ question: "Where are you? Share your location or name a station.", missing: "my_location", suggestions: ME_SUGGESTIONS });
+  if (dest) return goTo({ ask, text, when, base, begin, unknowns, sources, dest, you: youPlace ? { ...youPlace.location, id: youPlace.id ?? undefined } : origin, youName: youPlace?.name ?? "your location", them: null, themTyped: null, now });
   return nearMe({ ask, text, when, base, begin, unknowns, sources, you: origin, youName: youPlace?.name, now });
 }
 
@@ -774,5 +786,108 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
     ? `${n} ${what}${n > 1 ? "s" : ""} within ${maxMin} min of ${ctx.youName ?? "you"}, ${londonLabel(when)}.`
     : `Nothing open in our data within ${maxMin} min of ${ctx.youName ?? "you"} at ${londonLabel(when)}.`;
   result.draftMessage = nearDraft({ picks: chosen.map(({ c }, i) => ({ name: result.cards[i].name, event: c.kind === "event", free: c.kind === "place" && c.p.tags.fee === "no", url: result.cards[i].url })), when, now: ctx.now });
+  return finish(ctx, result);
+}
+
+/** A fixed destination (a named venue / address, e.g. from a snapped poster): no hub or venue search.
+ *  One card for that place, TfL from you (and them), the forecast there at that time.
+ *  result.middle stays unset, so plan_runs never records the place typed. */
+async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string }; youName: string; them: Place | null; themTyped: string | null }): Promise<PlanResultWithAgent> {
+  const { ask, when, begin, unknowns, sources, dest } = ctx;
+  const who = ask.themWho;
+  const result: PlanResultWithAgent = { ...ctx.base, intent: ctx.them ? "meet_halfway" : "near_me", you: { lat: ctx.you.lat, lng: ctx.you.lng } };
+  if (ctx.them && ctx.themTyped) {
+    const area = roundToArea(ctx.them.location);
+    result.them = { area: ctx.themTyped.replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\(Approx\.\)/, "(approx.)"), center: area.center, radiusM: area.radiusM };
+    if (ask.themApprox) unknowns.push("Their side is a broad area, not a station, so their journey time is approximate.");
+  }
+  if (ask.youApprox) unknowns.push("Your side is a broad area, not a station, so your journey time is approximate.");
+
+  const endPlace = begin("place", "Finding the place you named", "Atlas Search · OSM · postcodes.io");
+  const found = await resolveDestination(dest, ctx.you);
+  if (!found) {
+    endPlace("failed", "No match in the OSM venues, Nominatim or a postcode");
+    addSource(sources, "OSM Nominatim", new Date().toISOString());
+    for (const [id, label] of [["travel", "Checking TfL journeys"], ["lines", "Checking line status"], ["weather", "Checking the forecast"]]) begin(id, label)("skipped", "Needs the place first");
+    unknowns.push(`Couldn't place "${dest.venue}": add the street or postcode and try again.`);
+    result.headline = `Couldn't find ${dest.venue} on the map.`;
+    return finish(ctx, result);
+  }
+  addSource(sources, found.source, found.asOf);
+  endPlace("done", `${found.name} · ${found.how}${found.address ? ` · ${found.address}` : ""} · destination fixed, no middle search`, found.source);
+  if (found.verdict !== "confirmed") unknowns.push(`${found.name}: placed at ${found.how}, not an exact map pin.`);
+
+  const t = londonClock(when.toISOString());
+  const endTravel = begin("travel", ctx.them ? "Checking TfL journeys for both of you" : "Checking your TfL journey", "TfL Journey Planner");
+  const endWeather = begin("weather", "Checking the forecast", "Open-Meteo");
+  const [ja, jb, wx] = await Promise.all([
+    journey(ctx.you, found.location, when),
+    ctx.them ? journey({ ...ctx.them.location, id: ctx.them.id ?? undefined }, found.location, when) : Promise.resolve(null),
+    forecastAt(found.location, when).then((r) => {
+      endWeather("error" in r ? "failed" : "done", "error" in r ? r.error : `${londonLabel(when)}: ${r.value}`);
+      return r;
+    }),
+  ]);
+  const a = "error" in ja ? null : ja;
+  const b = jb && !("error" in jb) ? jb : null;
+  endTravel(a || b ? "done" : "failed", `you ${a ? `${a.minutes} min` : "no TfL time"}${ctx.them ? ` · ${who} ${b ? `${b.minutes} min` : "no TfL time"}` : ""} · arriving by ${t}`);
+  if (a) addSource(sources, "TfL Journey Planner", a.fetchedAt);
+  else unknowns.push("TfL didn't return your journey time; try again in a minute.");
+  if (ctx.them && !b) unknowns.push(`TfL didn't return ${who === "them" ? "their" : `${who}'s`} journey time.`);
+  const lineIds = [...new Set([...(a?.lines ?? []), ...(b?.lines ?? [])].map((l) => l.id))];
+  const endLines = begin("lines", "Checking line status", "TfL");
+  const ls = await lineStatus(lineIds);
+  endLines("error" in ls ? "failed" : "done", "error" in ls ? `TfL line status ${ls.error}` : `${ls.lines.length} line${ls.lines.length === 1 ? "" : "s"}: ${ls.lines.map((l) => `${l.name} ${l.status}`).join(", ") || "none used"}`);
+  if (!("error" in ls)) addSource(sources, "TfL Line Status", ls.fetchedAt);
+  if (!("error" in wx)) addSource(sources, "Open-Meteo", wx.fetchedAt);
+  else unknowns.push(`Weather: ${wx.error}.`);
+  if (lineIds.length) unknowns.push("Line status is as of now, not for the time of the plan.");
+
+  const isEvent = !!dest.title;
+  const tags = found.tags;
+  const h = tags.opening_hours ? closingSoon(hoursAt(tags, when, found.location)) : null;
+  const facts: Fact[] = [];
+  if (isEvent) {
+    facts.push(fact("When", `${londonLabel(when)}${dest.endTime ? `–${dest.endTime}` : ""}`, "likely", "Your ask"));
+    unknowns.push(`${dest.title}: date, time and entry are as given (e.g. on the poster), not checked against a listing.`);
+  } else if (h) facts.push(fact(`Open ${londonDayShort(when)}`, h.value, h.verdict, found.source, found.asOf));
+  else unknowns.push(`${found.name}: opening hours not listed.`);
+  facts.push(
+    a || b
+      ? fact("Travel", `TfL planner: you ${a ? `${a.minutes} min` : "no time"}${ctx.them ? `, ${who} ${b ? `${b.minutes} min` : "no time"}` : ""} to ${found.name}, arriving by ${t}`, "confirmed", "TfL", (a ?? b)!.fetchedAt)
+      : fact("Travel", "TfL journey time didn't come back", "unknown", "TfL"),
+  );
+  facts.push(...lineFacts(lineIds, ls), weatherFact(wx, when));
+  if (dest.free) facts.push(fact("Entry", "Free (as given)", "likely", "Your ask"));
+  else if (dest.priceText) facts.push(fact("Price", `${dest.priceText} (as given)`, "likely", "Your ask"));
+  else facts.push(fact("Price", "Not listed", "unknown", isEvent ? "Your ask (no price)" : "OSM (no price tag)"));
+  if (dest.signUp !== null) facts.push(fact("Sign-up", dest.signUp ? "Needed (as given)" : "Not needed (as given)", "likely", "Your ask"));
+  else if (isEvent) facts.push(fact("Sign-up", "Not stated", "unknown", "Your ask"));
+  facts.push(stepFree(tags, found.asOf, found.source === "postcodes.io" ? "OSM" : found.source));
+
+  const legs: LegWithSegments[] = [];
+  if (a) legs.push({ who: "you", minutes: a.minutes, summary: a.summary, path: a.path, segments: tidySegments(a.segments, ctx.youName) });
+  if (b) legs.push({ who: "them", minutes: b.minutes, summary: b.summary, path: trimPathStart(b.path, 500, metresBetween), segments: tidySegments(trimSegmentsStart(b.segments, 500, metresBetween)) });
+  const addr = found.address ?? dest.address ?? addressOf(tags);
+  const slug = (isEvent ? `${dest.title}-${found.name}` : found.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  const url = tags.website ?? tags["contact:website"] ?? (found.id?.startsWith("osm-") ? `https://www.openstreetmap.org/${found.id.split("-")[1]}/${found.id.split("-")[2]}` : undefined);
+  const card: PlanCardWithHours = {
+    id: isEvent ? `dest-${slug}` : (found.id ?? `dest-${slug}`),
+    kind: isEvent ? "event" : "venue",
+    name: isEvent ? dest.title! : found.name,
+    subtitle: (isEvent ? [`${londonDayShort(when)} ${t}${dest.endTime ? `–${dest.endTime}` : ""}`, found.name, addr] : [kindLabel(tags), addr]).filter(Boolean).join(" · "),
+    location: found.location,
+    legs,
+    facts,
+    why: `The place you named, so no middle search${a ? `: ${a.minutes} min for you` : ""}${b ? `, ${b.minutes} for ${who}` : ""}${!isEvent && h ? untilWhy(h) : ""}.`,
+    ...(url ? { url } : {}),
+    ...(isEvent
+      ? { openAtPlan: true, closesAt: dest.endTime, closingSoon: false, hoursKnown: !!dest.endTime }
+      : h ? cardHours(h) : { openAtPlan: null, closesAt: null, closingSoon: false, hoursKnown: false }),
+  };
+  result.cards = [card];
+  const label = isEvent ? `${dest.title} at ${found.name}` : found.name;
+  result.headline = `${label}, ${londonLabel(when)}: ${a ? `you ${a.minutes} min` : "no TfL time for you"}${ctx.them ? `, ${who} ${b ? b.minutes : "?"}` : ""}.`;
+  result.draftMessage = goDraft({ title: dest.title ?? undefined, venue: found.name, address: addr ?? undefined, when, themMinutes: ctx.them ? b?.minutes : undefined, url, now: ctx.now });
   return finish(ctx, result);
 }

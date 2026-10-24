@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, ArrowUp, CalendarDays, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, LocateFixed, Loader2, Mic, Navigation, PencilLine, Send, Sparkles, X } from "lucide-react";
+import { ArrowRight, ArrowUp, CalendarDays, Camera, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, LocateFixed, Loader2, Mic, Navigation, PencilLine, Send, Sparkles, X } from "lucide-react";
 import type { PlanResultWithAgent } from "@/lib/plan-types";
 import type { FixtureId } from "@/lib/plan-fixture";
 import { cn } from "@/lib/utils";
 import { AgentSteps } from "./agent-steps";
+import { PosterSnap } from "./poster-snap";
 import { ClarifyBox } from "./clarify-box";
 import { PlanCard } from "./plan-card";
 import { DetailPanel } from "./place-detail";
@@ -128,13 +129,18 @@ function InfoTip() {
   );
 }
 
-function Blind({ result }: { result: PlanResultWithAgent }) {
+function Blind({ result, photo = false }: { result: PlanResultWithAgent; photo?: boolean }) {
   const words = result.headline.split(" ");
   return (
     <div className="sw-blind relative overflow-hidden rounded-[16px] bg-tint/80 py-3 pb-4 pl-5 pr-4 text-ink shadow-e2 ring-1 ring-line/70 [perspective:600px]">
       <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 bg-signal" />
       <p className="num font-mono text-[11.5px] font-semibold uppercase tracking-[0.08em] text-signal-ink">
         {fmtWhen(result.when)} · {INTENT_LABEL[result.intent] ?? result.intent}
+        {photo ? (
+          <span className="ml-2 inline-flex translate-y-[-1px] items-center gap-1 rounded-full bg-signal-soft px-2 py-0.5 align-middle font-sans text-[11px] font-semibold normal-case tracking-normal text-signal-ink ring-1 ring-signal/25">
+            <Camera className="size-3" aria-hidden /> From your photo
+          </span>
+        ) : null}
       </p>
       <h2 className="relative mt-1.5 text-[24px] font-bold leading-[1.15] tracking-[-0.02em] text-balance">
         {words.map((w, i) => {
@@ -244,6 +250,23 @@ function MicButton({ listening, onClick, className, size = "md" }: { listening: 
   );
 }
 
+/** Opens "Snap a poster" (camera on phones, file / drop / paste on desktop). Same footprint as the mic. */
+function CameraButton({ open, onClick, size = "md" }: { open: boolean; onClick: () => void; size?: "md" | "sm" }) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      aria-expanded={open}
+      aria-label="Snap a poster"
+      title="Snap a poster"
+      whileTap={{ scale: 0.9 }}
+      className={cn("sw-btn relative shrink-0 rounded-full transition-colors", size === "md" ? "size-11" : "size-10", open ? "bg-signal-soft text-signal-ink" : "text-ink-2 hover:bg-white/80 hover:text-ink")}
+    >
+      <Camera className="size-[18px]" aria-hidden />
+    </motion.button>
+  );
+}
+
 /** "Sending in a moment" after a voice ask, with a cancel. */
 function PendingSend({ onCancel, ms }: { onCancel: () => void; ms: number }) {
   return (
@@ -316,6 +339,29 @@ export function SoWhereApp() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [chat, setChat] = useState("");
+  // Poster snap: which composer it opened from, and the ask it produced (for the "From your photo" chip).
+  const [snap, setSnap] = useState<null | "ask" | "chat">(null);
+  const [photoAsk, setPhotoAsk] = useState<string | null>(null);
+  const snapRef = useRef<HTMLDivElement>(null);
+  // Bring the poster panel into view when it opens (it sits below the fold on phones).
+  useEffect(() => {
+    if (!snap) return;
+    const show = () => snapRef.current?.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+    const t = window.setTimeout(show, 280);
+    // …and again when it grows (scanning → found card), so the next step is never below the fold.
+    let h = 0;
+    const ro = new ResizeObserver(([e]) => {
+      const nh = Math.round(e.contentRect.height);
+      if (h && nh > h + 8) show();
+      h = nh;
+    });
+    const el = snapRef.current;
+    if (el) ro.observe(el);
+    return () => {
+      window.clearTimeout(t);
+      ro.disconnect();
+    };
+  }, [snap, reduced]);
   const [pending, setPending] = useState<null | "ask" | "chat">(null);
   const pendingTimer = useRef<number | null>(null);
   const baseAsk = useRef("");
@@ -430,12 +476,37 @@ export function SoWhereApp() {
       setRefining(false);
       setShown(null);
       setTurns([]);
+      setPhotoAsk(null);
       baseAsk.current = text;
       awaitingReply.current = false;
       submit(text, undefined, you ?? undefined);
     },
     [submit, you, stopTyping]
   );
+
+  const snapPlan = useCallback(
+    (q: string) => {
+      setSnap(null);
+      setQuery(q);
+      setActiveChip(null);
+      ask(q);
+      setPhotoAsk(q.trim());
+      scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      if (window.innerWidth < 1024) window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [ask]
+  );
+  const snapEdit = useCallback((q: string) => {
+    setSnap(null);
+    setQuery(q);
+    setActiveChip(null);
+    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.setTimeout(() => {
+      const ta = inputRef.current;
+      ta?.focus();
+      ta?.setSelectionRange(q.length, q.length);
+    }, 60);
+  }, []);
 
   const locate = useCallback(() => {
     if (you) {
@@ -529,6 +600,8 @@ export function SoWhereApp() {
 
   // While a follow-up chip re-asks, keep the previous picks on screen (dimmed) so new results can animate into place.
   const view = status === "result" ? result : refining ? shown : null;
+  // A halfway plan on screen: the poster becomes "meet halfway for <event>" with the same two people.
+  const snapContext = view && view.intent === "meet_halfway" && view.middle ? { query: state.ask || view.query || baseAsk.current } : null;
   const selected = result?.cards.find((c) => c.id === selectedId) ?? result?.cards[0];
   const detail = result?.cards.find((c) => c.id === detailId) ?? null;
   const finished = status === "result" || status === "clarify";
@@ -596,6 +669,19 @@ export function SoWhereApp() {
                     </motion.button>
                   );
                 })}
+                <motion.button
+                  initial={{ opacity: 0, y: 10, scale: 0.92 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ delay: 0.35 + CHIPS.length * 0.06, type: "spring", stiffness: 420, damping: 26 }}
+                  type="button"
+                  disabled={status === "running"}
+                  onClick={() => setSnap((v) => (v === "ask" ? null : "ask"))}
+                  aria-expanded={snap === "ask"}
+                  className={cn("sw-chip min-h-9 px-3 text-[13px] font-medium max-lg:min-h-11", snap === "ask" && "bg-signal-soft")}
+                >
+                  <Camera className={cn("size-4 transition-colors", snap === "ask" ? "text-signal-ink" : "text-ink-3")} aria-hidden />
+                  <span>Snap a poster</span>
+                </motion.button>
               </div>
               <motion.div layout="size" className={cn("sw-field flex items-end gap-2 p-1.5 pl-3.5", typing && "is-typing")}>
                 <label htmlFor="ask" className="sr-only">Your ask</label>
@@ -619,6 +705,7 @@ export function SoWhereApp() {
                   placeholder="Date Thursday at 7, I'm at Old Street, she's around Clapham…"
                   className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal transition-[height] duration-200 placeholder:text-ink-3 focus:outline-none"
                 />
+                <CameraButton open={snap === "ask"} onClick={() => setSnap((v) => (v === "ask" ? null : "ask"))} />
                 {speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : null}
                 <motion.button
                   type="submit"
@@ -650,6 +737,13 @@ export function SoWhereApp() {
               </div>
               <AnimatePresence>{pending === "ask" ? <PendingSend ms={PENDING_MS} onCancel={cancelPending} /> : null}</AnimatePresence>
             </form>
+            <AnimatePresence initial={false}>
+              {snap === "ask" ? (
+                <motion.div key="snap-ask" ref={snapRef} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: reduced ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
+                  <PosterSnap className="mt-3" onPlan={snapPlan} onEdit={snapEdit} context={snapContext} />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
 
             {/* Live steps */}
             <div className="mt-4 flex flex-col gap-4">
@@ -661,7 +755,7 @@ export function SoWhereApp() {
               {view ? <Trail turns={turns} typing={refining && status === "running"} /> : null}
               {view ? (
                 <motion.div key="results" className="flex flex-col gap-4" initial={{ opacity: 0 }} animate={{ opacity: refining && status === "running" ? 0.55 : 1 }} transition={{ duration: 0.3 }} aria-busy={status === "running"}>
-                  <Blind key={view.headline} result={view} />
+                  <Blind key={view.headline} result={view} photo={!!photoAsk && baseAsk.current === photoAsk} />
                   <Filters f={view.filters} />
 
                   <div ref={(n) => { if (n) cardRefs.current.set("__results", n); }} className="scroll-mt-20 lg:scroll-mt-4">
@@ -717,6 +811,13 @@ export function SoWhereApp() {
                 transition={{ delay: 0.3, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 className="sticky bottom-0 z-20 flex flex-col gap-2 border-t border-white/70 bg-white/85 px-4 py-3 shadow-[0_-10px_24px_-18px_rgba(74,52,30,0.35)] backdrop-blur-xl backdrop-saturate-150 lg:rounded-b-[22px] lg:px-5"
               >
+                <AnimatePresence initial={false}>
+                  {snap === "chat" ? (
+                    <motion.div key="snap-chat" ref={snapRef} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: reduced ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
+                      <PosterSnap onPlan={snapPlan} onEdit={snapEdit} context={snapContext} />
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -737,6 +838,7 @@ export function SoWhereApp() {
                     enterKeyHint="send"
                     className="min-w-0 flex-1 bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal placeholder:text-ink-3 focus:outline-none"
                   />
+                  <CameraButton size="sm" open={snap === "chat"} onClick={() => setSnap((v) => (v === "chat" ? null : "chat"))} />
                   {speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : null}
                   <motion.button
                     type="submit"

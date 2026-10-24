@@ -46,3 +46,11 @@ export function nearDraft(o: { picks: { name: string; event: boolean; free: bool
   const others = rest.length ? ` Or ${rest.map((r) => r.name).join(" or ")}.` : "";
   return strip(`Hey! ${lead}${extra}${others}${top.url ? ` ${top.url}` : ""}`);
 }
+
+/** Draft for a fixed destination (a named place / poster event). Their journey time only, never their area. */
+export function goDraft(o: { title?: string; venue: string; address?: string; when: Date; themMinutes?: number; url?: string; now?: Date }): string {
+  const when = friendlyWhen(o.when, o.now);
+  const place = `${o.venue}${o.address ? `, ${o.address}` : ""}`;
+  if (o.themMinutes == null) return strip(`${o.title ? `${o.title} at ${place}` : place} ${when}${o.url ? ` ${o.url}` : ""}`);
+  return strip(`Hey! Fancy ${o.title ? o.title : `meeting at ${o.venue}`} ${when}? It's at ${place}, about ${o.themMinutes} min for you 🙂${o.url ? ` ${o.url}` : ""}`);
+}

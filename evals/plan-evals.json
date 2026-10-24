@@ -103,6 +103,12 @@
     { "id": "refine-italian-only-matches", "query": "coffee near London Bridge station at 4pm on Saturday", "clock": "12:00", "focusTop": true, "refines": ["any italian coffee nearby?"],
       "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "category": "cafe", "cuisine": "italian", "onlyCuisine": true, "headlineMatch": "^\\d Italian caf(é|és) near ", "replyMatch": ["italian"], "replyNot": ["wasn't sure"]} },
     { "id": "refine-open-keeps-plan", "query": "i wanna meet a friend for a coffe, i'm in greenwich and he lives in ne i dont know the precise position", "clock": "22:30", "focusTop": true, "refines": ["is it open now?"],
-      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "sameAsBase": true, "replyMatch": ["open until|no hours listed|is open"], "replyNot": ["wasn't sure"]} }
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "sameAsBase": true, "replyMatch": ["open until|no hours listed|is open"], "replyNot": ["wasn't sure"]} },
+    {"id": "poster-query-unit", "query": "(unit) poster → suggestedQuery → plan parser", "unit": "poster", "expect": {"clarify": false}},
+    {"id": "dest-poster-event-solo", "query": "Get me to Jazz Night at The Vortex Jazz Club, 11 Gillett Square, N16 8AZ on Sat 31 Oct at 19:00", "you": {"lat": 51.5256, "lng": -0.0877}, "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "weekday": "Sat", "time": "19:00", "headlineMatch": "Jazz Night at The Vortex", "destination": {"kind": "event", "facts": ["When", "Travel", "Weather", "Sign-up"], "legs": 1}}},
+    {"id": "dest-poster-halfway", "query": "Meet halfway for Jazz Night at The Vortex Jazz Club, 11 Gillett Square, N16 8AZ on Fri 30 Oct at 18:00. i'm at old street and she's in clapham", "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "weekday": "Fri", "time": "18:00", "themArea": "Clapham", "headlineMatch": "Vortex.*you \\d+ min, her \\d+", "destination": {"kind": "event", "facts": ["When", "Travel", "Weather"], "legs": 2}}},
+    {"id": "dest-venue-from-station", "query": "how do I get to Tate Modern from Old Street tomorrow at 2pm", "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "time": "14:00", "headlineMatch": "^Tate Modern", "destination": {"kind": "venue", "facts": ["Open", "Travel", "Weather"], "legs": 1}}},
+    {"id": "dest-needs-origin", "query": "Get me to Tate Modern tomorrow at 2pm", "expect": {"clarify": true, "missing": "my_location"}},
+    {"id": "dest-unknown-place", "query": "Get me to Blorptastic Hall on Sat 31 Oct at 19:00", "you": {"lat": 51.5256, "lng": -0.0877}, "expect": {"clarify": false, "headlineMatch": "^Couldn't find Blorptastic Hall"}}
   ]
 }
