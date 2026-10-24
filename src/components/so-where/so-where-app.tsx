@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, CalendarDays, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, LocateFixed, Loader2, Navigation, PencilLine, Send, X } from "lucide-react";
-import type { Fact, PlanResultWithAgent } from "@/lib/plan-types";
+import { ArrowRight, ArrowUp, CalendarDays, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, LocateFixed, Loader2, Mic, Navigation, PencilLine, Send, Sparkles, X } from "lucide-react";
+import type { PlanResultWithAgent } from "@/lib/plan-types";
 import type { FixtureId } from "@/lib/plan-fixture";
 import { cn } from "@/lib/utils";
 import { AgentSteps } from "./agent-steps";
@@ -15,9 +15,11 @@ import { FollowUps } from "./follow-ups";
 import { SendPlanDialog } from "./send-plan-dialog";
 import { Mark } from "./mark";
 import { VerdictChip } from "./verdict-chip";
-import { WeatherIcon, weatherKind } from "./fact-icon";
 import { fmtAsOf, fmtWhen, gmapsDirections } from "./format";
 import { usePlan } from "./use-plan";
+import { useSpeech } from "./use-speech";
+import { MapChips } from "./map-chips";
+import { friendlyDraft } from "./draft";
 import { CountUp } from "./motion-bits";
 import type { MapPadding } from "./plan-map";
 
@@ -56,45 +58,6 @@ function Header({ example, reason, className }: { example: boolean; reason?: str
         </AnimatePresence>
       </span>
     </header>
-  );
-}
-
-function liveFacts(r: PlanResultWithAgent | null, cardId: string | null): Fact[] {
-  if (!r) return [];
-  const card = r.cards.find((c) => c.id === cardId) ?? r.cards[0];
-  return (card?.facts ?? []).filter((f) => /train|line|status|weather|tube|bus/i.test(f.label) && f.verdict !== "unknown").slice(0, 2);
-}
-
-function LiveStrip({ facts }: { facts: Fact[] }) {
-  return (
-    <div className="flex flex-col items-end gap-1.5">
-      <AnimatePresence>
-        {facts.map((f, i) => (
-          <motion.div
-            key={f.label + f.value}
-            initial={{ opacity: 0, x: 16, scale: 0.92 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 12 }}
-            transition={{ delay: 0.9 + i * 0.1, type: "spring", stiffness: 380, damping: 26 }}
-            className="sw-glass-chip flex items-center gap-2 rounded-full py-1.5 pl-2 pr-3 text-[12.5px] shadow-e3 ring-1 ring-white/70"
-          >
-            {weatherKind(f) ? (
-              <WeatherIcon fact={f} />
-            ) : (
-              <span className="relative ml-0.5 flex size-2.5" aria-hidden>
-                <span className={cn("absolute inset-0 animate-ping rounded-full opacity-50 [animation-duration:2.4s] motion-reduce:hidden", f.verdict === "forecast" ? "bg-fc" : "bg-ok")} />
-                <span className={cn("relative size-2.5 rounded-full", f.verdict === "forecast" ? "bg-fc" : "bg-ok")} />
-              </span>
-            )}
-            <span className="max-w-[190px] truncate sm:max-w-[300px] font-medium text-ink" title={f.value}>{f.value}</span>
-            <span className="num shrink-0 whitespace-nowrap font-mono text-[11px] text-ink-3">
-              {f.source.split(" · ")[0]}
-              {f.asOf ? ` ${fmtAsOf(f.asOf)}` : ""}
-            </span>
-          </motion.div>
-        ))}
-      </AnimatePresence>
-    </div>
   );
 }
 
@@ -239,6 +202,107 @@ function RouteScan() {
 }
 
 type Toast = { id: number; text: string };
+type Turn = { id: number; role: "user" | "agent"; text: string };
+
+const TIME_RE = /\b(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\b(?:at\s+)?([01]?\d|2[0-3]):([0-5]\d)\b|\bat\s+(\d{1,2})\b/i;
+
+/** Original ask + refinements. A new time replaces the old one; other tweaks stack. */
+function composeAsk(base: string, tweaks: string[]) {
+  let q = base.trim().replace(/[.\s]+$/, "");
+  const notes: string[] = [];
+  for (const t of tweaks) {
+    const m = t.match(TIME_RE);
+    if (m) {
+      q = q.replace(new RegExp(TIME_RE.source, "gi"), "").replace(/\s{2,}/g, " ").replace(/\s+([.,])/g, "$1").trim();
+      const time = m[3] ? `${m[1]}${m[2] ? `:${m[2]}` : ""}${m[3].toLowerCase()}` : m[4] ? `${m[4]}:${m[5]}` : `${m[6]}`;
+      q = `${q.replace(/[.\s]+$/, "")} at ${time}`;
+      const rest = t.replace(TIME_RE, "").replace(/\b(make it|change (?:it )?to|move (?:it )?to)\b/gi, "").replace(/[\s,.]+/g, " ").trim();
+      if (rest.length > 2) notes.push(rest);
+    } else notes.push(t.trim());
+  }
+  return notes.length ? `${q}. (refine: ${notes.join("; ")})` : `${q}.`;
+}
+
+function agentReply(prev: PlanResultWithAgent | null, next: PlanResultWithAgent) {
+  const top = next.cards[0];
+  if (!top) return "Nothing matched that. Try another tweak.";
+  const them = top.legs.find((l) => l.who === "them")?.minutes;
+  const you = top.legs.find((l) => l.who === "you")?.minutes;
+  const mins = them != null && you != null ? ` · you ${you}, them ${them} min` : you != null ? ` · ${you} min` : "";
+  if (prev?.cards[0]?.id === top.id) return `Still ${top.name}: best fit${mins}.`;
+  return `New top pick: ${top.name}${mins}.`;
+}
+
+/** Mic toggle. Hidden when the browser has no speech recognition. */
+function MicButton({ listening, onClick, className, size = "md" }: { listening: boolean; onClick: () => void; className?: string; size?: "md" | "sm" }) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      aria-pressed={listening}
+      aria-label={listening ? "Stop voice input" : "Speak your ask"}
+      whileTap={{ scale: 0.9 }}
+      className={cn(
+        "sw-btn relative shrink-0 rounded-full transition-colors",
+        size === "md" ? "size-11" : "size-10",
+        listening ? "sw-mic-on bg-[linear-gradient(180deg,var(--sw-cta-a),var(--sw-cta-b))] text-[#2b1203]" : "text-ink-2 hover:bg-white/80 hover:text-ink",
+        className
+      )}
+    >
+      {listening ? (
+        <span className="flex h-4 items-center gap-[3px]" aria-hidden>
+          {[0, 1, 2, 3].map((i) => (
+            <motion.span key={i} className="w-[3px] rounded-full bg-[#2b1203]" animate={{ height: [5, 15, 7, 12, 5] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.12, ease: "easeInOut" }} />
+          ))}
+        </span>
+      ) : (
+        <Mic className="size-[18px]" aria-hidden />
+      )}
+    </motion.button>
+  );
+}
+
+/** "Sending in a moment" after a voice ask, with a cancel. */
+function PendingSend({ onCancel, ms }: { onCancel: () => void; ms: number }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} className="mt-2 flex items-center gap-2 text-[12.5px] font-semibold text-ink-2">
+      <span className="relative h-1.5 w-20 overflow-hidden rounded-full bg-sunk">
+        <motion.span className="absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,var(--sw-cta-a),var(--sw-cta-b))]" initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: ms / 1000, ease: "linear" }} />
+      </span>
+      Sending…
+      <button type="button" onClick={onCancel} className="rounded-full px-2 py-0.5 text-ink underline-offset-2 hover:underline">Cancel</button>
+    </motion.div>
+  );
+}
+
+/** Light chat trail: what you asked, what changed. */
+function Trail({ turns }: { turns: Turn[] }) {
+  if (!turns.length) return null;
+  return (
+    <ol className="flex flex-col gap-1.5" aria-label="Conversation">
+      <AnimatePresence initial={false}>
+        {turns.slice(-6).map((t) => (
+          <motion.li
+            key={t.id}
+            layout
+            initial={{ opacity: 0, y: 10, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 420, damping: 30 }}
+            className={cn("flex", t.role === "user" ? "justify-end" : "justify-start")}
+          >
+            {t.role === "user" ? (
+              <span className="max-w-[85%] rounded-[16px] rounded-br-[6px] bg-[linear-gradient(180deg,#fff1e4,#ffe3cc)] px-3 py-1.5 text-[13.5px] font-medium leading-5 text-[#4a2408] shadow-e1 ring-1 ring-[#ff9a3c]/25">{t.text}</span>
+            ) : (
+              <span className="flex max-w-[90%] items-start gap-1.5 rounded-[16px] rounded-bl-[6px] bg-white/85 px-3 py-1.5 text-[13.5px] leading-5 text-ink-2 shadow-e1 ring-1 ring-white/80">
+                <Sparkles className="mt-[3px] size-3.5 shrink-0 text-signal" aria-hidden /> {t.text}
+              </span>
+            )}
+          </motion.li>
+        ))}
+      </AnimatePresence>
+    </ol>
+  );
+}
 
 export function SoWhereApp() {
   const reduced = !!useReducedMotion();
@@ -260,6 +324,13 @@ export function SoWhereApp() {
   const [refining, setRefining] = useState(false);
   const [shown, setShown] = useState<PlanResultWithAgent | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [chat, setChat] = useState("");
+  const [pending, setPending] = useState<null | "ask" | "chat">(null);
+  const pendingTimer = useRef<number | null>(null);
+  const baseAsk = useRef("");
+  const tweaks = useRef<string[]>([]);
+  const awaitingReply = useRef(false);
   const toastTimer = useRef<number | null>(null);
   const say = useCallback((text: string) => {
     setToast({ id: Date.now(), text });
@@ -343,6 +414,11 @@ export function SoWhereApp() {
     setSelectedId(result?.cards[0]?.id ?? null);
     setDetailId(null);
     if (result) {
+      if (awaitingReply.current) {
+        awaitingReply.current = false;
+        const text = agentReply(shown, result);
+        setTurns((t) => [...t, { id: Date.now(), role: "agent", text }]);
+      }
       setShown(result);
       if (refining) say("Picks updated");
     }
@@ -360,6 +436,10 @@ export function SoWhereApp() {
       if (!text) return;
       setRefining(false);
       setShown(null);
+      setTurns([]);
+      baseAsk.current = text;
+      tweaks.current = [];
+      awaitingReply.current = false;
       submit(text, undefined, you ?? undefined);
     },
     [submit, you, stopTyping]
@@ -386,18 +466,54 @@ export function SoWhereApp() {
   }, [you, say]);
 
   const refine = useCallback(
-    (extra: string) => {
-      const base = state.query || query;
-      if (!base) return;
-      const next = `${base.replace(/\s*\(refine:.*\)$/i, "")} (refine: ${extra})`;
+    (extra: string, label?: string) => {
+      const text = extra.trim();
+      if (!text) return;
+      if (!baseAsk.current) baseAsk.current = state.query || query;
+      if (!baseAsk.current) return;
+      tweaks.current = [...tweaks.current, text];
+      const next = composeAsk(baseAsk.current, tweaks.current);
       setQuery(next);
       setRefining(true);
-      say(`Re-checking: ${extra}`);
+      setDetailId(null);
+      setTurns((t) => [...t, { id: Date.now(), role: "user", text: label ?? text }]);
+      awaitingReply.current = true;
       submit(next, undefined, you ?? undefined);
       scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [state.query, query, submit, you, say]
+    [state.query, query, submit, you]
   );
+
+  // Voice: fill the box live; after a final result, send after a short pause unless cancelled.
+  const voiceTarget = useRef<"ask" | "chat">("ask");
+  const cancelPending = useCallback(() => {
+    if (pendingTimer.current) window.clearTimeout(pendingTimer.current);
+    pendingTimer.current = null;
+    setPending(null);
+  }, []);
+  const PENDING_MS = 1600;
+  const speech = useSpeech({
+    onText: (t) => (voiceTarget.current === "chat" ? setChat(t) : setQuery(t)),
+    onFinal: (t) => {
+      const target = voiceTarget.current;
+      setPending(target);
+      if (pendingTimer.current) window.clearTimeout(pendingTimer.current);
+      pendingTimer.current = window.setTimeout(() => {
+        setPending(null);
+        if (target === "chat") {
+          setChat("");
+          refine(t);
+        } else ask(t);
+      }, PENDING_MS);
+    },
+    onError: (m) => say(m),
+  });
+  const mic = (target: "ask" | "chat") => () => {
+    cancelPending();
+    voiceTarget.current = target;
+    speech.toggle();
+  };
+  useEffect(() => () => { if (pendingTimer.current) window.clearTimeout(pendingTimer.current); }, []);
 
   const openDetail = useCallback((id: string) => {
     setSelectedId(id);
@@ -430,8 +546,8 @@ export function SoWhereApp() {
         {/* Map: on top on phones, full-bleed behind the panel on desktop */}
         <div className="relative h-[46svh] min-h-[300px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto">
           <PlanMap result={result ?? (refining ? shown : null)} selectedId={selectedId} hoverId={hoverId} focusId={detailId} scanning={status === "running"} onSelect={select} onHover={setHoverId} padding={detail && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} />
-          <div className={cn("pointer-events-none absolute right-3 top-3 z-10 transition-[right] duration-500 lg:right-4 lg:top-4", detail && !mobile && "md:right-[412px] lg:right-[412px]")}>
-            <LiveStrip facts={liveFacts(result, selectedId)} />
+          <div className={cn("pointer-events-none absolute right-3 top-3 z-10 transition-[right] duration-500 max-sm:right-2 max-sm:top-2 max-sm:origin-top-right max-sm:scale-[.92] lg:right-4 lg:top-4", detail && !mobile && "md:right-[412px] lg:right-[412px]")}>
+            <MapChips result={result ?? (refining ? shown : null)} cardId={detailId ?? selectedId} />
           </div>
           {state.example ? (
             <div className="pointer-events-none absolute bottom-4 left-[476px] z-10 hidden lg:block">
@@ -508,6 +624,7 @@ export function SoWhereApp() {
                   placeholder="Date Thursday at 7, I'm at Old Street, she's around Clapham…"
                   className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink caret-sky transition-[height] duration-200 placeholder:text-ink-3 focus:outline-none"
                 />
+                {speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : null}
                 <motion.button
                   type="submit"
                   disabled={!query.trim() || status === "running"}
@@ -536,6 +653,7 @@ export function SoWhereApp() {
                 </button>
                 {locating === "denied" ? <span className="text-[11.5px] leading-4 text-ink-3">Location blocked: name a station.</span> : null}
               </div>
+              <AnimatePresence>{pending === "ask" ? <PendingSend ms={PENDING_MS} onCancel={cancelPending} /> : null}</AnimatePresence>
             </form>
 
             {/* Live steps */}
@@ -546,6 +664,7 @@ export function SoWhereApp() {
 
               {view ? (
                 <motion.div key="results" className="flex flex-col gap-4" initial={{ opacity: 0 }} animate={{ opacity: refining && status === "running" ? 0.55 : 1 }} transition={{ duration: 0.3 }} aria-busy={status === "running"}>
+                  <Trail turns={turns} />
                   <Blind key={view.headline} result={view} />
                   <Filters f={view.filters} />
 
@@ -560,7 +679,7 @@ export function SoWhereApp() {
                     </LayoutGroup>
                   </div>
 
-                  <FollowUps intent={view.intent} onRefine={refine} disabled={status === "running"} />
+                  <FollowUps intent={view.intent} onRefine={(ask, label) => refine(ask, label)} disabled={status === "running"} />
 
                   {view.unknowns.length ? (
                     <section aria-label="Couldn't check" className="rounded-[14px] border border-dashed border-control bg-raised/60 p-3.5">
@@ -589,32 +708,70 @@ export function SoWhereApp() {
             </div>
           </div>
 
-          {/* Action bar */}
+          {/* Composer + action bar */}
           <AnimatePresence>
-            {status === "result" && result && !detail ? (
+            {view && !(detail && mobile) ? (
               <motion.div
+                key="dock"
                 initial={{ y: 24, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 24, opacity: 0 }}
                 transition={{ delay: 0.3, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className="sticky bottom-0 flex gap-2 border-t border-white/70 bg-white/85 px-4 py-3 shadow-[0_-10px_24px_-18px_rgba(74,52,30,0.35)] backdrop-blur-xl backdrop-saturate-150 lg:rounded-b-[22px] lg:px-5"
+                className="sticky bottom-0 z-20 flex flex-col gap-2 border-t border-white/70 bg-white/85 px-4 py-3 shadow-[0_-10px_24px_-18px_rgba(74,52,30,0.35)] backdrop-blur-xl backdrop-saturate-150 lg:rounded-b-[22px] lg:px-5"
               >
-                <button type="button" onClick={() => { setSendOpen(true); say("Draft ready · nothing is sent"); }} className="sw-btn sw-btn-primary min-h-11 flex-1 whitespace-nowrap rounded-[12px] px-4 text-[15px] font-semibold">
-                  <Send className="size-4" aria-hidden /> Send plan
-                </button>
-                {selected ? (
-                  <a href={gmapsDirections(selected.location.lat, selected.location.lng)} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3.5 text-[15px] font-medium">
-                    <Navigation className="size-4" aria-hidden /> <span className="max-sm:sr-only">Directions</span>
-                  </a>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!chat.trim() || status === "running") return;
+                    cancelPending();
+                    refine(chat);
+                    setChat("");
+                  }}
+                  className={cn("sw-field flex items-center gap-1 p-1 pl-3.5", speech.listening && voiceTarget.current === "chat" && "is-typing")}
+                >
+                  <label htmlFor="chat" className="sr-only">Refine the plan</label>
+                  <input
+                    id="chat"
+                    value={chat}
+                    onChange={(e) => { setChat(e.target.value); cancelPending(); }}
+                    placeholder={speech.listening && voiceTarget.current === "chat" ? "Listening…" : "Cheaper, quieter, make it 8pm…"}
+                    autoComplete="off"
+                    enterKeyHint="send"
+                    className="min-w-0 flex-1 bg-transparent py-2 text-[16px] leading-6 text-ink caret-sky placeholder:text-ink-3 focus:outline-none"
+                  />
+                  {speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : null}
+                  <motion.button
+                    type="submit"
+                    disabled={!chat.trim() || status === "running"}
+                    aria-label="Send to agent"
+                    aria-busy={status === "running"}
+                    whileTap={{ scale: 0.9 }}
+                    className="sw-btn sw-btn-primary size-10 shrink-0 rounded-full"
+                  >
+                    {status === "running" ? <span className="size-4 animate-spin rounded-full border-2 border-[#2b1203]/25 border-t-[#2b1203]" aria-hidden /> : <ArrowUp className="size-[18px]" aria-hidden />}
+                  </motion.button>
+                </form>
+                <AnimatePresence>{pending === "chat" ? <PendingSend ms={PENDING_MS} onCancel={cancelPending} /> : null}</AnimatePresence>
+                {status === "result" && result && !detail ? (
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setSendOpen(true); say("Draft ready · nothing is sent"); }} className="sw-btn sw-btn-primary min-h-11 flex-1 whitespace-nowrap rounded-[12px] px-4 text-[15px] font-semibold">
+                      <Send className="size-4" aria-hidden /> Send plan
+                    </button>
+                    {selected ? (
+                      <a href={gmapsDirections(selected.location.lat, selected.location.lng)} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3.5 text-[15px] font-medium">
+                        <Navigation className="size-4" aria-hidden /> <span className="max-sm:sr-only">Directions</span>
+                      </a>
+                    ) : null}
+                    <button type="button" onClick={change} className="sw-btn sw-btn-ghost min-h-11 gap-1.5 rounded-[12px] px-3 text-[15px] font-medium">
+                      <PencilLine className="size-4" aria-hidden /> Change
+                    </button>
+                  </div>
                 ) : null}
-                <button type="button" onClick={change} className="sw-btn sw-btn-ghost min-h-11 gap-1.5 rounded-[12px] px-3 text-[15px] font-medium">
-                  <PencilLine className="size-4" aria-hidden /> Change
-                </button>
               </motion.div>
             ) : null}
           </AnimatePresence>
           {/* micro confirmations */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-[84px] z-30 flex justify-center" role="status" aria-live="polite">
+          <div className={cn("pointer-events-none absolute inset-x-0 z-30 flex justify-center", view ? "bottom-[150px]" : "bottom-[84px]")} role="status" aria-live="polite">
             <AnimatePresence>
               {toast ? (
                 <motion.div
@@ -634,7 +791,7 @@ export function SoWhereApp() {
         </motion.aside>
 
         {result ? <DetailPanel card={detail} mobile={mobile} result={result} example={state.example} onClose={closeDetail} onSend={() => { setSendOpen(true); say("Draft ready · nothing is sent"); }} /> : null}
-        {result ? <SendPlanDialog open={sendOpen} onOpenChange={setSendOpen} draft={result.draftMessage} /> : null}
+        {result ? <SendPlanDialog open={sendOpen} onOpenChange={setSendOpen} draft={friendlyDraft(result, detail ?? selected)} /> : null}
       </main>
     </MotionConfig>
   );

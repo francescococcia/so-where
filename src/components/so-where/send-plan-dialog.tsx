@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Copy, Lock, X } from "lucide-react";
+import { Check, Copy, Lock, Share2, X } from "lucide-react";
 
 /** Draft only. Nothing in here sends anything; the user copies and sends it themselves. */
 export function SendPlanDialog({ open, onOpenChange, draft }: { open: boolean; onOpenChange: (o: boolean) => void; draft: string }) {
   const [text, setText] = useState(draft);
   const [copied, setCopied] = useState(false);
+  const [canShare, setCanShare] = useState(false);
+  useEffect(() => setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function"), []);
   useEffect(() => {
     if (open) {
       setText(draft);
@@ -26,6 +28,15 @@ export function SendPlanDialog({ open, onOpenChange, draft }: { open: boolean; o
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
+  };
+
+  // Opens the system share sheet on tap; the user picks the app and sends it themselves.
+  const share = async () => {
+    try {
+      await navigator.share({ text });
+    } catch {
+      /* dismissed */
+    }
   };
 
   return (
@@ -52,19 +63,25 @@ export function SendPlanDialog({ open, onOpenChange, draft }: { open: boolean; o
                 </div>
                 <p id="sw-draft-note" className="mt-1 flex items-start gap-1.5 text-[13px] leading-5 text-ink-3">
                   <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                  Nothing is sent from here. Copy it and send it yourself. Their area isn&apos;t in the message.
+                  Nothing is sent from here. Their area is never included.
                 </p>
                 <label htmlFor="sw-draft" className="sr-only">Message draft</label>
                 <textarea
                   id="sw-draft"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  rows={5}
+                  rows={4}
                   className="sw-field mt-4 w-full resize-none p-3.5 text-[16px] leading-6 text-ink caret-sky focus:bg-surface focus:shadow-[0_0_0_1.5px_var(--sw-sky),var(--sw-shadow-focus)] focus:outline-none"
                 />
                 <div className="mt-4 flex justify-end gap-2">
-                  <Dialog.Close className="sw-btn sw-btn-ghost min-h-11 rounded-[12px] px-4 text-[15px] font-medium">Close</Dialog.Close>
-                  <motion.button type="button" onClick={copy} whileTap={{ scale: 0.96 }} className="sw-btn sw-btn-primary min-h-11 min-w-[132px] rounded-[12px] px-4 text-[15px] font-semibold transition-[box-shadow,background-color,color]">
+                  {canShare ? (
+                    <motion.button type="button" onClick={share} whileTap={{ scale: 0.96 }} className="sw-btn sw-btn-quiet min-h-11 gap-2 rounded-[12px] px-4 text-[15px] font-medium">
+                      <Share2 className="size-4" aria-hidden /> Share
+                    </motion.button>
+                  ) : (
+                    <Dialog.Close className="sw-btn sw-btn-ghost min-h-11 rounded-[12px] px-4 text-[15px] font-medium">Close</Dialog.Close>
+                  )}
+                  <motion.button type="button" onClick={copy} whileTap={{ scale: 0.96 }} className="sw-btn sw-btn-primary min-h-11 min-w-[140px] flex-1 rounded-[12px] px-4 text-[15px] font-semibold sm:flex-none">
                     <AnimatePresence mode="popLayout" initial={false}>
                       {copied ? (
                         <motion.span key="ok" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="inline-flex items-center gap-2">

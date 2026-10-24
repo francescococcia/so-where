@@ -20,7 +20,7 @@ const NEAR = [
 ];
 
 /** Steer the agent after a result: each chip re-asks /api/plan with a natural-language refinement. */
-export function FollowUps({ intent, onRefine, disabled }: { intent: Intent; onRefine: (extra: string) => void; disabled?: boolean }) {
+export function FollowUps({ intent, onRefine, disabled }: { intent: Intent; onRefine: (extra: string, label?: string) => void; disabled?: boolean }) {
   const items = intent === "near_me" ? NEAR : MEET;
   return (
     <section aria-label="Refine the plan" className="rounded-[16px] bg-sky-wash/70 p-3 ring-1 ring-sky/15">
@@ -38,7 +38,7 @@ export function FollowUps({ intent, onRefine, disabled }: { intent: Intent; onRe
             transition={{ delay: 0.6 + i * 0.05, type: "spring", stiffness: 420, damping: 24 }}
             whileHover={{ y: -2 }}
             whileTap={{ scale: 0.93 }}
-            onClick={() => onRefine(it.ask)}
+            onClick={() => onRefine(it.ask, it.label)}
             className="sw-chip group min-h-9 px-3 text-[13px] font-semibold text-ink hover:bg-signal-soft hover:text-signal-ink max-lg:min-h-11 transition-[box-shadow,background-color,color]"
           >
             <it.Icon className="size-3.5 text-signal transition-transform duration-200 group-hover:scale-110 group-active:scale-90" aria-hidden />
