@@ -1,11 +1,13 @@
 // POST /api/plan {query, you?, when?, previous?} → PlanResultWithAgent (JSON), or NDJSON when
 // Follow-up chat: {mode:"refine", query:"<short refinement>", previous:{query:"<last result.query>"}, you?} → the
 // (optional `focus:{id?,name?,lat,lng}` = the selected card: "other … in the area" searches around it, excluding it) →
+// optional `previous.result` = the result on screen: "is it open?" is then answered from the focus/top card's hours and
+// that same result comes back unchanged with `reply` (no replan unless the place is closed) →
 // the same result plus `reply` (one sentence) and `query` (accumulated ask to send as previous.query next turn).
 // `Accept: application/x-ndjson`: {"type":"step",...} lines then one {"type":"result"} or {"type":"clarify"}.
 // Request bodies are never logged (they can hold someone's location).
 import { planRunWrite, runPlan, type PlanFocus, type PlanRequest, type PlanResultRefined } from "@/lib/plan";
-import type { AgentStep } from "@/lib/plan-types";
+import type { AgentStep, PlanResultWithAgent } from "@/lib/plan-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +19,15 @@ function focusOf(v: unknown): PlanFocus | null {
   const f = v as Record<string, unknown>;
   if (typeof f.lat !== "number" || typeof f.lng !== "number" || !Number.isFinite(f.lat) || !Number.isFinite(f.lng)) return null;
   return { lat: f.lat, lng: f.lng, ...(typeof f.id === "string" ? { id: f.id.slice(0, 80) } : {}), ...(typeof f.name === "string" ? { name: f.name.slice(0, 120) } : {}) };
+}
+
+/** Refine only: previous.result = the plan on screen (echoed back for "is it open?", never stored or logged). */
+function resultOf(v: unknown): PlanResultWithAgent | null {
+  if (!v || typeof v !== "object") return null;
+  const r = v as PlanResultWithAgent;
+  if (!Array.isArray(r.cards) || !r.cards.length || typeof r.when !== "string" || typeof r.query !== "string") return null;
+  if (!r.cards.every((c) => c && typeof c.name === "string" && typeof c.id === "string" && Array.isArray(c.facts))) return null;
+  return { ...r, cards: r.cards.slice(0, 3), steps: Array.isArray(r.steps) ? r.steps : [] };
 }
 
 function parseBody(raw: unknown): PlanRequest | null {
@@ -36,7 +47,7 @@ function parseBody(raw: unknown): PlanRequest | null {
     you: you && typeof you === "object" && Number.isFinite(you.lat) && Number.isFinite(you.lng) ? { lat: you.lat, lng: you.lng } : undefined,
     when: typeof b.when === "string" ? b.when : undefined,
     ...(refine !== undefined && focusOf(b.focus) ? { focus: focusOf(b.focus)! } : {}),
-    previous: prev && str(prev.query) ? { query: (prev.query as string).slice(0, 1500), answer: refine !== undefined ? "" : answer.slice(0, 200) } : undefined,
+    previous: prev && str(prev.query) ? { query: (prev.query as string).slice(0, 1500), answer: refine !== undefined ? "" : answer.slice(0, 200), ...(refine !== undefined && resultOf(prev.result) ? { result: resultOf(prev.result)! } : {}) } : undefined,
   };
 }
 

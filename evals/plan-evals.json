@@ -99,6 +99,10 @@
     { "id": "hours-late-coffee-near-me", "query": "coffee near Old Street at 22:30", "clock": "20:00",
       "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "hours": true, "openAtPlan": true} },
     { "id": "refine-focus-other-italian", "query": "i wanna meet a friend for a coffe, i'm in greenwich and he lives in ne i dont know the precise position", "clock": "22:30", "focusTop": true, "refines": ["are there any other italian coffee places in the area?"],
-      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "category": "cafe", "cuisine": "italian", "replyMatch": ["italian"], "replyNot": ["wasn't sure", "switched to caf"]} }
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "category": "cafe", "cuisine": "italian", "replyMatch": ["italian"], "replyNot": ["wasn't sure", "switched to caf"]} },
+    { "id": "refine-italian-only-matches", "query": "coffee near London Bridge station at 4pm on Saturday", "clock": "12:00", "focusTop": true, "refines": ["any italian coffee nearby?"],
+      "expect": {"intent": "near_me", "clarify": false, "minCards": 1, "category": "cafe", "cuisine": "italian", "onlyCuisine": true, "headlineMatch": "^\\d Italian caf(é|és) near ", "replyMatch": ["italian"], "replyNot": ["wasn't sure"]} },
+    { "id": "refine-open-keeps-plan", "query": "i wanna meet a friend for a coffe, i'm in greenwich and he lives in ne i dont know the precise position", "clock": "22:30", "focusTop": true, "refines": ["is it open now?"],
+      "expect": {"intent": "meet_halfway", "clarify": false, "minCards": 1, "sameAsBase": true, "replyMatch": ["open until|no hours listed|is open"], "replyNot": ["wasn't sure"]} }
   ]
 }

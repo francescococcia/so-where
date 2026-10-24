@@ -19,7 +19,7 @@ import { weatherDecision, weatherFitFact, weatherMode, weatherRank, type Weather
 import { applyRefinements, clock12, cuisineLabel, cuisineMatch, cuisineOf, joinRefine, pickHub, prefRank, refineReply, seatingWish, splitRefine, type Pref, type RefinedAsk, type Refinement } from "@/lib/refine";
 import { meetDraft, nearDraft } from "@/lib/draft-message";
 
-export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string }; refine?: string;
+export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string; /** Refine only: the result on screen, so "is it open?" answers without replanning. Echoed, never stored. */ result?: PlanResultWithAgent }; refine?: string;
   /** Refine only: the place the user has selected (a card), so "other Italian places in the area" searches around it and excludes it. Never stored. */
   focus?: PlanFocus };
 export type PlanFocus = { id?: string; name?: string; lat: number; lng: number };
@@ -253,7 +253,9 @@ function venuePick(res: OsmResult, at: Date, wm?: WeatherMode, prefs?: Pref[], c
   // A cuisine wish ("any Italian?") puts tagged matches first, then name matches.
   const cu = (p: OsmPlace) => (cuisine ? { tag: 0, name: 1, none: 2 }[cuisineMatch(p.tags, cuisine) ?? "none"] : 0);
   const keep = open.sort((a, b) => cu(a.p) - cu(b.p) || pr(a.p) - pr(b.p) || wr(a.p) - wr(b.p) || soon(a.h) - soon(b.h) || rank[a.h.verdict] - rank[b.h.verdict] || a.p.distanceM - b.p.distanceM);
-  return { picks: keep.slice(0, MAX_CARDS), total: rows.length, closed, soonDropped };
+  // With ≥1 cuisine match, cards are only the matches; non-matches fill in only when there are none (the reply says so).
+  const hits = cuisine ? keep.filter((x) => cuisineMatch(x.p.tags, cuisine)) : [];
+  return { picks: (hits.length ? hits : keep).slice(0, MAX_CARDS), total: rows.length, closed, soonDropped };
 }
 
 /** Weather-fit fact for a venue card (empty when the forecast doesn't change the choice). */
@@ -305,7 +307,45 @@ export function setClockOverride(f: (() => Date) | null) {
   CLOCK = f;
 }
 
+/** "Is it open? / when does it close?" with nothing else to change: answered from the selected card's hours. */
+function openQuestionOnly(req: PlanRequest, today: string): boolean {
+  if (req.refine === undefined || !req.previous?.query) return false;
+  const base = splitRefine(req.previous.query).base;
+  const { refinement } = applyRefinements(parsePlanAsk(base, today), [req.refine], today);
+  return refinement.latest.asks.includes("open") && !refinement.latest.changes.length && !refinement.latest.prefs.length;
+}
+/** Hours of a card: the CardHours fields, else read back from its "Open <Day>" fact. */
+function cardOpen(c: PlanCard): { known: boolean; open: boolean | null; until: string | null } {
+  const h = c as Partial<CardHours>;
+  if (h.hoursKnown !== undefined) return { known: h.hoursKnown, open: h.openAtPlan ?? null, until: h.closesAt ?? null };
+  const f = c.facts.find((x) => /^open\b/i.test(x.label))?.value ?? "";
+  if (/^Open 24 hours/.test(f)) return { known: true, open: true, until: null };
+  const u = /^Open until (\d\d:\d\d)/.exec(f);
+  if (u) return { known: true, open: true, until: u[1] };
+  if (/^Closed/.test(f)) return { known: true, open: false, until: null };
+  return { known: false, open: null, until: null };
+}
+
 export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? CLOCK() : new Date()): Promise<PlanResultRefined> {
+  const prev = req.previous?.result;
+  const askOpen = !!prev?.cards?.length && openQuestionOnly(req, londonToday(now));
+  if (askOpen && prev) {
+    const card = (req.focus && prev.cards.find((c) => c.id === req.focus!.id || c.name === req.focus!.name)) || prev.cards[0];
+    const o = cardOpen(card);
+    const p = londonParts(new Date(prev.when));
+    const clock = clock12(p.hh, p.mm);
+    if (o.open !== false) {
+      // Same plan, same cards: no replanning, no new middle.
+      const step: AgentStep = { id: "refine", label: "Checking opening hours", status: "done", detail: `Answered from ${card.name}'s OSM opening_hours · plan unchanged`, source: "OSM", ms: 0 };
+      emit?.(step);
+      const reply = !o.known ? `No hours listed for ${card.name}.` : o.until ? `${card.name} is open until ${o.until}.` : `${card.name} is open at ${clock}.`;
+      return { ...prev, query: joinRefine(req.previous!.query, req.refine!), steps: [...(prev.steps ?? []), step], reply };
+    }
+    // Closed then: replan (closed venues are dropped) and say so.
+    const r: PlanResultRefined = await runPlanCore(req, emit, now);
+    r.reply = r.cards.length ? `${card.name} looks closed at ${clock}, so here are open options: ${r.cards.map((c) => c.name).join(", ")}.` : `${card.name} looks closed at ${clock} and nothing else open came up.`;
+    return r;
+  }
   const r: PlanResultRefined = await runPlanCore(req, emit, now);
   const rr = REFINE_RUNS.get(r.steps);
   if (!rr) return r;
@@ -329,6 +369,18 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? C
   });
   if (r.them && reply.toLowerCase().includes(r.them.area.toLowerCase())) reply = reply.split(r.them.area).join("their side");
   r.reply = reply;
+  // Headline follows a cuisine refine: "2 Italian cafés near The Roasting Plant: …".
+  const hits = rr.cuisine ? r.cards.filter((c) => c.facts.some((f) => f.label === "Cuisine" && f.verdict !== "unknown")).length : 0;
+  if (hits) {
+    const cat = r.filters.category;
+    const kinds = cat === "cafe" ? "cafés" : cat === "pub" ? "pubs and bars" : cat === "restaurant" ? "restaurants" : "places";
+    const one = cat === "cafe" ? "café" : cat === "pub" ? "pub or bar" : cat === "restaurant" ? "restaurant" : "place";
+    const near = rr.focusName ?? (r.intent === "meet_halfway" ? r.middle?.name : undefined);
+    const lead = `${hits} ${cuisineLabel(rr.cuisine!)} ${hits > 1 ? kinds : one}`;
+    r.headline = r.intent === "meet_halfway"
+      ? r.headline.replace(/^[^:]+:/, `${lead} near ${near}:`)
+      : r.headline.replace(/^\d+ [\w-]+ within (\d+ min) of ([^,]+)/, (_m, mins: string, of: string) => (near ? `${lead} near ${near}, within ${mins} of ${of}` : `${lead} within ${mins} of ${of}`));
+  }
   return r;
 }
 

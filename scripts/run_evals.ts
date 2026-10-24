@@ -20,7 +20,7 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
@@ -62,12 +62,12 @@ async function call(c: Case) {
     }
     if (r.status === 200 && r.body.clarify && c.answers) asked.push(`${r.body.clarify.missing}: ${r.body.clarify.question}`);
     let focus: { id: string; name: string; lat: number; lng: number } | undefined;
-    const base = c.refines ? { youMin: youMin(r.body), query: r.body.query } : undefined;
+    const base = c.refines ? { youMin: youMin(r.body), query: r.body.query, cards: (r.body.cards ?? []).map((x) => x.id), middle: r.body.middle?.name ?? null } : undefined;
     for (const q of c.refines ?? []) {
       if (r.status !== 200) break;
       const top = c.focusTop ? r.body.cards?.[0] : undefined;
       if (top) focus = { id: top.id, name: top.name, lat: top.location.lat, lng: top.location.lng };
-      r = await post({ query: q, mode: "refine", previous: { query: r.body.query }, you: c.you, ...(top ? { focus } : {}) });
+      r = await post({ query: q, mode: "refine", previous: { query: r.body.query, result: r.body }, you: c.you, ...(top ? { focus } : {}) });
     }
     return { ...r, asked, base, pinned, focus, ms: Date.now() - t0 };
   } finally {
@@ -132,7 +132,7 @@ function unitChecks(c: Case): Chk[] {
   return out;
 }
 
-function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | null; query: string }, pinned?: Date | null, focus?: { id: string; name: string; lat: number; lng: number }) {
+function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | null; query: string; cards?: string[]; middle?: string | null }, pinned?: Date | null, focus?: { id: string; name: string; lat: number; lng: number }) {
   const e = c.expect;
   const out: { name: string; pass: boolean; got?: unknown }[] = [];
   const add = (name: string, pass: boolean, got?: unknown) => out.push({ name, pass, ...(got !== undefined ? { got } : {}) });
@@ -247,12 +247,19 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
   }
   if (c.focusTop) {
     add("focus sent (selected card)", !!focus, null);
-    if (focus) {
+    if (focus && !e.sameAsBase) {
       add("selected place excluded", !r.cards.some((x) => x.id === focus.id || x.name === focus.name), r.cards.map((x) => x.name));
       const far = r.cards.filter((x) => x.kind !== "event" && Math.hypot((x.location.lat - focus.lat) * 111_000, (x.location.lng - focus.lng) * 69_000) > 1000);
       add("cards are in the selected place's area (≤1 km)", far.length === 0, far.map((x) => x.name));
     }
   }
+  if (c.focusTop && e.sameAsBase && focus) add("reply is about the selected place", r.reply?.includes(focus.name) === true, r.reply);
+  if (e.sameAsBase) add("same plan: cards and middle unchanged", !!base && JSON.stringify(r.cards.map((x) => x.id)) === JSON.stringify(base.cards) && (r.middle?.name ?? null) === base.middle, { before: base?.cards, after: r.cards.map((x) => x.id) });
+  if (e.onlyCuisine) {
+    const hit = (x: Refined["cards"][number]) => x.facts.some((f) => f.label === "Cuisine" && f.verdict !== "unknown");
+    add("with ≥1 cuisine match, every card matches", !r.cards.some(hit) || r.cards.every(hit), r.cards.map((x) => `${x.name}: ${x.facts.find((f) => f.label === "Cuisine")?.value}`));
+  }
+  if (e.headlineMatch) add(`headline matches /${e.headlineMatch}/i`, new RegExp(e.headlineMatch, "i").test(r.headline), r.headline);
   if (e.approx) {
     add("approximate area noted", r.unknowns.some((u) => /broad area/i.test(u)) && /approx/i.test(r.them?.area ?? ""), { area: r.them?.area, unknowns: r.unknowns.filter((u) => /broad/i.test(u)) });
     add("unknowns/draft don't name their area", ![...r.unknowns, r.draftMessage ?? ""].some((u) => /walthamstow|north-east/i.test(u)), null);
