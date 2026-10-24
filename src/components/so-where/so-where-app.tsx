@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, CalendarDays, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, LocateFixed, Loader2, Navigation, PencilLine, Send, X } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, LocateFixed, Loader2, Navigation, PencilLine, Send, X } from "lucide-react";
 import type { Fact, PlanResultWithAgent } from "@/lib/plan-types";
 import type { FixtureId } from "@/lib/plan-fixture";
 import { cn } from "@/lib/utils";
 import { AgentSteps } from "./agent-steps";
 import { ClarifyBox } from "./clarify-box";
 import { PlanCard } from "./plan-card";
-import { PlaceDetail } from "./place-detail";
+import { DetailPanel } from "./place-detail";
 import { FollowUps } from "./follow-ups";
 import { SendPlanDialog } from "./send-plan-dialog";
 import { Mark } from "./mark";
@@ -35,22 +35,22 @@ const CHIPS = [
 
 const INTENT_LABEL = { meet_halfway: "Meet halfway", near_me: "Near you" } as const;
 
-function Header({ example, testedN, className }: { example: boolean; testedN: number | null; className?: string }) {
+function Header({ example, reason, className }: { example: boolean; reason?: string | null; className?: string }) {
   return (
     <header className={cn("flex items-center gap-2.5", className)}>
       <span className="shrink-0"><Mark /></span>
       <span className="shrink-0 whitespace-nowrap text-[19px] font-bold tracking-[-0.02em] text-ink">So where?</span>
-      <span className="hidden text-[13px] text-ink-3 2xl:inline">London</span>
       <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
-        {testedN != null ? (
-          <span className="num inline-flex h-6 items-center gap-1 rounded-full bg-ok-bg px-2 text-[12px] font-semibold text-ok" title="From evals/last-run.json">
-            <Check className="size-3.5" strokeWidth={2.6} aria-hidden /> <span className="max-sm:hidden">Tested on</span> {testedN} asks
-          </span>
-        ) : null}
         <AnimatePresence>
           {example ? (
-            <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="inline-flex h-6 items-center gap-1 rounded-full bg-likely-bg px-2 text-[12px] font-semibold text-likely">
-              <FlaskConical className="size-3.5" aria-hidden /> Example<span className="max-sm:hidden"> data</span>
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              title={reason && reason !== "demo link" ? `Example data: the planner didn't respond (${reason})` : "Example data, not a live answer"}
+              className="inline-flex h-6 items-center gap-1 rounded-full bg-likely-bg px-2 text-[12px] font-semibold text-likely"
+            >
+              <FlaskConical className="size-3.5" aria-hidden /> Example data
             </motion.span>
           ) : null}
         </AnimatePresence>
@@ -125,35 +125,43 @@ function Filters({ f }: { f: PlanResultWithAgent["filters"] }) {
 }
 
 const LEGEND = [
-  { v: "confirmed", text: "A live or official source says so" },
-  { v: "likely", text: "Our data says so, but nobody's checked lately" },
-  { v: "forecast", text: "A prediction, like the weather" },
-  { v: "unknown", text: "We couldn't check, so we say so" },
+  { v: "confirmed", text: "Live or official source" },
+  { v: "likely", text: "Our data, not checked lately" },
+  { v: "forecast", text: "A prediction" },
+  { v: "unknown", text: "Couldn't check" },
 ] as const;
 
-function HowWeAnswer() {
+/** The verdict legend, tucked behind a small (i). */
+function InfoTip() {
+  const [open, setOpen] = useState(false);
   return (
-    <section aria-label="How we answer" className="mt-6 rounded-[16px] bg-tint/70 p-4 shadow-e1 ring-1 ring-white/70">
-      <h2 className="text-[13px] font-semibold text-ink">Every fact gets a verdict</h2>
-      <ul className="mt-2 flex flex-col gap-0.5">
-        {LEGEND.map((l, i) => (
-          <motion.li
-            key={l.v}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            whileHover={{ x: 3 }}
-            transition={{ type: "spring", stiffness: 420, damping: 30, delay: 0.12 + i * 0.07 }}
-            className="group -mx-2 grid grid-cols-[104px_1fr] items-center gap-3 rounded-[10px] px-2 py-1 transition-colors duration-200 hover:bg-raised"
+    <span className="relative inline-flex" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button type="button" aria-label="How we label facts" aria-expanded={open} onClick={() => setOpen((o) => !o)} onBlur={() => setOpen(false)} className="grid size-6 cursor-pointer place-items-center rounded-full text-ink-3 transition-colors hover:bg-white/70 hover:text-ink">
+        <Info className="size-4" aria-hidden />
+      </button>
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            role="tooltip"
+            initial={{ opacity: 0, y: 4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ type: "spring", stiffness: 480, damping: 32 }}
+            className="sw-glass absolute left-1/2 top-8 z-40 w-[260px] -translate-x-1/2 rounded-[14px] p-3 text-left"
           >
-            <VerdictChip verdict={l.v} delay={0.1 + i * 0.06} />
-            <span className="text-[13px] leading-5 text-ink-2 transition-colors duration-200 group-hover:text-ink">{l.text}</span>
-          </motion.li>
-        ))}
-      </ul>
-      <p className="mt-3 border-t border-rule pt-3 text-[12.5px] leading-[18px] text-ink-3">
-        Their location is rounded to about 500 m and never stored. Nothing is sent for you: you get a draft to copy.
-      </p>
-    </section>
+            <ul className="flex flex-col gap-1.5">
+              {LEGEND.map((l) => (
+                <li key={l.v} className="grid grid-cols-[86px_1fr] items-center gap-2">
+                  <VerdictChip verdict={l.v} size="sm" />
+                  <span className="text-[12.5px] leading-4 text-ink-2">{l.text}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 border-t border-rule pt-2 text-[11.5px] leading-4 text-ink-3">Their location is rounded to ~500 m. Nothing is sent for you.</p>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </span>
   );
 }
 
@@ -204,8 +212,8 @@ function Hero() {
           </motion.span>
         ))}
       </h1>
-      <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.45, ease: [0.22, 1, 0.36, 1] }} className="mt-2 text-[14.5px] leading-[22px] text-ink-2">
-        Ask like you&apos;d text a friend. We check travel times, opening hours, live trains and the weather, and tell you what we couldn&apos;t check.
+      <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.45, ease: [0.22, 1, 0.36, 1] }} className="mt-1.5 flex items-center gap-1 text-[14.5px] leading-[22px] text-ink-2">
+        Ask like you&apos;d text a friend. <InfoTip />
       </motion.p>
     </div>
   );
@@ -232,7 +240,7 @@ function RouteScan() {
 
 type Toast = { id: number; text: string };
 
-export function SoWhereApp({ testedN }: { testedN: number | null }) {
+export function SoWhereApp() {
   const reduced = !!useReducedMotion();
   const { state, submit, showFixture } = usePlan();
   const [query, setQuery] = useState("");
@@ -243,6 +251,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
   const [you, setYou] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState<"idle" | "busy" | "denied">("idle");
   const [sendOpen, setSendOpen] = useState(false);
+  const [mobile, setMobile] = useState(false);
   const [padding, setPadding] = useState<MapPadding>({ top: 90, right: 80, bottom: 90, left: 500 });
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typeTimer = useRef<number | null>(null);
@@ -322,6 +331,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
     }
     const onResize = () => {
       const wide = window.innerWidth >= 1024;
+      setMobile(window.innerWidth < 768);
       setPadding(wide ? { top: 110, right: 90, bottom: 90, left: 500 } : { top: 110, right: 56, bottom: 36, left: 36 });
     };
     onResize();
@@ -392,8 +402,10 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
   const openDetail = useCallback((id: string) => {
     setSelectedId(id);
     setDetailId(id);
-    requestAnimationFrame(() => cardRefs.current.get("__results")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    // Phones: bring the map back into view above the sheet.
+    if (window.innerWidth < 768) window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
+  const closeDetail = useCallback(() => setDetailId(null), []);
 
   const select = useCallback((id: string) => openDetail(id), [openDetail]);
 
@@ -412,13 +424,13 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <main className="relative min-h-dvh bg-ground lg:h-dvh lg:overflow-hidden">
-        <Header example={state.example} testedN={testedN} className="sticky top-0 z-20 bg-ground/75 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 lg:hidden" />
+      <main className={cn("relative min-h-dvh bg-ground lg:h-dvh lg:overflow-hidden", detail && !mobile && "sw-detail-open")}>
+        <Header example={state.example} reason={state.exampleReason} className="sticky top-0 z-20 bg-ground/75 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 lg:hidden" />
 
         {/* Map: on top on phones, full-bleed behind the panel on desktop */}
         <div className="relative h-[46svh] min-h-[300px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto">
-          <PlanMap result={result ?? (refining ? shown : null)} selectedId={selectedId} hoverId={hoverId} focusId={detailId} scanning={status === "running"} onSelect={select} onHover={setHoverId} padding={padding} reduced={reduced} />
-          <div className="pointer-events-none absolute right-3 top-3 z-10 lg:right-4 lg:top-4">
+          <PlanMap result={result ?? (refining ? shown : null)} selectedId={selectedId} hoverId={hoverId} focusId={detailId} scanning={status === "running"} onSelect={select} onHover={setHoverId} padding={detail && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} />
+          <div className={cn("pointer-events-none absolute right-3 top-3 z-10 transition-[right] duration-500 lg:right-4 lg:top-4", detail && !mobile && "md:right-[412px] lg:right-[412px]")}>
             <LiveStrip facts={liveFacts(result, selectedId)} />
           </div>
           {state.example ? (
@@ -438,7 +450,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
           className="sw-glass relative z-10 -mt-5 flex flex-col rounded-t-[22px] lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:mt-0 lg:w-[444px] lg:rounded-[22px]"
         >
           <div ref={scrollRef} className="flex-1 px-4 pb-6 pt-4 lg:overflow-y-auto lg:px-5 lg:pt-5">
-            <Header example={state.example} testedN={testedN} className="mb-5 hidden lg:flex" />
+            <Header example={state.example} reason={state.exampleReason} className="mb-5 hidden lg:flex" />
 
             {status === "idle" ? <Hero /> : null}
 
@@ -505,9 +517,9 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                   whileHover={query.trim() && status !== "running" ? { scale: 1.06 } : undefined}
                   whileTap={{ scale: 0.92 }}
                   transition={{ type: "spring", stiffness: 520, damping: 26 }}
-                  className="sw-btn sw-btn-primary size-11 shrink-0 rounded-[12px] transition-[box-shadow,background-color,color] disabled:aria-busy:bg-signal-strong disabled:aria-busy:text-white"
+                  className="sw-btn sw-btn-primary size-11 shrink-0 rounded-[12px] transition-[box-shadow,background-color,color] "
                 >
-                  {status === "running" ? <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden /> : <ArrowRight className="size-5" aria-hidden />}
+                  {status === "running" ? <span className="size-4 animate-spin rounded-full border-2 border-[#2b1203]/25 border-t-[#2b1203]" aria-hidden /> : <ArrowRight className="size-5" aria-hidden />}
                 </motion.button>
               </motion.div>
               <div className="mt-2 flex items-center gap-2">
@@ -522,25 +534,13 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
                   {you ? "Using your location · ~100 m" : "Use my location"}
                   {you ? <X className="size-3.5" aria-label="Stop using location" /> : null}
                 </button>
-                <span className="text-[11.5px] leading-4 text-ink-3">{locating === "denied" ? "Location blocked: name a station instead." : you ? "Sent with your ask only, never stored." : "Skips the “where are you?” question."}</span>
+                {locating === "denied" ? <span className="text-[11.5px] leading-4 text-ink-3">Location blocked: name a station.</span> : null}
               </div>
             </form>
-
-            {status === "idle" ? <HowWeAnswer /> : null}
 
             {/* Live steps */}
             <div className="mt-4 flex flex-col gap-4">
               {state.steps.length ? <AgentSteps steps={state.steps} finished={finished} elapsedMs={state.elapsedMs} /> : null}
-
-              {state.example && state.exampleReason && finished ? (
-                <p className="flex items-start gap-1.5 text-[12.5px] leading-[18px] text-ink-3">
-                  <FlaskConical className="mt-0.5 size-3.5 shrink-0 text-likely" aria-hidden />
-                  <span>
-                    Example data from the design mockups, not a live answer
-                    {state.exampleReason !== "demo link" ? ` (the planner didn't respond: ${state.exampleReason})` : ""}.
-                  </span>
-                </p>
-              ) : null}
 
               {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={(answer) => submit(answer, { query: state.query, answer }, you ?? undefined)} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
 
@@ -551,24 +551,18 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
 
                   <div ref={(n) => { if (n) cardRefs.current.set("__results", n); }} className="scroll-mt-20 lg:scroll-mt-4">
                     <LayoutGroup>
-                      <AnimatePresence mode="popLayout" initial={false}>
-                        {detail && result ? (
-                          <PlaceDetail key="detail" card={detail} index={result.cards.indexOf(detail)} result={result} example={state.example} onClose={() => setDetailId(null)} onSend={() => setSendOpen(true)} />
-                        ) : (
-                          <motion.div key="list" layout className="flex flex-col gap-3" exit={{ opacity: 0 }}>
-                            {view.cards.slice(0, 3).map((c, i) => (
-                              <PlanCard key={c.id} card={c} index={i} when={view.when} selected={c.id === selected?.id} hovered={c.id === hoverId} onOpen={() => openDetail(c.id)} onHover={(on) => setHoverId(on ? c.id : null)} />
-                            ))}
-                            {!view.cards.length ? <p className="rounded-[14px] bg-tint p-4 text-[14px] text-ink-2 shadow-e1">Nothing matched. Try a wider area or a different time.</p> : null}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                      <motion.div key="list" layout className="flex flex-col gap-3">
+                        {view.cards.slice(0, 3).map((c, i) => (
+                          <PlanCard key={c.id} card={c} index={i} when={view.when} selected={c.id === (detailId ?? selected?.id)} hovered={c.id === hoverId} onOpen={() => openDetail(c.id)} onHover={(on) => setHoverId(on ? c.id : null)} />
+                        ))}
+                        {!view.cards.length ? <p className="rounded-[14px] bg-tint p-4 text-[14px] text-ink-2 shadow-e1">Nothing matched. Try a wider area or a different time.</p> : null}
+                      </motion.div>
                     </LayoutGroup>
                   </div>
 
                   <FollowUps intent={view.intent} onRefine={refine} disabled={status === "running"} />
 
-                  {view.unknowns.length && !detail ? (
+                  {view.unknowns.length ? (
                     <section aria-label="Couldn't check" className="rounded-[14px] border border-dashed border-control bg-raised/60 p-3.5">
                       <h3 className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3">Couldn&apos;t check</h3>
                       <ul className="mt-1.5 flex flex-col gap-1">
@@ -597,7 +591,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
 
           {/* Action bar */}
           <AnimatePresence>
-            {status === "result" && result ? (
+            {status === "result" && result && !detail ? (
               <motion.div
                 initial={{ y: 24, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -639,6 +633,7 @@ export function SoWhereApp({ testedN }: { testedN: number | null }) {
           </div>
         </motion.aside>
 
+        {result ? <DetailPanel card={detail} mobile={mobile} result={result} example={state.example} onClose={closeDetail} onSend={() => { setSendOpen(true); say("Draft ready · nothing is sent"); }} /> : null}
         {result ? <SendPlanDialog open={sendOpen} onOpenChange={setSendOpen} draft={result.draftMessage} /> : null}
       </main>
     </MotionConfig>

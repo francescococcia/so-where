@@ -378,3 +378,36 @@ textarea:focus-visible { outline: none; }
   .sw-mesh, .sw-scanroute path.trace, .sw-scanroute .dot, .sw-glint::after { animation: none !important; }
   .sw-pin-body { animation: none !important; }
 }
+
+/* ui5: right-hand detail panel — keep map controls clear of it */
+.maplibregl-ctrl-bottom-right { transition: right .5s cubic-bezier(.22,1,.36,1); right: 0; }
+.sw-detail-open .maplibregl-ctrl-bottom-right { right: 396px; }
+@media (prefers-reduced-motion: reduce) { .maplibregl-ctrl-bottom-right { transition: none; } }
+
+/* ui5: primary CTAs — light neon orange with a warm glow (deep-ink text: 8.7:1 → 5.5:1 across the gradient) */
+:root {
+  --sw-cta-a: #ff9a3c;
+  --sw-cta-b: #ff6b2c;
+  --sw-cta-ink: #2b1203;
+  --sw-cta-glow: 0 0 0 1px rgba(255,107,44,.35), 0 6px 22px -4px rgba(255,122,44,.42), 0 0 26px rgba(255,140,60,.28);
+  --sw-cta-glow-hi: 0 0 0 1px rgba(255,107,44,.5), 0 10px 30px -4px rgba(255,112,40,.58), 0 0 36px rgba(255,140,60,.45);
+  --sw-cta-inner: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -2px 6px rgba(200,60,0,.18);
+}
+.sw-btn-primary {
+  background: linear-gradient(180deg, var(--sw-cta-a) 0%, var(--sw-cta-b) 100%);
+  color: var(--sw-cta-ink);
+  box-shadow: var(--sw-cta-inner), var(--sw-cta-glow);
+  transition: box-shadow .25s ease, transform .15s ease, filter .25s ease;
+}
+.sw-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffa44a 0%, #ff7333 100%);
+  box-shadow: var(--sw-cta-inner), var(--sw-cta-glow-hi);
+  filter: saturate(1.08);
+}
+.sw-btn-primary:active:not(:disabled) { transform: scale(.96); box-shadow: var(--sw-cta-inner), var(--sw-cta-glow); }
+.sw-btn-primary:focus-visible { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--sw-cta-b), var(--sw-cta-glow-hi); outline: none; }
+.sw-btn-primary:disabled { background: var(--sw-sunk); color: var(--sw-ink-3); box-shadow: none; }
+.sw-btn-primary:disabled[aria-busy="true"] { background: linear-gradient(180deg, var(--sw-cta-a), var(--sw-cta-b)); color: var(--sw-cta-ink); box-shadow: var(--sw-cta-inner), var(--sw-cta-glow); animation: sw-cta-breathe 1.6s ease-in-out infinite; }
+@keyframes sw-cta-breathe { 50% { box-shadow: var(--sw-cta-inner), var(--sw-cta-glow-hi); } }
+@media (prefers-reduced-motion: reduce) { .sw-btn-primary { transition: none; } .sw-btn-primary:disabled[aria-busy="true"] { animation: none; } .sw-btn-primary:active:not(:disabled) { transform: none; } }
+@media (forced-colors: active) { .sw-btn-primary { border: 1px solid ButtonText; } }

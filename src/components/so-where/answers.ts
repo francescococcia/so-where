@@ -5,6 +5,20 @@ export function findFact(card: Card, re: RegExp) {
   return card.facts.find((f) => re.test(f.label));
 }
 
+/** "01:00–01:00", "00:00-00:00", "" → no real time. Such values are hidden rather than shown. */
+export function noTime(v: string | undefined | null): boolean {
+  if (!v || !v.trim()) return true;
+  const m = v.match(/^\s*(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})\s*$/);
+  return !!m && +m[1] === +m[3] && m[2] === m[4];
+}
+
+/** Category/type label without repeats: "Event · event" → "Event". */
+export function kindLabel(type: string, kind: string): string {
+  const parts = [type, kind].map((x) => x.trim()).filter(Boolean);
+  const seen = new Set<string>();
+  return parts.filter((x) => { const k = x.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).join(" · ");
+}
+
 /** "12:00–00:00" → is `when` inside it (London time)? Returns null when we can't tell. */
 export function openAt(hours: string | undefined, whenIso: string): boolean | null {
   if (!hours) return null;
@@ -15,7 +29,8 @@ export function openAt(hours: string | undefined, whenIso: string): boolean | nu
   const now = t[0] * 60 + t[1];
   const a = +m[1] * 60 + +m[2];
   let b = +m[3] * 60 + +m[4];
-  if (b <= a) b += 24 * 60;
+  if (b === a) return null; // "01:00–01:00": not real hours
+  if (b < a) b += 24 * 60;
   return (now >= a && now < b) || (now + 1440 >= a && now + 1440 < b);
 }
 
@@ -24,12 +39,13 @@ export const priceFact = (card: Card) => findFact(card, /price|entry|fee|£|cost
 
 /** Plain-English "Open?" answer. */
 export function openAnswer(card: Card, whenIso: string): { text: string; sub?: string; state: boolean | null; fact?: Fact } {
-  const h = hoursFact(card);
+  const raw = hoursFact(card);
+  const h = raw && !noTime(raw.value) ? raw : undefined;
   const s = openAt(h?.value, whenIso);
   const at = fmtTime(whenIso);
   if (s === true) return { text: `Open at ${at}`, sub: h?.value ? `Hours ${h.value}` : undefined, state: s, fact: h };
   if (s === false) return { text: `Probably closed at ${at}`, sub: h?.value ? `Hours ${h.value}` : undefined, state: s, fact: h };
-  return { text: h?.value && !/not|unknown/i.test(h.value) ? h.value : "Opening hours not listed", sub: h ? undefined : "Worth a quick check", state: null, fact: h };
+  return { text: h?.value && !/not|unknown/i.test(h.value) ? h.value : "Opening hours not listed", state: null, fact: h };
 }
 
 /** Plain-English "Cost?" answer. */

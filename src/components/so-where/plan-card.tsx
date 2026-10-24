@@ -72,7 +72,7 @@ export function PlanCard({
   const open = openAnswer(card, when);
   const cost = costAnswer(card);
   const answers: { key: string; icon: typeof Clock; text: string; tone: string; v?: Verdict; wx?: Fact }[] = [
-    { key: "open", icon: Clock, text: open.text, tone: open.state === true ? "text-ok" : open.state === false ? "text-amber-ink" : "text-unknown", v: open.fact?.verdict },
+    ...(card.kind === "event" && open.state === null ? [] : [{ key: "open", icon: Clock, text: open.text, tone: open.state === true ? "text-ok" : open.state === false ? "text-amber-ink" : "text-unknown", v: open.fact?.verdict }]),
     ...(cost.fact && !/not listed/i.test(cost.text) ? [{ key: "cost", icon: Banknote, text: cost.text, tone: "text-sky-ink", v: cost.fact.verdict }] : []),
     ...(wx ? [{ key: "wx", icon: Clock, text: wx.value, tone: "", v: wx.verdict, wx }] : []),
   ];

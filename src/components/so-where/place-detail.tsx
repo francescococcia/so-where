@@ -1,22 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { Accessibility, ArrowLeft, ArrowUpRight, Banknote, ChevronDown, Clock, CloudSun, ExternalLink, Globe, HelpCircle, ListChecks, Map as MapIcon, Navigation, Route, Send, TrainFront } from "lucide-react";
+import { useEffect, useState } from "react";
+import { animate, AnimatePresence, motion, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from "motion/react";
+import { Accessibility, ArrowUpRight, Banknote, ChevronDown, Clock, CloudSun, Globe, HelpCircle, Map as MapIcon, Navigation, Send, TrainFront, X } from "lucide-react";
 import type { Fact, PlanCard as Card, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { VerdictChip } from "./verdict-chip";
-import { fmtAsOf, fmtWhen, gmapsDirections } from "./format";
+import { fmtAsOf, fmtTime, gmapsDirections } from "./format";
 import { WeatherIcon, weatherKind } from "./fact-icon";
 import { ROUTE, splitSubtitle } from "./plan-card";
 import { JourneySentence } from "./journey";
-import { costAnswer, findFact, openAnswer, priceFact, shortUnknown } from "./answers";
+import { costAnswer, findFact, kindLabel, noTime, openAnswer, priceFact, shortUnknown } from "./answers";
 
 const ease = [0.22, 1, 0.36, 1] as const;
-const item = (i: number) => ({ initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.4, delay: 0.18 + i * 0.05, ease } });
+const item = (i: number) => ({ initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35, delay: 0.08 + i * 0.04, ease } });
 
-/** A checked fact. The source sits in a small chip that shows on hover, focus or tap, not on every row. */
-function Row({ icon: Icon, label, fact, fallback }: { icon: typeof Clock; label: string; fact?: Fact; fallback?: string }) {
+/** A checked fact; its source shows on hover, focus or tap. */
+function Row({ icon: Icon, label, fact }: { icon: typeof Clock; label: string; fact?: Fact }) {
   const [show, setShow] = useState(false);
   const v: Verdict = fact?.verdict ?? "unknown";
   return (
@@ -26,17 +26,13 @@ function Row({ icon: Icon, label, fact, fallback }: { icon: typeof Clock; label:
         onClick={() => setShow((x) => !x)}
         aria-expanded={fact ? show : undefined}
         disabled={!fact}
-        className="group/row -mx-2 grid w-[calc(100%+1rem)] cursor-pointer grid-cols-[24px_1fr_auto] items-center gap-x-2.5 rounded-[12px] px-2 py-2 text-left transition-colors duration-200 hover:bg-raised focus-visible:bg-raised disabled:cursor-default"
+        className="group/row -mx-2 grid w-[calc(100%+1rem)] cursor-pointer grid-cols-[22px_1fr_auto] items-center gap-x-2.5 rounded-[10px] px-2 py-1.5 text-left transition-colors duration-200 hover:bg-white/70 focus-visible:bg-white/70 disabled:cursor-default"
       >
-        {fact && weatherKind(fact) ? (
-          <WeatherIcon fact={fact} className="size-6 [&>svg]:size-3.5" />
-        ) : (
-          <span className="grid size-6 place-items-center rounded-full bg-sky-wash text-sky-ink"><Icon className="size-3.5" aria-hidden /></span>
-        )}
+        {fact && weatherKind(fact) ? <WeatherIcon fact={fact} className="size-[22px] [&>svg]:size-3.5" /> : <Icon className="mx-auto size-4 text-ink-3" aria-hidden />}
         <span className="min-w-0">
-          <span className="block text-[14px] leading-5 text-ink"><span className="text-ink-3">{fact?.label ?? label}: </span>{fact?.value ?? fallback ?? "not listed"}</span>
+          <span className="block text-[13.5px] leading-5 text-ink"><span className="text-ink-3">{fact?.label ?? label} </span>{fact?.value ?? "—"}</span>
           {fact ? (
-            <span className={cn("num mt-1 h-5 items-center rounded-full bg-sky-wash px-2 font-mono text-[10.5px] text-sky-ink", show ? "inline-flex" : "hidden group-hover/row:inline-flex group-focus-visible/row:inline-flex")}>
+            <span className={cn("num mt-0.5 h-5 items-center rounded-full bg-sky-wash px-2 font-mono text-[10.5px] text-sky-ink", show ? "inline-flex" : "hidden group-hover/row:inline-flex group-focus-visible/row:inline-flex")}>
               {fact.source}
               {fact.asOf ? ` · ${fmtAsOf(fact.asOf)}` : ""}
             </span>
@@ -48,197 +44,239 @@ function Row({ icon: Icon, label, fact, fallback }: { icon: typeof Clock; label:
   );
 }
 
-function Answer({ icon: Icon, q, children, tone = "plain", fact, i }: { icon: typeof Clock; q: string; children: React.ReactNode; tone?: "ok" | "warn" | "plain" | "unknown"; fact?: Fact; i: number }) {
+function Tile({ label, value, dot, tone, i }: { label: string; value: string; dot?: string; tone?: string; i: number }) {
   return (
-    <motion.div {...item(i)} className="grid grid-cols-[40px_1fr] items-start gap-3 py-3">
-      <span className={cn("grid size-10 place-items-center rounded-[12px] shadow-e1", { ok: "bg-ok-bg text-ok", warn: "bg-amber-soft text-amber-ink", plain: "bg-sky-soft text-sky-ink", unknown: "bg-unknown-bg text-unknown" }[tone])}>
-        <Icon className="size-5" aria-hidden />
-      </span>
-      <div className="min-w-0">
-        <p className="flex items-center gap-2 text-[12.5px] font-semibold text-ink-3">
-          {q}
-          {fact ? <VerdictChip verdict={fact.verdict} size="sm" title={`${fact.source}${fact.asOf ? ` · checked ${fmtAsOf(fact.asOf)}` : ""}`} /> : null}
-        </p>
-        <div className="mt-0.5 text-[17px] font-semibold leading-[1.35] tracking-[-0.01em] text-ink">{children}</div>
-      </div>
+    <motion.div {...item(i)} className="min-w-0 rounded-[12px] bg-white/70 px-3 py-2 shadow-e1 ring-1 ring-white/80">
+      <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-ink-3">
+        {dot ? <span className="size-2 rounded-full" style={{ background: dot }} aria-hidden /> : null}
+        {label}
+      </p>
+      <p className={cn("num truncate text-[16px] font-bold tracking-[-0.01em] text-ink", tone)}>{value}</p>
     </motion.div>
   );
 }
 
-export function PlaceDetail({
-  card,
-  index,
-  result,
-  example,
-  onClose,
-  onSend,
-}: {
-  card: Card;
-  index: number;
-  result: PlanResultWithAgent;
-  example: boolean;
-  onClose: () => void;
-  onSend: () => void;
-}) {
+/** Lumap-style place detail: header, two actions, stat tiles, journeys, then the checks (closed). */
+export function PlaceDetail({ card, result, example, onClose, onSend }: { card: Card; result: PlanResultWithAgent; example: boolean; onClose: () => void; onSend: () => void }) {
   const { type, address } = splitSubtitle(card.subtitle);
-  const hours = findFact(card, /^open/i);
+  const label = kindLabel(type, card.kind === "event" ? "Event" : "");
+  const hoursRaw = findFact(card, /^open/i);
+  const hours = hoursRaw && !noTime(hoursRaw.value) ? hoursRaw : undefined;
   const open = openAnswer(card, result.when);
   const cost = costAnswer(card);
   const lines = findFact(card, /train|lines?$|status/i);
   const travel = findFact(card, /^travel/i);
-  const weather = card.facts.find((f) => weatherKind(f)) ?? findFact(card, /weather/i);
+  const weather = findFact(card, /weather|forecast/i) ?? card.facts.find((f) => f !== lines && f !== travel && weatherKind(f));
   const price = priceFact(card);
   const access = findFact(card, /step-free|wheelchair|access/i);
-  const signup = findFact(card, /sign-up|when/i);
-  const used = new Set([hours, lines, travel, weather, price, access, signup].filter(Boolean));
-  const other = card.facts.filter((f) => !used.has(f));
+  const whenRaw = findFact(card, /sign-up|when/i);
+  const signup = whenRaw && !noTime(whenRaw.value) ? whenRaw : undefined;
+  const used = new Set([hoursRaw, lines, travel, weather, price, access, whenRaw].filter(Boolean));
+  const shownVals = new Set([...used].map((f) => f!.value.trim().toLowerCase()));
+  const other = card.facts.filter((f) => !used.has(f) && !noTime(f.value) && !shownVals.has(f.value.trim().toLowerCase()));
   const nChecks = card.facts.length + result.unknowns.length;
   const [checks, setChecks] = useState(false);
   const { lat, lng } = card.location;
   const osm = `https://www.openstreetmap.org/?mlat=${lat.toFixed(5)}&mlon=${lng.toFixed(5)}#map=18/${lat.toFixed(5)}/${lng.toFixed(5)}`;
   const citymapper = `https://citymapper.com/directions?endcoord=${lat.toFixed(5)}%2C${lng.toFixed(5)}&endname=${encodeURIComponent(card.name)}`;
-  let i = 0;
+  // The pitch line only when it says something the tiles don't (travel time / opening).
+  const why = card.why && !/\bmin(ute)?s?\b|\bopen\b|\bwalk\b/i.test(card.why) ? card.why : null;
+  const tiles: { label: string; value: string; dot?: string; tone?: string }[] = [
+    ...card.legs.map((l) => ({ label: l.who === "you" ? "You" : "Them", value: `${l.minutes} min`, dot: ROUTE[l.who] })),
+    ...(open.state === true ? [{ label: "Open at", value: fmtTime(result.when), tone: "text-ok" }] : open.state === false ? [{ label: "Closed at", value: fmtTime(result.when), tone: "text-amber-ink" }] : []),
+    ...(cost.fact && !/not listed/i.test(cost.text) ? [{ label: "Cost", value: cost.text }] : []),
+  ];
 
   return (
-    <motion.section
-      layoutId={`place-${card.id}`}
-      transition={{ type: "spring", stiffness: 300, damping: 32 }}
-      className="relative overflow-hidden rounded-[20px] sw-glass-card shadow-e3 ring-1 ring-line/70"
-      aria-label={`${card.name} details`}
-    >
-      {/* Blind header */}
-      <div className="relative overflow-hidden border-b border-rule bg-gradient-to-b from-tint to-surface px-4 pb-4 pt-3 text-ink">
-        <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-signal" />
-        <div className="sw-blind-grain pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-        <div className="relative flex items-center gap-2">
-          <button type="button" onClick={onClose} className="sw-btn sw-btn-ghost -ml-1.5 min-h-9 gap-1 rounded-full px-2.5 text-[12.5px] font-semibold">
-            <ArrowLeft className="size-4" aria-hidden /> All picks
-          </button>
-          {example ? <span className="ml-auto rounded-full bg-likely-bg px-2 py-0.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-likely">Example data</span> : null}
+    <div className="flex flex-col gap-4">
+      {/* Header */}
+      <div>
+        <div className="flex items-center gap-1.5 pr-10">
+          {label ? <span className="inline-flex h-6 items-center rounded-full bg-signal-soft px-2.5 text-[12px] font-semibold text-signal-ink">{label}</span> : null}
+          {example ? <span className="inline-flex h-6 items-center rounded-full bg-likely-bg px-2 text-[12px] font-semibold text-likely">Example</span> : null}
         </div>
-        <div className="relative mt-2 flex items-end gap-3">
-          <motion.div layoutId={`rank-${card.id}`} className={cn("grid size-14 shrink-0 place-items-center rounded-[12px] font-mono text-[28px] font-bold tracking-[-0.04em]", index === 0 ? "bg-signal-strong text-white shadow-accent" : "bg-sky-soft text-sky-ink shadow-e1")}>
-            {String(index + 1).padStart(2, "0")}
-          </motion.div>
-          <div className="min-w-0">
-            <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-signal-ink">{type}{card.kind === "event" ? " · event" : ""}</p>
-            <motion.h2 layoutId={`name-${card.id}`} className="text-[24px] font-bold leading-[1.08] tracking-[-0.025em] text-ink">{card.name}</motion.h2>
-          </div>
-        </div>
-        {address ? <motion.p {...item(0)} className="relative mt-2 text-[13px] text-ink-2">{address}</motion.p> : null}
-        <motion.p {...item(1)} className="num relative mt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-3">For {fmtWhen(result.when)}</motion.p>
+        <h2 className="mt-2 text-[24px] font-bold leading-[1.1] tracking-[-0.025em] text-ink">{card.name}</h2>
+        {address ? <p className="mt-1 text-[13.5px] text-ink-2">{address}</p> : null}
       </div>
 
-      <div className="px-4 pb-4">
-        {/* Three plain answers */}
-        <div className="divide-y divide-rule">
-          <Answer i={i++} icon={Clock} q="Open?" tone={open.state === true ? "ok" : open.state === false ? "warn" : "unknown"} fact={open.fact}>
-            {open.text}
-            {open.sub ? <p className="text-[13px] font-medium text-ink-3">{open.sub}</p> : null}
-          </Answer>
-          <Answer i={i++} icon={Route} q="How to get there?">
-            <ul className="flex flex-col gap-2">
-              {card.legs.map((l, k) => (
-                <li key={l.who + k} className="grid grid-cols-[auto_1fr] gap-x-2 text-[15px] font-medium text-ink-2">
-                  <span className="mt-[9px] size-2.5 rounded-full ring-2 ring-white" style={{ background: ROUTE[l.who] }} aria-hidden />
-                  <span>
-                    <span className="font-semibold text-ink">{l.who === "you" ? "You" : "Them"}: </span>
-                    <JourneySentence leg={l} />
-                    {l.who === "them" && result.them ? <span className="block text-[12px] font-normal text-ink-3">from around {result.them.area} (rounded)</span> : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Answer>
-          <Answer i={i++} icon={Banknote} q="Cost?" tone={cost.fact && !/not listed/i.test(cost.text) ? "plain" : "unknown"} fact={cost.fact}>
-            {cost.text}
-            {/not listed/i.test(cost.text) ? <p className="text-[13px] font-medium text-ink-3">Check before you go</p> : null}
-          </Answer>
+      {/* Two actions */}
+      <motion.div {...item(0)} className="grid grid-cols-2 gap-2">
+        <a href={gmapsDirections(lat, lng)} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3 text-[14px] font-semibold">
+          <Navigation className="size-4" aria-hidden /> Directions
+        </a>
+        <button type="button" onClick={onSend} className="sw-btn sw-btn-primary min-h-11 gap-1.5 rounded-[12px] px-3 text-[14px] font-semibold">
+          <Send className="size-4" aria-hidden /> Send plan
+        </button>
+      </motion.div>
+
+      {/* Stat tiles */}
+      {tiles.length ? (
+        <div className={cn("grid gap-2", tiles.length >= 3 ? "grid-cols-3" : "grid-cols-2")}>
+          {tiles.map((t, k) => <Tile key={t.label + k} {...t} i={k + 1} />)}
         </div>
+      ) : null}
 
-        {weather ? (
-          <motion.p {...item(i++)} className="mt-1 flex items-center gap-2 rounded-[12px] bg-raised px-2.5 py-2 text-[14px] text-ink">
-            <WeatherIcon fact={weather} className="size-7 [&>svg]:size-4" />
-            <span className="min-w-0">{weather.value}</span>
-          </motion.p>
-        ) : null}
+      {/* Journeys */}
+      <motion.ul {...item(4)} className="flex flex-col gap-2.5">
+        {card.legs.map((l, k) => (
+          <li key={l.who + k} className="grid grid-cols-[auto_1fr] gap-x-2.5 text-[14px] text-ink-2">
+            <span className="mt-[7px] size-2.5 rounded-full ring-2 ring-white" style={{ background: ROUTE[l.who] }} aria-hidden />
+            <span>
+              <span className="font-semibold text-ink">{l.who === "you" ? "You" : "Them"} </span>
+              <JourneySentence leg={l} />
+              {l.who === "them" && result.them ? <span className="block text-[12px] text-ink-3">from ~{result.them.area}</span> : null}
+            </span>
+          </li>
+        ))}
+      </motion.ul>
 
-        {card.why ? <motion.p {...item(i++)} className="mt-3 text-[14.5px] leading-[21px] text-ink-2">“{card.why}”</motion.p> : null}
+      {why ? <motion.p {...item(5)} className="text-[13.5px] leading-5 text-ink-2">{why}</motion.p> : null}
 
-        {/* Everything else, closed by default */}
-        <motion.div {...item(i++)} className="mt-3 overflow-hidden rounded-[14px] bg-raised ring-1 ring-line/70">
-          <button type="button" onClick={() => setChecks((o) => !o)} aria-expanded={checks} className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3.5 text-left text-[14px] font-semibold text-ink transition-colors duration-200 hover:bg-sky-wash active:bg-sky-soft">
-            <ListChecks className="size-4 text-sky-ink" aria-hidden />
-            {checks ? "Hide the checks" : `Show the checks (${nChecks})`}
-            <ChevronDown className={cn("ml-auto size-4 text-ink-3 transition-transform duration-200", checks && "rotate-180")} aria-hidden />
-          </button>
-          <AnimatePresence initial={false}>
-            {checks ? (
-              <motion.div key="checks" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease }} className="overflow-hidden">
-                <div className="border-t border-line bg-surface px-3.5 pb-3 pt-1">
-                  <ul className="flex flex-col">
-                    <Row icon={Clock} label="Opening hours" fact={hours} fallback="not listed" />
-                    {signup ? <Row icon={Clock} label="Sign-up" fact={signup} /> : null}
-                    <Row icon={TrainFront} label="Trains" fact={lines ?? travel} fallback="not checked" />
-                    {lines && travel ? <Row icon={Navigation} label="Travel" fact={travel} /> : null}
-                    <Row icon={Banknote} label="Price" fact={price} fallback="not listed" />
-                    <Row icon={Accessibility} label="Step-free" fact={access} fallback="not tagged" />
-                    {weather ? <Row icon={CloudSun} label="Weather" fact={weather} /> : null}
-                    {other.map((f) => (
-                      <Row key={f.label} icon={HelpCircle} label={f.label} fact={f} />
+      {/* Checks, closed by default */}
+      <motion.div {...item(6)} className="overflow-hidden rounded-[14px] bg-white/55 ring-1 ring-white/80">
+        <button type="button" onClick={() => setChecks((o) => !o)} aria-expanded={checks} className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3.5 text-left text-[14px] font-semibold text-ink transition-colors duration-200 hover:bg-white/70">
+          Checks <span className="num font-mono text-[12px] font-medium text-ink-3">{nChecks}</span>
+          <ChevronDown className={cn("ml-auto size-4 text-ink-3 transition-transform duration-200", checks && "rotate-180")} aria-hidden />
+        </button>
+        <AnimatePresence initial={false}>
+          {checks ? (
+            <motion.div key="checks" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease }} className="overflow-hidden">
+              <div className="border-t border-white/80 px-3.5 pb-3 pt-1">
+                <ul className="flex flex-col">
+                  <Row icon={Clock} label="Opening hours" fact={hours} />
+                  {signup ? <Row icon={Clock} label="When" fact={signup} /> : null}
+                  <Row icon={TrainFront} label="Trains" fact={lines ?? travel} />
+                  {lines && travel && travel.value !== lines.value ? <Row icon={Navigation} label="Travel" fact={travel} /> : null}
+                  <Row icon={Banknote} label="Price" fact={price} />
+                  {access ? <Row icon={Accessibility} label="Step-free" fact={access} /> : null}
+                  {weather ? <Row icon={CloudSun} label="Weather" fact={weather} /> : null}
+                  {other.map((f) => <Row key={f.label} icon={HelpCircle} label={f.label} fact={f} />)}
+                </ul>
+                {result.unknowns.length ? (
+                  <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Not known">
+                    {[...new Set(result.unknowns.map(shortUnknown))].map((u) => (
+                      <li key={u} className="inline-flex h-7 items-center gap-1 rounded-full bg-unknown-bg px-2.5 text-[12.5px] text-unknown">
+                        <HelpCircle className="size-3" aria-hidden /> {u}
+                      </li>
                     ))}
                   </ul>
-                  {card.url ? (
-                    <a href={card.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-[13.5px] font-semibold text-ink underline decoration-hi decoration-2 underline-offset-4 hover:decoration-signal">
-                      <Globe className="size-3.5" aria-hidden /> {card.url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "").slice(0, 42)} <ArrowUpRight className="size-3.5" aria-hidden />
-                    </a>
-                  ) : null}
-
-                  {result.unknowns.length ? (
-                    <div className="mt-3">
-                      <h3 className="text-[12.5px] font-semibold text-ink-3">Not known</h3>
-                      <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                        {[...new Set(result.unknowns.map(shortUnknown))].map((u) => (
-                          <li key={u} className="inline-flex h-7 items-center gap-1 rounded-full bg-unknown-bg px-2.5 text-[12.5px] text-unknown">
-                            <HelpCircle className="size-3" aria-hidden /> {u}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-3">
-                    <h3 className="text-[12.5px] font-semibold text-ink-3">Sources</h3>
-                    <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                      {result.sources.map((s) => (
-                        <li key={s.name} className="num inline-flex h-6 items-center gap-1 rounded-full bg-raised px-2 font-mono text-[10.5px] text-ink-2">
-                          {s.name} <span className="text-ink-3">{fmtAsOf(s.asOf)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] font-semibold text-ink">
+                  <a href={citymapper} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-signal-ink"><Navigation className="size-3.5" aria-hidden /> Citymapper</a>
+                  <a href={osm} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-signal-ink"><MapIcon className="size-3.5" aria-hidden /> OpenStreetMap</a>
+                  {card.url ? <a href={card.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-signal-ink"><Globe className="size-3.5" aria-hidden /> Website <ArrowUpRight className="size-3" aria-hidden /></a> : null}
                 </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </motion.div>
+                <p className="num mt-3 font-mono text-[10.5px] leading-4 text-ink-3">{result.sources.map((s) => `${s.name} ${fmtAsOf(s.asOf)}`).join(" · ")}</p>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </motion.div>
+    </div>
+  );
+}
 
-        {/* Actions */}
-        <motion.div {...item(i++)} className="mt-4 grid grid-cols-2 gap-2">
-          <button type="button" onClick={onSend} className="sw-btn sw-btn-primary col-span-2 min-h-12 rounded-[12px] px-4 text-[15px] font-semibold">
-            <Send className="size-4" aria-hidden /> Send plan (opens a draft)
-          </button>
-          <a href={citymapper} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3 text-[13.5px] font-semibold">
-            <Navigation className="size-4" aria-hidden /> Citymapper
-          </a>
-          <a href={gmapsDirections(lat, lng)} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3 text-[13.5px] font-semibold">
-            <ExternalLink className="size-4" aria-hidden /> Transit directions
-          </a>
-          <a href={osm} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-ghost col-span-2 min-h-11 gap-1.5 rounded-[12px] bg-raised px-3 text-[13.5px] font-semibold">
-            <MapIcon className="size-4" aria-hidden /> Open in OpenStreetMap
-          </a>
-        </motion.div>
-      </div>
-    </motion.section>
+/**
+ * The detail lives outside the list: a floating glass panel on the right (≥768px),
+ * or a bottom sheet with ~50% / ~90% snap points on phones. Content crossfades when the place changes.
+ */
+export function DetailPanel({ card, mobile, onClose, ...rest }: { card: Card | null; mobile: boolean; result: PlanResultWithAgent; example: boolean; onClose: () => void; onSend: () => void }) {
+  const drag = useDragControls();
+  const [snap, setSnap] = useState<"half" | "full">("half");
+  const sheetY = useMotionValue(2000);
+  const reduced = useReducedMotion();
+  const spring = reduced ? ({ duration: 0 } as const) : ({ type: "spring", stiffness: 300, damping: 34 } as const);
+  // Sheet is 90svh tall; "half" shows ~50% of the screen, "full" ~90%.
+  const halfY = () => (typeof window === "undefined" ? 400 : window.innerHeight * 0.4);
+  useEffect(() => {
+    if (!mobile || !card) return;
+    const c = animate(sheetY, snap === "full" ? 0 : halfY(), spring);
+    return () => c.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobile, !!card, snap]);
+  useEffect(() => {
+    if (!card) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [card, onClose]);
+  useEffect(() => {
+    if (!card) setSnap("half");
+  }, [card]);
+
+  const body = card ? (
+    <AnimatePresence mode="popLayout" initial={false}>
+      <motion.div key={card.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25, ease }}>
+        <PlaceDetail card={card} onClose={onClose} {...rest} />
+      </motion.div>
+    </AnimatePresence>
+  ) : null;
+  const close = (
+    <button type="button" onClick={onClose} aria-label="Close details" className="absolute right-3 top-3 z-10 grid size-9 cursor-pointer place-items-center rounded-full bg-white/80 text-ink-2 shadow-e1 ring-1 ring-line/60 transition-colors hover:bg-white hover:text-ink">
+      <X className="size-4" aria-hidden />
+    </button>
+  );
+
+  if (!mobile) {
+    return (
+      <AnimatePresence>
+        {card ? (
+          <motion.aside
+            key="detail-panel"
+            role="dialog"
+            aria-label={`${card.name} details`}
+            initial={{ x: 420, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 420, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 30 }}
+            className="sw-glass fixed bottom-4 right-4 top-4 z-30 flex w-[380px] flex-col rounded-[22px]"
+          >
+            {close}
+            <div className="flex-1 overflow-y-auto px-5 pb-5 pt-5">{body}</div>
+          </motion.aside>
+        ) : null}
+      </AnimatePresence>
+    );
+  }
+
+  const onDragEnd = (_: unknown, info: PanInfo) => {
+    const vh = window.innerHeight;
+    const y = sheetY.get();
+    const v = info.velocity.y;
+    let next: "half" | "full" | "close";
+    if (v > 700 || y > vh * 0.6) next = "close";
+    else if (v < -400 || y < vh * 0.2) next = "full";
+    else next = "half";
+    if (next === "close") return onClose();
+    if (next === snap) animate(sheetY, next === "full" ? 0 : halfY(), spring);
+    else setSnap(next);
+  };
+
+  return (
+    <AnimatePresence>
+      {card ? (
+        <motion.aside
+          key="detail-sheet"
+          role="dialog"
+          aria-label={`${card.name} details`}
+          style={{ y: sheetY }}
+          exit={{ y: typeof window === "undefined" ? 1000 : window.innerHeight, transition: { duration: 0.25, ease } }}
+          drag="y"
+          dragListener={false}
+          dragControls={drag}
+          dragMomentum={false}
+          dragConstraints={{ top: 0 }}
+          dragElastic={{ top: 0.05, bottom: 0 }}
+          onDragEnd={onDragEnd}
+          className="sw-glass fixed inset-x-0 bottom-0 z-40 flex h-[90svh] flex-col rounded-t-[24px] shadow-e3"
+        >
+          <div onPointerDown={(e) => drag.start(e)} className="flex shrink-0 cursor-grab touch-none justify-center pb-2 pt-2.5 active:cursor-grabbing">
+            <button type="button" aria-label={snap === "full" ? "Shrink details" : "Expand details"} onClick={() => setSnap((s) => (s === "full" ? "half" : "full"))} className="h-1.5 w-11 rounded-full bg-ink-3/40" />
+          </div>
+          {close}
+          <div className={cn("flex-1 overscroll-contain px-4 pt-1", snap === "full" ? "overflow-y-auto pb-6" : "overflow-y-auto pb-[46svh]")}>{body}</div>
+        </motion.aside>
+      ) : null}
+    </AnimatePresence>
   );
 }
