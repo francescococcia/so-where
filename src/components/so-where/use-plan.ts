@@ -28,6 +28,14 @@ export type PlanState = {
   resultSeq: number;
   /** Live ask failed with no result at all: a friendly message (never demo data for a live ask). */
   error: string | null;
+  /** Set when the server translated the user's words to English first (any-language asks). */
+  translated: Translated | null;
+};
+/** Server `translated` on a result/clarify: the user's language and the model that really did the translation. */
+export type Translated = { lang: string; langName: string; model: string };
+const translatedOf = (v: unknown): Translated | null => {
+  const t = v as Translated | null | undefined;
+  return t && typeof t.lang === "string" && typeof t.langName === "string" && typeof t.model === "string" ? { lang: t.lang, langName: t.langName, model: t.model } : null;
 };
 
 /** Optional short description on a card (server4, src/lib/blurb.ts). Kept here so plan-types.ts stays unchanged. */
@@ -38,7 +46,7 @@ export const blurbOf = (c: unknown): Blurb | null => {
 };
 const BLURB_WAIT_MS = 3000;
 
-const EMPTY: PlanState = { status: "idle", query: "", ask: "", reply: null, steps: [], result: null, clarify: null, example: false, exampleReason: null, elapsedMs: 0, blurbsPending: false, resultSeq: 0, error: null };
+const EMPTY: PlanState = { status: "idle", query: "", ask: "", reply: null, steps: [], result: null, clarify: null, example: false, exampleReason: null, elapsedMs: 0, blurbsPending: false, resultSeq: 0, error: null, translated: null };
 
 type Previous = { query: string; answer: string };
 
@@ -72,8 +80,9 @@ export function usePlan() {
   }, []);
 
   /** Show a fixture from plan-fixture.ts (always labelled "example data"). */
-  const playFixture = useCallback(async (id: FixtureId, query: string, reason: string, signal: AbortSignal, opts?: { clarify?: boolean }) => {
-    const fx = FIXTURES[id];
+  const playFixture = useCallback(async (id: FixtureId, query: string, reason: string, signal: AbortSignal, opts?: { clarify?: boolean; lead?: AgentStep; translated?: Translated }) => {
+    const base = FIXTURES[id];
+    const fx = opts?.lead ? { ...base, steps: [opts.lead, ...base.steps] } : base;
     setState((s) => ({ ...s, example: true, exampleReason: reason }));
     if (opts?.clarify) {
       const steps: AgentStep[] = [
@@ -86,12 +95,12 @@ export function usePlan() {
     }
     await replay(fx.steps, signal);
     const total = fx.steps.reduce((a, s) => a + (s.ms ?? 0), 0);
-    setState((s) => ({ ...s, status: "result", resultSeq: s.resultSeq + 1, steps: fx.steps, result: { ...fx, query: query || fx.query }, ask: query || fx.query, clarify: null, elapsedMs: total }));
+    setState((s) => ({ ...s, status: "result", resultSeq: s.resultSeq + 1, steps: fx.steps, result: { ...fx, query: query || fx.query }, ask: query || fx.query, clarify: null, translated: opts?.translated ?? null, elapsedMs: total }));
   }, [replay]);
 
   /** `you` is the device location, already rounded to ~100 m by the caller; it is only sent, never stored here. */
   /** opts.refine = previous accumulated query → POST {mode:"refine", query, previous:{query, result?}} (result = the plan on screen, as received; server never stores it); opts.display = ask kept on screen. */
-  const submit = useCallback(async (query: string, previous?: Previous, you?: { lat: number; lng: number }, opts?: { refine?: string; display?: string; focus?: { id: string; name: string; lat: number; lng: number }; result?: PlanResultWithAgent | null }) => {
+  const submit = useCallback(async (query: string, previous?: Previous, you?: { lat: number; lng: number }, opts?: { refine?: string; display?: string; focus?: { id: string; name: string; lat: number; lng: number }; result?: PlanResultWithAgent | null; /** "auto" | ISO code from the language picker */ lang?: string; /** already translated in the browser (voice, live-translate) */ translated?: { lang: string; model: string; ms?: number } }) => {
     ctrl.current?.abort();
     const ac = new AbortController();
     ctrl.current = ac;
@@ -110,6 +119,9 @@ export function usePlan() {
           ...(you ? { you } : {}),
           // Refine only: the place the follow-up is about ("other Italian places in the area").
           ...(refine && opts?.focus ? { focus: opts.focus } : {}),
+          // Any language: omitted for plain English so the request is byte-for-byte what it was.
+          ...(opts?.lang && opts.lang !== "auto" ? { lang: opts.lang } : {}),
+          ...(opts?.translated ? { translated: opts.translated } : {}),
         }),
         signal: ac.signal,
       });
@@ -141,6 +153,7 @@ export function usePlan() {
             ask: typeof result.query === "string" && result.query ? result.query : s.ask,
             reply: typeof result.reply === "string" && result.reply ? result.reply : null,
             clarify: null,
+            translated: translatedOf((result as { translated?: unknown }).translated),
             steps: result.steps?.length ? result.steps : s.steps,
             elapsedMs: performance.now() - t0,
           }));
@@ -161,7 +174,7 @@ export function usePlan() {
         } else if (msg.type === "clarify" && msg.clarify) {
           gotTerminal = true;
           // The server returns the cumulative query on clarify; keep it so the next answer goes back as previous:{query, answer}.
-          setState((s) => ({ ...s, status: "clarify", ask: typeof msg.query === "string" ? msg.query : s.ask, reply: typeof msg.reply === "string" ? msg.reply : null, clarify: msg.clarify as Clarify, elapsedMs: performance.now() - t0 }));
+          setState((s) => ({ ...s, status: "clarify", ask: typeof msg.query === "string" ? msg.query : s.ask, reply: typeof msg.reply === "string" ? msg.reply : null, clarify: msg.clarify as Clarify, translated: translatedOf(msg.translated), elapsedMs: performance.now() - t0 }));
         }
       };
 
@@ -195,13 +208,13 @@ export function usePlan() {
     }
   }, []);
 
-  /** Show a fixture straight away (used by ?demo=meet|saturday). */
-  const showFixture = useCallback((id: FixtureId) => {
+  /** Show a fixture straight away (used by ?demo=meet|saturday|translate). `display` = the ask shown on screen. */
+  const showFixture = useCallback((id: FixtureId, opts?: { display?: string; lead?: AgentStep; translated?: Translated }) => {
     ctrl.current?.abort();
     const ac = new AbortController();
     ctrl.current = ac;
-    setState({ ...EMPTY, status: "running", query: FIXTURES[id].query });
-    playFixture(id, FIXTURES[id].query, "demo link", ac.signal).catch(() => {});
+    setState({ ...EMPTY, status: "running", query: opts?.display ?? FIXTURES[id].query });
+    playFixture(id, FIXTURES[id].query, "demo link", ac.signal, { lead: opts?.lead, translated: opts?.translated }).catch(() => {});
   }, [playFixture]);
 
   const reset = useCallback(() => {

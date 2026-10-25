@@ -21,12 +21,15 @@ function ctor(): (new () => Rec) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function useSpeech({ onText, onFinal, onError }: { onText: (t: string) => void; onFinal: (t: string) => void; onError: (msg: string) => void }) {
+/** `lang` = BCP 47 tag for recognition (default en-GB); follows the language picker / the last detected language. */
+export function useSpeech({ onText, onFinal, onError, lang = "en-GB" }: { onText: (t: string) => void; onFinal: (t: string) => void; onError: (msg: string) => void; lang?: string }) {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const rec = useRef<Rec | null>(null);
   const cb = useRef({ onText, onFinal, onError });
   cb.current = { onText, onFinal, onError };
+  const langRef = useRef(lang);
+  langRef.current = lang;
 
   useEffect(() => setSupported(!!ctor()), []);
   useEffect(() => () => rec.current?.abort(), []);
@@ -38,7 +41,7 @@ export function useSpeech({ onText, onFinal, onError }: { onText: (t: string) =>
     if (!C) return;
     rec.current?.abort();
     const r = new C();
-    r.lang = "en-GB";
+    r.lang = langRef.current || "en-GB";
     r.interimResults = true;
     r.continuous = false;
     let finalText = "";

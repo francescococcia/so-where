@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, ArrowUp, CalendarDays, Camera, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, LocateFixed, Loader2, Mic, Navigation, PencilLine, Repeat2, Send, Sparkles, X } from "lucide-react";
+import { ArrowRight, ArrowUp, CalendarDays, Camera, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, Languages, LocateFixed, Loader2, Mic, Navigation, PencilLine, Repeat2, Send, Sparkles, X } from "lucide-react";
 import type { PlanResultWithAgent } from "@/lib/plan-types";
-import type { FixtureId } from "@/lib/plan-fixture";
+import { translateDemo, type FixtureId } from "@/lib/plan-fixture";
 import type { VerifyInfo } from "@/lib/verify";
 import { cn } from "@/lib/utils";
 import { AgentSteps } from "./agent-steps";
@@ -20,10 +20,11 @@ import { SendPlanDialog } from "./send-plan-dialog";
 import { Mark } from "./mark";
 import { VerdictChip } from "./verdict-chip";
 import { fmtAsOf, fmtWhen, gmapsDirections } from "./format";
-import { usePlan } from "./use-plan";
+import { usePlan, type Translated } from "./use-plan";
+import { useTranslateMic, type HeardTranslation } from "./use-translate-mic";
 import { useSpeech } from "./use-speech";
 import { LiveVoiceButton } from "./live-voice";
-import { VoiceCardSlot, primeVoice, type VoiceReply } from "./voice-card";
+import { BCP47, VoiceCardSlot, primeVoice, type VoiceReply } from "./voice-card";
 import { useLiveTools } from "./live-tools";
 
 /** Live voice (Gemini Live). Off unless NEXT_PUBLIC_LIVE_VOICE=1; the Web Speech mic stays the fallback. */
@@ -265,13 +266,16 @@ function agentReply(prev: PlanResultWithAgent | null, next: PlanResultWithAgent)
 }
 
 /** Mic toggle. Hidden when the browser has no speech recognition. */
-function MicButton({ listening, onClick, className, size = "md" }: { listening: boolean; onClick: () => void; className?: string; size?: "md" | "sm" }) {
+function MicButton({ listening, onClick, className, size = "md", busy, label }: { listening: boolean; onClick: () => void; className?: string; size?: "md" | "sm"; busy?: boolean; label?: string }) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
+      disabled={busy}
+      aria-busy={busy}
       aria-pressed={listening}
-      aria-label={listening ? "Stop voice input" : "Speak your ask"}
+      aria-label={busy ? "Translating" : listening ? "Stop voice input" : label ?? "Speak your ask"}
+      title={label}
       whileTap={{ scale: 0.9 }}
       className={cn(
         "sw-btn relative shrink-0 rounded-full transition-colors",
@@ -280,7 +284,9 @@ function MicButton({ listening, onClick, className, size = "md" }: { listening: 
         className
       )}
     >
-      {listening ? (
+      {busy ? (
+        <Loader2 className="size-[18px] animate-spin text-signal-ink" aria-hidden />
+      ) : listening ? (
         <span className="flex h-4 items-center gap-[3px]" aria-hidden>
           {[0, 1, 2, 3].map((i) => (
             <motion.span key={i} className="w-[3px] rounded-full bg-white" animate={{ height: [5, 15, 7, 12, 5] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.12, ease: "easeInOut" }} />
@@ -363,6 +369,37 @@ function Trail({ turns, typing }: { turns: Turn[]; typing?: boolean }) {
   );
 }
 
+/** Language picker next to the location chip. "auto" = typed text in any language is detected (English skips it);
+ * "any" = the mic records and gemini-3.5-live-translate-preview translates; a named language sets the browser mic to it. */
+const LANGS = [
+  { id: "auto", label: "Auto", short: "Auto" },
+  { id: "any", label: "Any language · voice translate", short: "Any language" },
+  { id: "en", label: "English", short: "EN" },
+  { id: "it", label: "Italiano", short: "IT" },
+  { id: "es", label: "Español", short: "ES" },
+  { id: "fr", label: "Français", short: "FR" },
+  { id: "de", label: "Deutsch", short: "DE" },
+  { id: "pt", label: "Português", short: "PT" },
+  { id: "zh", label: "中文", short: "中文" },
+  { id: "ja", label: "日本語", short: "日本語" },
+] as const;
+function LangPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const cur = LANGS.find((l) => l.id === value) ?? LANGS[0];
+  return (
+    <label className={cn("sw-chip relative min-h-9 shrink-0 cursor-pointer px-3 text-[12.5px] font-semibold max-lg:min-h-11", value !== "auto" && "bg-signal-soft")} title="Speak or type in your language">
+      <Languages className={cn("size-3.5", value !== "auto" ? "text-signal-ink" : "text-ink-3")} aria-hidden />
+      <span>{cur.short}</span>
+      <select aria-label="Your language" value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0">
+        {LANGS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+      </select>
+    </label>
+  );
+}
+/** Client twin of the server's cheap check: a short follow-up like "Greenwich" needs no translation hint. */
+const looksPlain = (t: string) => t.trim().split(/\s+/).length <= 2 && !/[^\x00-\x7f]/.test(t);
+/** Web Speech wants zh-CN, not the TTS cmn-CN tag. */
+const recogLang = (code?: string) => (code === "zh" ? "zh-CN" : (code && BCP47[code]) || "en-GB");
+
 export function SoWhereApp() {
   const reduced = !!useReducedMotion();
   const { state, submit, showFixture } = usePlan();
@@ -386,6 +423,21 @@ export function SoWhereApp() {
   const [turns, setTurns] = useState<Turn[]>([]);
   // Floating voice card for the latest follow-up reply (the chat trail keeps the text bubble too).
   const [voice, setVoice] = useState<VoiceReply | null>(null);
+  // Any language: the picker, the language the conversation is in (sticky across follow-ups), and the demo reply.
+  const [lang, setLangState] = useState<string>("auto");
+  useEffect(() => {
+    const v = window.localStorage.getItem("sw-lang");
+    if (v && LANGS.some((l) => l.id === v)) setLangState(v);
+  }, []);
+  const setLang = useCallback((v: string) => {
+    setLangState(v);
+    try { window.localStorage.setItem("sw-lang", v); } catch {}
+  }, []);
+  const talkLang = useRef<(Translated & { heardBy?: string }) | null>(null);
+  const [talkCode, setTalkCode] = useState<string | null>(null);
+  const demoReply = useRef<string | null>(null);
+  const voiceSeq = useRef(0);
+  const langHint = lang === "any" ? "auto" : lang;
   const focusName = useRef<string | undefined>(undefined);
   const [wide, setWide] = useState(false);
   // Mobile voice card floats above the composer dock. It lives in a portal (fixed to the viewport):
@@ -455,6 +507,27 @@ export function SoWhereApp() {
     toastTimer.current = window.setTimeout(() => setToast(null), 2400);
   }, []);
 
+  /** Show (and speak) a reply, in the conversation's language when the ask wasn't English. Venue names stay as-is;
+   * drafts to the friend are untouched (English). Falls back to the English reply if translation fails. */
+  const voiceOut = useCallback((v: VoiceReply, turnId?: number) => {
+    const my = ++voiceSeq.current;
+    const tr = talkLang.current;
+    if (!tr || tr.lang === "en") return setVoice(v);
+    const done = (text: string, model: string) => {
+      if (voiceSeq.current !== my) return;
+      setVoice({ ...v, text, english: v.text, lang: tr.lang, langName: tr.langName, model, heardBy: tr.heardBy ?? tr.model });
+      if (turnId != null) setTurns((t) => t.map((x) => (x.id === turnId ? { ...x, text } : x)));
+    };
+    if (demoReply.current) return done(demoReply.current, tr.model);
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), 5000);
+    fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: v.text, to: tr.lang }), signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { text?: string; model?: string } | null) => (j?.text && j.model ? done(j.text, j.model) : voiceSeq.current === my && setVoice(v)))
+      .catch(() => voiceSeq.current === my && setVoice(v))
+      .finally(() => window.clearTimeout(timer));
+  }, []);
+
   // Glow while text is going in (typed by hand or by a suggestion chip).
   const pulse = useCallback(() => {
     setTyping(true);
@@ -516,6 +589,11 @@ export function SoWhereApp() {
       setSnapDemo(demo);
       setSnapMode("place");
       setSnap("ask");
+    } else if (demo === "translate") {
+      // Italian ask on the meet fixture: translate step, Italian voice card, all offline (example data).
+      demoReply.current = translateDemo.reply;
+      showFixture("meet", { display: translateDemo.display, lead: translateDemo.lead, translated: translateDemo.translated });
+      setQuery(translateDemo.display);
     } else if (demo === "clarify") {
       setQuery(CHIPS[1].ask);
       setActiveChip("coffee");
@@ -538,15 +616,19 @@ export function SoWhereApp() {
     setSelectedId(result?.cards[0]?.id ?? null);
     setDetailId(null);
     if (result) {
+      // Conversation language: a fresh ask sets it; a follow-up keeps it unless the server translated a new language.
+      if (state.translated) talkLang.current = { ...state.translated, heardBy: talkLang.current?.lang === state.translated.lang && talkLang.current.heardBy && !awaitingReply.current ? talkLang.current.heardBy : state.translated.model };
+      else if (!awaitingReply.current) talkLang.current = null;
+      setTalkCode(talkLang.current?.lang ?? null);
       if (awaitingReply.current) {
         awaitingReply.current = false;
         const text = state.reply || agentReply(shown, result);
         const id = Date.now();
         setTurns((t) => [...t, { id, role: "agent", text, leaveBy: leaveByOf(result) }]);
-        setVoice({ id, text, leaveBy: leaveByOf(result), place: focusName.current, autoplay: true });
+        voiceOut({ id, text, leaveBy: leaveByOf(result), place: focusName.current, autoplay: true }, id);
       } else if (result.cards.length) {
         // Every fresh answer gets the voice card too, not just follow-ups.
-        setVoice({ id: Date.now(), text: planReply(result), leaveBy: leaveByOf(result), place: result.cards[0]?.name, autoplay: true });
+        voiceOut({ id: Date.now(), text: planReply(result), leaveBy: leaveByOf(result), place: result.cards[0]?.name, autoplay: true });
       }
       setShown(result);
       if (refining) say("Picks updated");
@@ -566,40 +648,54 @@ export function SoWhereApp() {
       awaitingReply.current = false;
       setTurns((t) => [...t, { id: Date.now(), role: "agent", text: "Sorry, that didn't go through. The plan above is unchanged; try again." }]);
     }
+    if (status === "clarify" && state.translated) {
+      talkLang.current = state.translated;
+      setTalkCode(state.translated.lang);
+    }
     if (status === "clarify" && awaitingReply.current) {
       awaitingReply.current = false;
       if (state.reply) {
         const id = Date.now();
         setTurns((t) => [...t, { id, role: "agent", text: state.reply! }]);
-        setVoice({ id, text: state.reply, autoplay: true });
+        voiceOut({ id, text: state.reply, autoplay: true }, id);
       }
     }
-    else if (status === "clarify" && state.clarify?.question) setVoice({ id: Date.now(), text: state.clarify.question, autoplay: true });
+    else if (status === "clarify" && state.clarify?.question) voiceOut({ id: Date.now(), text: state.clarify.question, autoplay: true });
   }, [status]);
 
   const ask = useCallback(
-    (q: string) => {
+    (q: string, heard?: HeardTranslation) => {
       stopTyping();
       const text = q.trim();
       if (!text) return;
+      demoReply.current = null;
+      if (!heard) talkLang.current = null;
       setRefining(false);
       setShown(null);
       setTurns([]);
       setVoice(null);
       setPhotoAsk(null);
       setPlaceSnap(null);
-      baseAsk.current = text;
       awaitingReply.current = false;
-      submit(text, undefined, you ?? undefined);
+      if (heard && heard.lang !== "en") {
+        // Spoken in another language: plan the English, keep their words on screen.
+        baseAsk.current = heard.original;
+        talkLang.current = { lang: heard.lang, langName: heard.langName, model: heard.model, heardBy: heard.model };
+        submit(heard.english, undefined, you ?? undefined, { display: heard.original, translated: { lang: heard.lang, model: heard.model, ms: heard.ms } });
+        return;
+      }
+      baseAsk.current = heard ? heard.english : text;
+      // English and "Auto" send exactly what they always did; a picked language rides along as a hint.
+      submit(heard ? heard.english : text, undefined, you ?? undefined, langHint !== "auto" ? { lang: langHint } : undefined);
     },
-    [submit, you, stopTyping]
+    [submit, you, stopTyping, langHint]
   );
 
   // While a question is open, text typed in the main box ("greenwich") answers it, keeping the original ask
   // (previous:{query, answer}); a rewritten full ask still starts fresh.
   const answerClarify = useCallback(
-    (answer: string) => submit(answer, { query: state.ask || state.query, answer }, you ?? undefined, { display: baseAsk.current || state.query }),
-    [submit, state.ask, state.query, you]
+    (answer: string) => submit(answer, { query: state.ask || state.query, answer }, you ?? undefined, { display: baseAsk.current || state.query, ...(langHint !== "auto" ? { lang: langHint } : talkLang.current ? { lang: talkLang.current.lang } : {}) }),
+    [submit, state.ask, state.query, you, langHint]
   );
   const askOrAnswer = useCallback(
     (q: string) => {
@@ -679,7 +775,7 @@ export function SoWhereApp() {
   }, [you, say]);
 
   const refine = useCallback(
-    (extra: string, label?: string) => {
+    (extra: string, label?: string, heard?: HeardTranslation) => {
       const text = extra.trim();
       if (!text) return;
       if (!baseAsk.current) baseAsk.current = state.query || query;
@@ -697,10 +793,12 @@ export function SoWhereApp() {
       primeVoice(); // inside the user's send, so the spoken reply may autoplay
       setTurns((t) => [...t, { id: Date.now(), role: "user", text: label ?? text }]);
       awaitingReply.current = true;
-      submit(text, undefined, you ?? undefined, { refine: prev, display: baseAsk.current, focus, result: state.result ?? shown });
+      const any = heard && heard.lang !== "en" ? { translated: { lang: heard.lang, model: heard.model, ms: heard.ms } } : langHint !== "auto" ? { lang: langHint } : talkLang.current && !looksPlain(text) ? { lang: talkLang.current.lang } : {};
+      if (heard && heard.lang !== "en") talkLang.current = { lang: heard.lang, langName: heard.langName, model: heard.model, heardBy: heard.model };
+      submit(text, undefined, you ?? undefined, { refine: prev, display: baseAsk.current, focus, result: state.result ?? shown, ...any });
       scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     },
-    [state.query, state.ask, state.result, shown, detailId, query, submit, you]
+    [state.query, state.ask, state.result, shown, detailId, query, submit, you, langHint]
   );
 
   // Voice: fill the box live; after a final result, send after a short pause unless cancelled.
@@ -730,7 +828,31 @@ export function SoWhereApp() {
       }, PENDING_MS);
     },
     onError: (m) => say(m),
+    // Follows the picker, else the language the conversation is in (Auto), else English.
+    lang: lang !== "auto" && lang !== "any" ? recogLang(lang) : recogLang(talkCode ?? "en"),
   });
+  // "Any language": one spoken ask → gemini-3.5-live-translate-preview → English plan, their words on screen.
+  const tmicTarget = useRef<"ask" | "chat">("ask");
+  const tmic = useTranslateMic({
+    onResult: (r) => {
+      if (tmicTarget.current === "chat") {
+        refine(r.english, r.original, r);
+      } else {
+        setQuery(r.original);
+        setActiveChip(null);
+        primeVoice();
+        ask(r.english, r);
+      }
+    },
+    onError: (m) => say(m),
+  });
+  const translateMic = (target: "ask" | "chat") => () => {
+    cancelPending();
+    speech.stop();
+    tmicTarget.current = target;
+    if (tmic.state === "idle") say("Speak in any language…");
+    tmic.toggle();
+  };
   const mic = (target: "ask" | "chat" | "clarify") => () => {
     cancelPending();
     voiceTarget.current = target;
@@ -870,7 +992,7 @@ export function SoWhereApp() {
                   className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal transition-[height] duration-200 placeholder:text-ink-3 focus:outline-none"
                 />
                 <CameraButton open={snap === "ask"} onClick={() => setSnap((v) => (v === "ask" ? null : "ask"))} />
-                {LIVE_VOICE ? <LiveVoiceButton onStateChange={liveState.ask} onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("ask") : undefined} fallbackListening={speech.listening && voiceTarget.current === "ask"} /> : speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : null}
+                {lang === "any" && tmic.supported ? <MicButton listening={tmic.state === "listening" && tmicTarget.current === "ask"} busy={tmic.state === "translating" && tmicTarget.current === "ask"} label="Speak in any language" onClick={translateMic("ask")} /> : lang !== "auto" && lang !== "en" && lang !== "any" && speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : LIVE_VOICE ? <LiveVoiceButton onStateChange={liveState.ask} onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("ask") : undefined} fallbackListening={speech.listening && voiceTarget.current === "ask"} /> : speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : null}
                 <motion.button
                   type="submit"
                   disabled={!query.trim() || status === "running"}
@@ -897,6 +1019,7 @@ export function SoWhereApp() {
                   {you ? "Using your location · ~100 m" : "Use my location"}
                   {you ? <X className="size-3.5" aria-label="Stop using location" /> : null}
                 </button>
+                <LangPicker value={lang} onChange={setLang} />
                 {locating === "denied" ? <span className="text-[11.5px] leading-4 text-ink-3">Location blocked: name a station.</span> : null}
               </div>
               <AnimatePresence>{pending === "ask" ? <PendingSend ms={PENDING_MS} onCancel={cancelPending} /> : null}</AnimatePresence>
@@ -1025,7 +1148,7 @@ export function SoWhereApp() {
                     className="min-w-0 flex-1 bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal placeholder:text-ink-3 focus:outline-none"
                   />
                   <CameraButton size="sm" open={snap === "chat"} onClick={() => setSnap((v) => (v === "chat" ? null : "chat"))} />
-                  {LIVE_VOICE ? <LiveVoiceButton size="sm" onStateChange={liveState.chat} onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("chat") : undefined} fallbackListening={speech.listening && voiceTarget.current === "chat"} /> : speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : null}
+                  {lang === "any" && tmic.supported ? <MicButton size="sm" listening={tmic.state === "listening" && tmicTarget.current === "chat"} busy={tmic.state === "translating" && tmicTarget.current === "chat"} label="Speak in any language" onClick={translateMic("chat")} /> : lang !== "auto" && lang !== "en" && lang !== "any" && speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : LIVE_VOICE ? <LiveVoiceButton size="sm" onStateChange={liveState.chat} onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("chat") : undefined} fallbackListening={speech.listening && voiceTarget.current === "chat"} /> : speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : null}
                   <motion.button
                     type="submit"
                     disabled={!chat.trim() || status === "running"}

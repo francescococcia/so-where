@@ -27,7 +27,7 @@ const CONNECT_TIMEOUT_MS = 9000;
 const TOOL_TIMEOUT_MS = 55_000;
 const CAPTION_MAX = 110;
 
-const WORKLET = `
+export const WORKLET = `
 class SwMic extends AudioWorkletProcessor {
   constructor() { super(); this.ratio = sampleRate / 16000; this.buf = new Int16Array(800); this.n = 0; this.pos = 0; this.acc = 0; this.cnt = 0; this.sq = 0; }
   process(inputs) {
@@ -52,7 +52,7 @@ class SwMic extends AudioWorkletProcessor {
 }
 registerProcessor("sw-mic", SwMic);`;
 
-function toBase64(buf: ArrayBuffer) {
+export function toBase64(buf: ArrayBuffer) {
   const bytes = new Uint8Array(buf);
   let s = "";
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));

@@ -1,6 +1,8 @@
-// POST /api/speak { text } → audio/wav: one short assistant reply read aloud by a Gemini TTS model (voice Aoede, the
+// POST /api/speak { text, lang? } → audio/wav: one short assistant reply read aloud by a Gemini TTS model (voice Aoede, the
 // same voice as live voice). Text only in, audio only out: nothing is logged or stored (the rate limit keeps an
 // in-memory counter per IP). 503 when no key is set; the client then falls back to the browser's speechSynthesis.
+// `lang` (ISO 639-1, e.g. "it") = the reply was translated: the TTS gets speechConfig.languageCode so it speaks it
+// natively; a model that rejects the code is retried once without it. No lang = exactly the old English request.
 import { GoogleGenAI } from "@google/genai";
 import { LIVE_VOICE_NAME } from "@/lib/live-config";
 
@@ -14,6 +16,8 @@ const MAX_CHARS = 400;
 const PER_MIN = 12;
 const PER_HOUR = 120;
 const hits = new Map<string, number[]>();
+/** BCP 47 codes Gemini TTS knows, for translated replies. */
+const TTS_LANG: Record<string, string> = { it: "it-IT", es: "es-US", fr: "fr-FR", de: "de-DE", pt: "pt-BR", nl: "nl-NL", pl: "pl-PL", ro: "ro-RO", tr: "tr-TR", ar: "ar-EG", hi: "hi-IN", bn: "bn-BD", ja: "ja-JP", ko: "ko-KR", ru: "ru-RU", uk: "uk-UA", zh: "cmn-CN", el: "el-GR", sv: "sv-SE" };
 
 function limited(ip: string) {
   const now = Date.now();
@@ -60,9 +64,12 @@ export async function POST(req: Request) {
   if (limited(ip)) return json(429, "Too many voice replies. Try again in a minute.");
 
   let text = "";
+  let languageCode: string | undefined;
   try {
-    const body = (await req.json()) as { text?: unknown };
+    const body = (await req.json()) as { text?: unknown; lang?: unknown };
     text = typeof body.text === "string" ? body.text.replace(/\s+/g, " ").trim() : "";
+    const lang = typeof body.lang === "string" ? body.lang.toLowerCase().slice(0, 2) : "";
+    if (lang && lang !== "en" && TTS_LANG[lang]) languageCode = TTS_LANG[lang];
   } catch {
     return json(400, "Send { text }.");
   }
@@ -71,12 +78,14 @@ export async function POST(req: Request) {
 
   const ai = new GoogleGenAI({ apiKey: key });
   const models = [process.env.TTS_MODEL, ...MODELS].filter((m, i, a): m is string => !!m && a.indexOf(m) === i && !dead.has(m));
-  for (const model of models) {
+  const tries = models.flatMap((m) => (languageCode ? [{ model: m, languageCode }, { model: m, languageCode: undefined }] : [{ model: m, languageCode: undefined }]));
+  for (const { model, languageCode: lc } of tries) {
+    if (dead.has(model)) continue;
     try {
       const res = await ai.models.generateContent({
         model,
         contents: [{ parts: [{ text }] }], // text only: style prompts get read aloud by some TTS models
-        config: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: LIVE_VOICE_NAME } } } },
+        config: { responseModalities: ["AUDIO"], speechConfig: { ...(lc ? { languageCode: lc } : {}), voiceConfig: { prebuiltVoiceConfig: { voiceName: LIVE_VOICE_NAME } } } },
       });
       const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
       const data = part?.inlineData?.data;
@@ -89,6 +98,7 @@ export async function POST(req: Request) {
       });
     } catch (e) {
       const status = (e as { status?: number }).status;
+      if (status === 400 && lc) continue; // maybe just the language code: retry this model without it
       if (status === 404 || status === 400 || status === 403) dead.add(model);
       if (status === 429) return json(429, "Voice is busy. Try again in a moment.");
     }

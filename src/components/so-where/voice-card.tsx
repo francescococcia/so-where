@@ -5,13 +5,17 @@
 // Only the short reply is spoken (never the other person's area). Audio isn't saved; mute is remembered locally.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CalendarPlus, Flag, Footprints, RotateCcw, Volume2, VolumeX, X } from "lucide-react";
+import { CalendarPlus, Flag, Footprints, Languages, RotateCcw, Volume2, VolumeX, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LeaveBy } from "./blurb";
 import { VoiceOrb } from "./live-voice";
 import { TFL_LINES } from "./motion-bits";
 
-export type VoiceReply = { id: number; text: string; leaveBy?: LeaveBy | null; place?: string; autoplay?: boolean };
+/** Any-language replies: `text` is in `lang` (spoken in it), `english` the original, `model` what really translated it. */
+export type VoiceReply = { id: number; text: string; leaveBy?: LeaveBy | null; place?: string; autoplay?: boolean; lang?: string; langName?: string; english?: string; model?: string; heardBy?: string };
+/** ISO 639-1 → BCP 47 for TTS / speechSynthesis. */
+export const BCP47: Record<string, string> = { en: "en-GB", it: "it-IT", es: "es-ES", fr: "fr-FR", de: "de-DE", pt: "pt-PT", nl: "nl-NL", pl: "pl-PL", ro: "ro-RO", tr: "tr-TR", ar: "ar-XA", hi: "hi-IN", bn: "bn-IN", ur: "ur-IN", zh: "cmn-CN", ja: "ja-JP", ko: "ko-KR", ru: "ru-RU", uk: "uk-UA", el: "el-GR", sv: "sv-SE" };
+const bcp = (lang?: string) => (lang && BCP47[lang]) || "en-GB";
 type Phase = "idle" | "loading" | "speaking" | "done";
 
 // ---------------------------------------------------------------- audio (one shared context, unlocked on send)
@@ -146,9 +150,9 @@ function downloadReminder(lb: LeaveBy, place: string | undefined, legs: Legs) {
 // ---------------------------------------------------------------- speech engine
 type Engine = { progress: () => number; level: () => number; stop: () => void };
 
-async function fetchVoice(text: string, signal: AbortSignal): Promise<ArrayBuffer | null> {
+async function fetchVoice(text: string, signal: AbortSignal, lang?: string): Promise<ArrayBuffer | null> {
   try {
-    const r = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }), signal });
+    const r = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(lang && lang !== "en" ? { text, lang } : { text }), signal });
     if (!r.ok) return null;
     return await r.arrayBuffer();
   } catch {
@@ -194,13 +198,16 @@ function playBuffer(buf: AudioBuffer, onEnd: () => void): Engine | null {
   };
 }
 
-function speakBrowser(text: string, onEnd: () => void): Engine | null {
+function speakBrowser(text: string, onEnd: () => void, lang?: string): Engine | null {
   const ss = typeof window !== "undefined" ? window.speechSynthesis : undefined;
   if (!ss || typeof SpeechSynthesisUtterance === "undefined") return null;
   ss.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-GB";
-  const v = ss.getVoices().find((x) => x.lang === "en-GB" && /female|libby|sonia|serena|kate|google uk english female/i.test(x.name)) ?? ss.getVoices().find((x) => x.lang === "en-GB");
+  u.lang = lang && lang !== "en" ? (bcp(lang) === "cmn-CN" ? "zh-CN" : bcp(lang)) : "en-GB";
+  const pre = u.lang.slice(0, 2);
+  const v = lang && lang !== "en"
+    ? ss.getVoices().find((x) => x.lang.replace("_", "-") === u.lang) ?? ss.getVoices().find((x) => x.lang.toLowerCase().startsWith(pre))
+    : ss.getVoices().find((x) => x.lang === "en-GB" && /female|libby|sonia|serena|kate|google uk english female/i.test(x.name)) ?? ss.getVoices().find((x) => x.lang === "en-GB");
   if (v) u.voice = v;
   u.rate = 1.03;
   let char = 0;
@@ -350,9 +357,16 @@ export function VoiceCard({ reply, live, onClose, className }: { reply: VoiceRep
   const cache = useRef<{ text: string; buf: AudioBuffer } | null>(null);
   const run = useRef(0);
 
-  const legs = useMemo(() => legsOf(reply.text), [reply.text]);
+  const foreign = !!reply.lang && reply.lang !== "en" && !!reply.english;
+  const [showEnglish, setShowEnglish] = useState(false);
+  const legs = useMemo(() => legsOf(reply.english ?? reply.text), [reply.english, reply.text]);
   const place = legs.place ?? reply.place;
-  const display = useMemo(() => (reply.leaveBy ? leaveLine(reply.leaveBy, place, legs) : reply.text.replace(/\s+/g, " ").trim()), [reply, place, legs]);
+  // Translated replies show (and speak) the translation as-is; the English leave line is only for English replies.
+  const display = useMemo(
+    () => (foreign ? (showEnglish ? reply.english! : reply.text).replace(/\s+/g, " ").trim() : reply.leaveBy ? leaveLine(reply.leaveBy, place, legs) : reply.text.replace(/\s+/g, " ").trim()),
+    [reply, place, legs, foreign, showEnglish],
+  );
+  const speakLang = foreign && !showEnglish ? reply.lang : undefined;
   const prefix = useMemo(() => spokenPrefix(display), [display]);
   const words = useMemo(() => display.split(/\s+/).filter(Boolean), [display]);
   const spokenWords = prefix.split(/\s+/).filter(Boolean).length;
@@ -391,7 +405,7 @@ export function VoiceCard({ reply, live, onClose, className }: { reply: VoiceRep
       const ac = new AbortController();
       abort.current = ac;
       const timer = setTimeout(() => ac.abort(), 9000);
-      const raw = await fetchVoice(text, ac.signal);
+      const raw = await fetchVoice(text, ac.signal, speakLang);
       clearTimeout(timer);
       if (run.current !== my) return;
       const c = audioCtx();
@@ -405,12 +419,12 @@ export function VoiceCard({ reply, live, onClose, className }: { reply: VoiceRep
       }
       if (run.current !== my) return;
     }
-    const e = (buf ? playBuffer(buf, done) : null) ?? speakBrowser(text, done);
+    const e = (buf ? playBuffer(buf, done) : null) ?? speakBrowser(text, done, speakLang);
     if (!e) return done();
     engine.current = e;
     setPhase("speaking");
     if (reduced) setShown(words.length);
-  }, [prefix, words.length, stop, reduced]);
+  }, [prefix, words.length, stop, reduced, speakLang]);
 
   // Word-by-word reveal from the engine's progress.
   useEffect(() => {
@@ -521,6 +535,19 @@ export function VoiceCard({ reply, live, onClose, className }: { reply: VoiceRep
           </span>
         ))}
       </p>
+
+      {foreign ? (
+        <button
+          type="button"
+          onClick={() => { stop(); setShowEnglish((v) => !v); setShown(9999); setPhase("done"); }}
+          aria-pressed={showEnglish}
+          title={`${reply.heardBy ? `Heard by ${reply.heardBy} · ` : ""}reply translated by ${reply.model ?? "Gemini"}. Tap to ${showEnglish ? "switch back" : "see the English"}.`}
+          className="relative mt-2 inline-flex min-h-7 max-w-full items-center gap-1.5 rounded-full bg-white/80 px-2.5 text-[11.5px] font-semibold text-ink-2 ring-1 ring-black/5 hover:bg-white hover:text-ink"
+        >
+          <Languages className="size-3.5 shrink-0 text-signal-ink" aria-hidden />
+          <span className="truncate">{showEnglish ? "English · tap for " + (reply.langName ?? "original") : `${reply.langName ?? reply.lang} · translated by ${reply.model ?? "Gemini"}`}</span>
+        </button>
+      ) : null}
 
       {reply.leaveBy ? <LeaveHero lb={reply.leaveBy} legs={legs} place={place} /> : null}
     </motion.section>

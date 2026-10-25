@@ -8,7 +8,12 @@
 // Cards may carry `blurb` {text, bestFor?, source:{name,url}} (top 3; see blurb.ts). Stream: attached to the result
 // when ready within ~600 ms, else sent after it as {"type":"blurbs","blurbs":{[cardId]: Blurb}} (≤2.5 s, may be absent).
 // The stream always ends with a result or clarify (a failure is a result with a friendly headline, plus {"type":"error"}).
+// Any language: optional `lang` ("auto" | ISO code picked in the UI) and `translated` ({lang, model} when the browser
+// already translated a spoken ask via /api/translate). Plainly English text skips translation (cheap rules, no model
+// call); otherwise the user's words go to English first (step "translate") and the result carries
+// `translated: {lang, langName, model}` so the UI can reply in that language.
 // Request bodies are never logged (they can hold someone's location).
+import { langEnglishName, langName, looksEnglish, toEnglish } from "@/lib/translate";
 import { planBlurbs, type Blurb } from "@/lib/blurb";
 import { cardTags, failedResult, planRunWrite, runPlan, type PlanFocus, type PlanRequest, type PlanResultRefined } from "@/lib/plan";
 import type { AgentStep, PlanResultWithAgent } from "@/lib/plan-types";
@@ -55,6 +60,35 @@ function parseBody(raw: unknown): PlanRequest | null {
   };
 }
 
+type Translated = { lang: string; langName: string; model: string };
+/** Translate the user's own words in place (fresh ask, clarify answer or refinement). Null = English, untouched. */
+async function translateAsk(raw: unknown, body: PlanRequest): Promise<{ step: AgentStep; translated: Translated } | null> {
+  const b = (raw ?? {}) as Record<string, unknown>;
+  const hint = typeof b.lang === "string" ? b.lang.toLowerCase().slice(0, 4) : "auto";
+  const pre = b.translated && typeof b.translated === "object" ? (b.translated as Record<string, unknown>) : null;
+  if (pre && typeof pre.lang === "string" && /^[a-z]{2}$/.test(pre.lang) && pre.lang !== "en" && typeof pre.model === "string") {
+    const lang = pre.lang;
+    const model = pre.model.slice(0, 60);
+    return { translated: { lang, langName: langName(lang), model }, step: { id: "translate", label: `Translated from ${langEnglishName(lang)} · ${model}`, status: "done", detail: `${langName(lang)} → English · voice`, source: model, ms: typeof pre.ms === "number" ? Math.round(pre.ms) : undefined } };
+  }
+  const field = body.refine !== undefined ? "refine" : body.previous?.answer ? "answer" : "query";
+  const text = field === "refine" ? body.refine! : field === "answer" ? body.previous!.answer : body.query;
+  if (hint === "en" || ((hint === "auto" || !hint) && looksEnglish(text))) return null;
+  const t0 = Date.now();
+  const t = await toEnglish(text, hint).catch(() => null);
+  if (!t || !t.model || t.lang === "en") return null;
+  if (field === "refine") body.refine = body.query = t.english.slice(0, 300);
+  else if (field === "answer") body.previous!.answer = t.english.slice(0, 200);
+  else body.query = t.english.slice(0, 500);
+  return { translated: { lang: t.lang, langName: t.langName, model: t.model }, step: { id: "translate", label: `Translated from ${langEnglishName(t.lang)} · ${t.model}`, status: "done", detail: `${t.langName} → English`, source: t.model, ms: Date.now() - t0 } };
+}
+const withTranslation = (r: PlanResultRefined, tr: { step: AgentStep; translated: Translated } | null) => {
+  if (!tr) return r;
+  r.steps = [tr.step, ...(r.steps ?? []).filter((s) => s.id !== "translate")];
+  (r as PlanResultRefined & { translated?: Translated }).translated = tr.translated;
+  return r;
+};
+
 const blurbsOn = () => process.env.BLURBS !== "off";
 /** Top-3 card blurbs, never throwing; {} when off, a clarify, or every card already has one (echoed refine). */
 function blurbsFor(r: PlanResultRefined): Promise<Record<string, Blurb>> {
@@ -65,10 +99,21 @@ const attach = (r: PlanResultRefined, b: Record<string, Blurb>) => {
   r.cards = r.cards.map((c) => (b[c.id] ? { ...c, blurb: b[c.id] } : c));
 };
 
+/** Stream only: true when no model translation will run (so no "Translating" row flashes up for English). */
+function looksEnglishBody(raw: unknown, body: PlanRequest) {
+  const b = (raw ?? {}) as Record<string, unknown>;
+  const hint = typeof b.lang === "string" ? b.lang.toLowerCase().slice(0, 4) : "auto";
+  if (b.translated || hint === "en") return true;
+  const text = body.refine !== undefined ? body.refine : body.previous?.answer || body.query;
+  return (hint === "auto" || !hint) && looksEnglish(text);
+}
+
 export async function POST(req: Request) {
   let body: PlanRequest | null = null;
+  let raw: unknown = null;
   try {
-    body = parseBody(await req.json());
+    raw = await req.json();
+    body = parseBody(raw);
   } catch {
     body = null;
   }
@@ -77,7 +122,8 @@ export async function POST(req: Request) {
   const stream = (req.headers.get("accept") ?? "").includes("application/x-ndjson");
   if (!stream) {
     try {
-      const r = await runPlan(body);
+      const tr = await translateAsk(raw, body);
+      const r = withTranslation(await runPlan(body), tr);
       attach(r, await blurbsFor(r));
       await planRunWrite(r); // finish the plan_runs insert before the serverless function returns
       return Response.json(r, { headers: { "Cache-Control": "no-store" } });
@@ -96,10 +142,16 @@ export async function POST(req: Request) {
         controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
       };
       try {
-        const r: PlanResultRefined = await runPlan(plan, (step: AgentStep) => send({ type: "step", step }));
+        let tr: Awaited<ReturnType<typeof translateAsk>> = null;
+        if (!looksEnglishBody(raw, plan)) {
+          send({ type: "step", step: { id: "translate", label: "Translating your ask", status: "running" } });
+          tr = await translateAsk(raw, plan);
+          send({ type: "step", step: tr?.step ?? { id: "translate", label: "Reading your language", status: "skipped", detail: "Read as English" } });
+        } else tr = await translateAsk(raw, plan); // pre-translated voice ask only; no model call
+        const r: PlanResultRefined = withTranslation(await runPlan(plan, (step: AgentStep) => send({ type: "step", step })), tr);
         // `query` is the accumulated ask (earlier answers appended as "; them: X"): resend it as
         // previous.query with the next answer so a second clarify never loses the first answer.
-        if (r.clarify) send({ type: "clarify", clarify: r.clarify, query: r.query, ...(r.reply ? { reply: r.reply } : {}) });
+        if (r.clarify) send({ type: "clarify", clarify: r.clarify, query: r.query, ...(r.reply ? { reply: r.reply } : {}), ...(tr ? { translated: tr.translated } : {}) });
         else {
           const pending = blurbsFor(r);
           const early = await Promise.race([pending, new Promise<null>((res) => setTimeout(() => res(null), 600))]);

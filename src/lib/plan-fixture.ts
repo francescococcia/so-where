@@ -202,3 +202,12 @@ export const FIXTURES: Record<FixtureId, PlanResultWithAgent> = { meet: meetFixt
 export function pickFixture(query: string): FixtureId {
   return /near me|what'?s on|walk ?in|walk into|registration|sign.?up|saturday|sunday|weekend/i.test(query) ? "saturday" : "meet";
 }
+
+/** ?demo=translate: the meet fixture asked in Italian (EXAMPLE DATA, no network). The Italian reply was written for
+ * this fixture; live asks translate through /api/translate and name the model that really answered. */
+export const translateDemo = {
+  display: "Appuntamento giovedì alle 19. Io sono a Old Street, lei è dalle parti di Clapham. Un pub a metà strada, circa 40 sterline in due.",
+  lead: { id: "translate", label: "Translated from Italian · gemini-3.5-flash-lite", status: "done", detail: "Italiano → English", source: "gemini-3.5-flash-lite", ms: 520 } as AgentStep,
+  translated: { lang: "it", langName: "Italiano", model: "gemini-3.5-flash-lite" },
+  reply: "The Blue Maid. A due minuti dalla stazione di Borough e aperto fino a dopo mezzanotte. Tu sei a 24 minuti, l'altra persona a 23. Ho trovato 3 opzioni; questa è la migliore.",
+};
