@@ -5,6 +5,7 @@
 // that one request (the server doesn't keep it either).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useCameraSnap } from "./camera-viewfinder";
 import { Camera, Check, ImageUp, Loader2, Pencil, RotateCcw, ScanLine, Sparkles, X } from "lucide-react";
 
 type Extracted = {
@@ -167,8 +168,15 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
     return () => window.removeEventListener("paste", onPaste);
   }, [handle]);
 
+  // Live camera (phone rear camera or laptop webcam); file picker when there's none / it's blocked.
+  const camera = useCameraSnap({ hint: "snap the poster", onShot: (b) => void handle(b), onUpload: () => input.current?.click() });
+  const snapNow = () => {
+    if (st.s !== "idle") reset();
+    void camera.start();
+  };
+
   const busy = st.s === "scanning";
-  const preview = st.s === "idle" ? null : st.preview;
+  const preview = st.s === "idle" || camera.active ? null : st.preview;
 
   return (
     <section
@@ -179,14 +187,15 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
         ref={input}
         type="file"
         accept="image/*"
-        capture="environment"
         className="sr-only"
         tabIndex={-1}
         aria-hidden
         onChange={(e) => void handle(e.target.files?.[0])}
       />
 
-      {!preview ? (
+      {camera.active ? (
+        camera.panel
+      ) : !preview ? (
         <div
           onDragOver={(e) => {
             e.preventDefault();
@@ -198,19 +207,21 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
             setDrag(false);
             void handle(e.dataTransfer.files?.[0]);
           }}
-          className={`flex items-center gap-3 rounded-[12px] border border-dashed p-2.5 transition-colors ${drag ? "border-signal bg-signal-soft" : "border-signal/35"}`}
+          className={`flex flex-wrap items-center gap-2 rounded-[12px] border border-dashed p-2.5 transition-colors ${drag ? "border-signal bg-signal-soft" : "border-signal/35"}`}
         >
           <motion.button
             type="button"
             whileTap={{ scale: 0.95 }}
-            onClick={() => input.current?.click()}
+            onClick={snapNow}
             aria-label="Snap a poster: take or choose a photo of an event poster, venue sign or menu"
             className="sw-btn sw-btn-primary min-h-11 shrink-0 rounded-full px-4 text-[14px] font-semibold"
           >
             <Camera className="size-[18px]" aria-hidden /> Snap a poster
           </motion.button>
-          <p className="min-w-0 text-[13px] leading-5 text-ink-3">
-            <span className="hidden sm:inline"><ImageUp className="mr-1 inline size-4 align-[-3px]" aria-hidden />Drop or paste an image. </span>
+          <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => input.current?.click()} className="sw-chip min-h-11 shrink-0 px-3.5 text-[14px] font-medium text-ink">
+            <ImageUp className="size-4 text-ink-3" aria-hidden /> Upload
+          </motion.button>
+          <p className="min-w-0 flex-1 basis-[140px] text-[13px] leading-5 text-ink-3">
             I&apos;ll read the event, venue and time.
           </p>
         </div>
@@ -248,7 +259,7 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
               ) : st.s === "error" ? (
                 <motion.div key="err" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} role="alert" className="pt-1">
                   <p className="text-[14px] font-medium leading-5 text-ink">{st.msg}</p>
-                  <button type="button" onClick={() => input.current?.click()} className="sw-btn mt-2 min-h-11 rounded-full bg-signal-soft px-4 text-[14px] font-semibold text-signal-ink">
+                  <button type="button" onClick={snapNow} className="sw-btn mt-2 min-h-11 rounded-full bg-signal-soft px-4 text-[14px] font-semibold text-signal-ink">
                     <RotateCcw className="size-4" aria-hidden /> Try another photo
                   </button>
                 </motion.div>

@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import type { Blurb } from "./use-plan";
 import { TONE_CLASS, type OpenTone } from "./answers";
 import { PosterSnap, type PosterSnapProps } from "./poster-snap";
+import { useCameraSnap } from "./camera-viewfinder";
 
 // ---------- Response contract (read defensively) ----------
 export type SnapExtracted = { name: string | null; kind: string | null; signText: string | null; cuisine?: string | null; confidence: number };
@@ -176,7 +177,6 @@ const FRIENDLY: Record<number, string> = {
 
 type St =
   | { s: "idle" }
-  | { s: "camera" }
   | { s: "scanning"; preview: string }
   | { s: "match"; preview: string; r: PlaceSnapResponse; chosen: SnapPlace; others: SnapPlace[] }
   | { s: "pick"; preview: string; r: PlaceSnapResponse }
@@ -197,17 +197,14 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
   const [area, setArea] = useState("");
   const [drag, setDrag] = useState(false);
   const [more, setMore] = useState(false);
-  const cam = useRef<HTMLInputElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
   const image = useRef<string | null>(null); // in memory only; dropped on clear / unmount
   const previewUrl = useRef<string | null>(null);
-  const [live, setLive] = useState(false);
   const demoRan = useRef(false);
   const isExample = !!demo && demo in DEMO;
 
   useEffect(() => {
-    setLive(typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && window.matchMedia("(pointer: coarse)").matches);
     return () => {
       abort.current?.abort();
       image.current = null;
@@ -267,6 +264,12 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
         if (src.size > 25 * 1024 * 1024) return setSt({ s: "error", msg: FRIENDLY[413] });
       }
       try {
+        // Show the scan straight away (camera shots skip the idle flash while the photo shrinks).
+        if (!(src instanceof HTMLVideoElement)) {
+          if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+          previewUrl.current = URL.createObjectURL(src);
+          setSt({ s: "scanning", preview: previewUrl.current });
+        }
         const small = await toJpeg(src);
         if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
         previewUrl.current = URL.createObjectURL(small);
@@ -279,6 +282,13 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
     },
     [send],
   );
+
+  // Live camera on every device that has one (phones: rear; laptops: webcam). Upload is the fallback.
+  const camera = useCameraSnap({ hint: "snap the sign", onShot: (b) => void handle(b), onUpload: () => file.current?.click() });
+  const snapNow = () => {
+    if (st.s !== "idle") reset();
+    void camera.start();
+  };
 
   // Demo: a canned scan of The Kings Arms (offline).
   useEffect(() => {
@@ -309,7 +319,6 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
     previewUrl.current = null;
     setSt({ s: "idle" });
-    if (cam.current) cam.current.value = "";
     if (file.current) file.current.value = "";
   };
 
@@ -332,16 +341,15 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
     if (image.current) void send(image.current, st.preview, a);
   };
 
-  const preview = st.s === "idle" || st.s === "camera" ? null : st.preview;
+  const preview = st.s === "idle" || camera.active ? null : st.preview;
   const busy = st.s === "scanning";
 
   return (
     <section aria-label="Snap a place" className={cn("relative", className)}>
-      <input ref={cam} type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => void handle(e.target.files?.[0])} />
       <input ref={file} type="file" accept="image/*" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => void handle(e.target.files?.[0])} />
 
-      {st.s === "camera" ? (
-        <Viewfinder onShot={(v) => void handle(v)} onCancel={() => setSt({ s: "idle" })} onFail={() => { setSt({ s: "idle" }); cam.current?.click(); }} />
+      {camera.active ? (
+        camera.panel
       ) : !preview ? (
         <div
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
@@ -349,7 +357,7 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
           onDrop={(e) => { e.preventDefault(); setDrag(false); void handle(e.dataTransfer.files?.[0]); }}
           className={cn("flex flex-wrap items-center gap-2 rounded-[12px] border border-dashed p-2.5 transition-colors", drag ? "border-signal bg-signal-soft" : "border-signal/35")}
         >
-          <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => (live ? setSt({ s: "camera" }) : cam.current?.click())} aria-label="Snap a place: take a photo of a pub or café front" className="sw-btn sw-btn-primary min-h-11 shrink-0 rounded-full px-4 text-[14px] font-semibold">
+          <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={snapNow} aria-label="Snap a place: take a photo of a pub or café front" className="sw-btn sw-btn-primary min-h-11 shrink-0 rounded-full px-4 text-[14px] font-semibold">
             <Camera className="size-[18px]" aria-hidden /> Snap a place
           </motion.button>
           <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => file.current?.click()} className="sw-chip min-h-11 shrink-0 px-3.5 text-[14px] font-medium text-ink">
@@ -388,7 +396,7 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
               ) : st.s === "error" ? (
                 <motion.div key="err" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} role="alert" className="pt-1">
                   <p className="text-[14px] font-medium leading-5 text-ink">{st.msg}</p>
-                  <button type="button" onClick={() => (live ? setSt({ s: "camera" }) : cam.current?.click())} className="sw-btn mt-2 min-h-11 rounded-full bg-signal-soft px-4 text-[14px] font-semibold text-signal-ink">
+                  <button type="button" onClick={snapNow} className="sw-btn mt-2 min-h-11 rounded-full bg-signal-soft px-4 text-[14px] font-semibold text-signal-ink">
                     <RotateCcw className="size-4" aria-hidden /> Try another photo
                   </button>
                 </motion.div>
@@ -495,48 +503,6 @@ function ScanThumb({ src, busy }: { src: string; busy: boolean }) {
           </motion.div>
         ) : null}
       </AnimatePresence>
-    </div>
-  );
-}
-
-/** Live rear-camera viewfinder (phones). Falls back to the system camera if getUserMedia fails. */
-function Viewfinder({ onShot, onCancel, onFail }: { onShot: (v: HTMLVideoElement) => void; onCancel: () => void; onFail: () => void }) {
-  const video = useRef<HTMLVideoElement>(null);
-  const stream = useRef<MediaStream | null>(null);
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    let off = false;
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1600 } }, audio: false })
-      .then((s) => {
-        if (off) return s.getTracks().forEach((t) => t.stop());
-        stream.current = s;
-        if (video.current) {
-          video.current.srcObject = s;
-          void video.current.play().then(() => setReady(true)).catch(() => setReady(true));
-        }
-      })
-      .catch(() => !off && onFail());
-    return () => {
-      off = true;
-      stream.current?.getTracks().forEach((t) => t.stop());
-    };
-  }, [onFail]);
-  const stop = () => stream.current?.getTracks().forEach((t) => t.stop());
-  return (
-    <div className="relative overflow-hidden rounded-[14px] bg-ink shadow-e2">
-      <video ref={video} playsInline muted className="aspect-[4/3] w-full object-cover" aria-label="Camera preview" />
-      {["left-3 top-3 border-l-[3px] border-t-[3px]", "right-3 top-3 border-r-[3px] border-t-[3px]", "bottom-16 left-3 border-b-[3px] border-l-[3px]", "bottom-16 right-3 border-b-[3px] border-r-[3px]"].map((c) => (
-        <span key={c} aria-hidden className={cn("absolute size-6 rounded-[3px] border-white/90", c)} />
-      ))}
-      <p className="absolute inset-x-0 top-3 text-center text-[12.5px] font-semibold text-white drop-shadow">Get the sign in frame</p>
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/55 to-transparent px-3 pb-2.5 pt-6">
-        <button type="button" onClick={() => { stop(); onCancel(); }} className="min-h-11 rounded-full px-3 text-[14px] font-semibold text-white">Cancel</button>
-        <motion.button type="button" whileTap={{ scale: 0.9 }} disabled={!ready} onClick={() => { if (video.current) { onShot(video.current); window.setTimeout(stop, 50); } }} aria-label="Take photo" className="grid size-14 place-items-center rounded-full bg-white/90 ring-4 ring-white/40 disabled:opacity-50">
-          <span className="size-11 rounded-full bg-[linear-gradient(180deg,var(--sw-cta-a),var(--sw-cta-b))]" />
-        </motion.button>
-        <span className="w-[68px]" />
-      </div>
     </div>
   );
 }
