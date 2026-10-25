@@ -242,6 +242,18 @@ type Toast = { id: number; text: string };
 type Turn = { id: number; role: "user" | "agent"; text: string; leaveBy?: LeaveBy | null };
 
 
+/** Spoken line for a fresh plan: the top pick, its travel time and its "why here", kept short for the voice card. */
+function planReply(next: PlanResultWithAgent) {
+  const top = next.cards[0];
+  if (!top) return next.headline;
+  const them = top.legs.find((l) => l.who === "them")?.minutes;
+  const you = top.legs.find((l) => l.who === "you")?.minutes;
+  const mins = them != null && you != null ? ` You're ${you} minutes away, they're ${them}.` : you != null ? ` ${you} minutes from you.` : "";
+  const why = top.why ? ` ${top.why.trim().replace(/([^.!?])$/, "$1.")}` : "";
+  const more = next.cards.length > 1 ? ` I found ${next.cards.length} options; this is the best fit.` : "";
+  return `${top.name}.${why}${mins}${more}`;
+}
+
 function agentReply(prev: PlanResultWithAgent | null, next: PlanResultWithAgent) {
   const top = next.cards[0];
   if (!top) return "Nothing matched that. Try another tweak.";
@@ -532,6 +544,9 @@ export function SoWhereApp() {
         const id = Date.now();
         setTurns((t) => [...t, { id, role: "agent", text, leaveBy: leaveByOf(result) }]);
         setVoice({ id, text, leaveBy: leaveByOf(result), place: focusName.current, autoplay: true });
+      } else if (result.cards.length) {
+        // Every fresh answer gets the voice card too, not just follow-ups.
+        setVoice({ id: Date.now(), text: planReply(result), leaveBy: leaveByOf(result), place: result.cards[0]?.name, autoplay: true });
       }
       setShown(result);
       if (refining) say("Picks updated");
@@ -559,6 +574,7 @@ export function SoWhereApp() {
         setVoice({ id, text: state.reply, autoplay: true });
       }
     }
+    else if (status === "clarify" && state.clarify?.question) setVoice({ id: Date.now(), text: state.clarify.question, autoplay: true });
   }, [status]);
 
   const ask = useCallback(
