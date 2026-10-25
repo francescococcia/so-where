@@ -18,7 +18,7 @@ The fair place to meet in London: open, on time, checked, and nothing sent witho
 - **MongoDB**
 - Real World: a working live demo, a public repo with setup steps (README), a video on real inputs (live voice, a real photo, live TfL), and the models and data sources below
 
-## How we used Gemini
+## Models: how we used Gemini
 
 **gemini-4-argon** is the planner. It chooses venues from a pool that has already been checked, and explains each trade-off in one line. Deterministic checks then re-test its pick against opening hours, TfL journeys, rain and step-free access. Failures go back to Argon for one re-pick, and that loop is shown on screen. Argon also powers vision: it reads signs, landmarks and posters, gives vibe tags for what is visible only, and reports an honest high/medium/low certainty. **gemini-3.8-live** handles voice and **gemini-3.5-live-translate-preview** handles speech in any language. **gemini-3.5-flash-lite** translates text, and **gemini-3.8-flash-tts** speaks the plan card. **gemini-embedding-001** is the fallback for vibe vectors.
 
@@ -39,7 +39,7 @@ We use six Atlas features, all visible in the app's "How we got here" steps:
 3. **Hybrid `$rankFusion`** fuses vector and text results for vibe asks like "cosy quiet pub".
 4. **Automated Embedding** has Atlas embed venues and queries itself…
 5. …with **Voyage AI voyage-4**.
-6. **Atlas Stream Processing** (`tfl_line_status`) pulls TfL line status every 60 s into `line_status`. The planner pads journeys on disrupted lines.
+6. **Atlas Stream Processing** (`tfl_line_status`) pulls TfL line status every 60 s into `line_status`. The planner pads journeys on disrupted lines, and the first screen's "Right now in London" strip (`/api/now`) reads the same rows.
 
 An aggregation over anonymised `plan_runs` (no text, no coordinates) powers `/api/stats`.
 

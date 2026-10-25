@@ -20,7 +20,7 @@ Real inputs only: live voice, live TfL, a real photo. Say the lines in quotes; t
 
 ### 0:00–0:15 · The problem
 
-Show the home screen.
+Show the home screen: the "Right now in London" strip (live line status from the Atlas stream, weather, today's events, via `/api/now`), the example pins and the *Meet halfway* card. The headline types itself in once on load.
 
 > "This is So where. I'm at Old Street, my friend Sam is in Brixton, and it's Friday night. Picking 'somewhere in the middle' by eye ignores how the Tube actually runs, and search can't tell you what's open at seven."
 

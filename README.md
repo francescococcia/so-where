@@ -16,6 +16,7 @@ Live: **https://so-where.vercel.app** · try it with no setup: [`?demo=meet`](ht
 
 | Feature | |
 |---|---|
+| **Right now in London (first screen).** Before you type, `/api/now` shows live line status (from the Atlas Stream Processing rows, or TfL directly if they are stale), this hour's weather (Open-Meteo) and today's listed events, each with its source and as-of time. Example pins and a one-tap *Meet halfway* card show what it does | Encode-built |
 | **Fair middle.** Compares central hubs by real TfL journey time for both of you and picks the fairest split ("you 20 min, them 21") | Encode-built |
 | **Argon picks, then gets checked.** Gemini 4 Argon chooses from a pool that has already been checked. Its picks are re-checked against opening hours, TfL, weather and step-free access. If the top pick fails, it re-picks once. The verify row is shown on screen | Encode-built |
 | **Live voice, any language.** Talk to it in Italian (or any language). It plans and answers in your language | Encode-built |

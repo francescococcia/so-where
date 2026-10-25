@@ -62,7 +62,7 @@ export default function NowStrip({ onPick }: { onPick: (ask: string) => void }) 
       id: "events",
       Icon: CalendarDays,
       title: `${e.count} listed event${e.count === 1 ? "" : "s"} today`,
-      sub: `${e.source} · ${day(e.asOf)}`,
+      sub: `${e.source.replace(/ seed\b/g, " listings")} · as of ${day(e.asOf)}`, // "seed" is jargon on camera
       ask: "What's on near me today?",
     });
   }
