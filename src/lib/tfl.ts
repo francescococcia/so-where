@@ -53,7 +53,8 @@ export async function searchPlace(text: string): Promise<{ place: Place | null; 
  * national-rail, tram…), line is "Jubilee line" / "Bus 394", path is ≤ 80 points.
  */
 export type LegSegment = { mode: string; line?: string; from?: string; to?: string; minutes: number; path: LatLng[]; est?: boolean };
-export type Journey = { minutes: number; summary: string; lines: { id: string; name: string }[]; path: LatLng[]; segments: LegSegment[]; fetchedAt: string; ms: number };
+/** `leaveAt` / `arriveAt`: TfL's own start / arrival clock ("HH:MM", London) for the chosen journey, when given. */
+export type Journey = { minutes: number; summary: string; lines: { id: string; name: string }[]; path: LatLng[]; segments: LegSegment[]; fetchedAt: string; ms: number; leaveAt?: string; arriveAt?: string };
 
 type JpPoint = { commonName?: string; lat?: number; lon?: number };
 type JpLeg = {
@@ -170,7 +171,7 @@ export function trimSegmentsStart(segs: LegSegment[], m: number, dist: (a: LatLn
     return { ...(n === 0 ? rest : { ...rest, ...(from ? { from } : {}) }), path: i < 0 ? [] : s.path.slice(i) };
   });
 }
-type JpResponse = { journeys?: { duration: number; legs: JpLeg[] }[] };
+type JpResponse = { journeys?: { duration: number; startDateTime?: string; arrivalDateTime?: string; legs: JpLeg[] }[] };
 
 const ll = (p: LatLng) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
 
@@ -215,7 +216,8 @@ export async function journey(from: End, to: End, arriveBy: Date): Promise<Journ
   const summary = transit.length
     ? transit.map((l) => segText(raw[best.legs.indexOf(l)], l)).join(", then ") + (transit.length === 1 ? " (direct)" : "")
     : "Walk";
-  return { minutes: best.duration, summary, lines, path: best.legs.flatMap((l) => parsePath(l.path?.lineString)), segments, fetchedAt: r.fetchedAt, ms: r.ms };
+  const hhmm = (t?: string) => (t && /T(\d\d:\d\d)/.exec(t)?.[1]) || undefined;
+  return { minutes: best.duration, summary, lines, path: best.legs.flatMap((l) => parsePath(l.path?.lineString)), segments, fetchedAt: r.fetchedAt, ms: r.ms, ...(hhmm(best.startDateTime) ? { leaveAt: hhmm(best.startDateTime) } : {}), ...(hhmm(best.arrivalDateTime) ? { arriveAt: hhmm(best.arrivalDateTime) } : {}) };
 }
 
 export type HubScore = { hub: Hub; a: Journey; b: Journey; worst: number; gap: number };

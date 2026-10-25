@@ -3,6 +3,7 @@
 // is only ever kept as a ~500 m area, is never logged, and never appears in draftMessage.
 import { parsePlanAsk, SOLO_RE, type PlanAsk } from "@/lib/ask-local";
 import { LONDON_CENTER } from "@/lib/areas";
+import { isLeaveQuestion, leaveTimes, type LeaveBy } from "@/lib/leave-time";
 import { londonToday } from "@/lib/dates";
 import { seedEventsOn, type SeedEvent } from "@/lib/events";
 import { GAZETTEER_AS_OF, GAZETTEER_SOURCE, matchPlace, normPlace } from "@/lib/gazetteer";
@@ -28,7 +29,7 @@ export type PlanRequest = { query: string; you?: LatLng; when?: string; previous
 export type PlanFocus = { id?: string; name?: string; lat: number; lng: number };
 /** Result plus the follow-up chat fields (plan-types.ts stays unchanged): `reply` is one plain sentence about
  * what a refinement changed; `query` (already on PlanResult) is the accumulated ask to send back next turn. */
-export type PlanResultRefined = PlanResultWithAgent & { reply?: string };
+export type PlanResultRefined = PlanResultWithAgent & { reply?: string; /** "When do I leave?" follow-ups only (see leave-time.ts). */ leaveBy?: LeaveBy };
 export type StepSink = (step: AgentStep) => void;
 
 const MAX_CARDS = 3;
@@ -344,6 +345,16 @@ function cardOpen(c: PlanCard): { known: boolean; open: boolean | null; until: s
 }
 
 export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? CLOCK() : new Date()): Promise<PlanResultRefined> {
+  if (req.refine && req.previous && isLeaveQuestion(req.refine)) {
+    // "What time do I need to leave?": same plan (replanned from the base ask if the UI didn't echo it), plus leave times.
+    const base: PlanResultRefined = req.previous.result?.cards?.length ? req.previous.result : await runPlanCore({ query: req.previous.query, you: req.you, when: req.when }, emit, now);
+    const card = base.cards.length ? (req.focus && base.cards.find((c) => c.id === req.focus!.id || c.name === req.focus!.name)) || base.cards[0] : null;
+    const t0 = Date.now();
+    const a = card ? await leaveTimes(base, card, req.refine, now, {}, req.you) : { reply: base.clarify?.question ?? "There's no place on the plan yet, so ask for one first and I'll work out when to leave.", detail: "No card" };
+    const step: AgentStep = { id: "refine", label: "Working out when to leave", status: "done", detail: `${a.detail} · plan unchanged`, source: "TfL", ms: Date.now() - t0 };
+    emit?.(step);
+    return { ...base, query: joinRefine(req.previous.query, req.refine), steps: [...(base.steps ?? []), step], reply: a.reply, ...("leaveBy" in a && a.leaveBy ? { leaveBy: a.leaveBy } : {}) };
+  }
   const prev = req.previous?.result;
   const askOpen = !!prev?.cards?.length && openQuestionOnly(req, londonToday(now));
   if (askOpen && prev) {
@@ -365,6 +376,13 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? C
   }
   const r: PlanResultRefined = await runPlanCore(req, emit, now);
   const rr = REFINE_RUNS.get(r.steps);
+  const goRefine = !rr && req.refine ? parseDestination(req.refine) : null;
+  if (goRefine && !r.clarify) {
+    // "Meet at <place>" / "get me to <place>" as a follow-up: the plan now goes there (splitRefine made it the base).
+    const c = r.cards[0];
+    const mins = (w: "you" | "them") => c?.legs.find((l) => l.who === w)?.minutes;
+    r.reply = c ? `Switched the plan to ${c.name}${mins("you") !== undefined ? `: ${mins("you")} min for you${mins("them") !== undefined ? `, ${mins("them")} for them` : ""}` : ""}.` : `Couldn't find ${goRefine.venue}, so try its full name or street.`;
+  }
   if (!rr) return r;
   const p = londonParts(new Date(r.when));
   const top = r.cards[0];
@@ -424,7 +442,7 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
     // The event's own day(s): past → plan the trip for now and say it's over; multi-day and on → today.
     const ev = eventDates(dest.rest || "", today, londonClock(now.toISOString()), dest.endTime);
     if (ev) {
-      dest.dates = ev;
+      dest.dates = { ...ev, startTime: ask.time };
       if (ev.status === "past") Object.assign(ask, { date: null, time: null });
       else if (ev.status === "ongoing") Object.assign(ask, { date: today, time: ask.time && ask.time > londonClock(now.toISOString()) ? ask.time : null });
       else ask.date = ev.start;
@@ -905,7 +923,8 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
   const h = tags.opening_hours ? closingSoon(hoursAt(tags, when, found.location)) : null;
   const facts: Fact[] = [];
   if (isEvent) {
-    facts.push(fact("When", ev?.end || ev?.status === "past" ? `${span}${dest.endTime ? `, until ${dest.endTime}` : ""}${ev.status === "past" ? " (over)" : ""}` : `${londonLabel(when)}${dest.endTime ? `–${dest.endTime}` : ""}`, "likely", "Your ask"));
+    // The event's own times ("Fri 23 Oct 12:00 – Sun 25 Oct 16:30"), never the trip's now-slot as its start.
+    facts.push(fact("When", ev?.end ? `${shortDay(ev.start)}${ev.startTime ? ` ${ev.startTime}` : ""} – ${shortDay(ev.end)}${dest.endTime ? ` ${dest.endTime}` : ""}${ev.status === "past" ? " (over)" : ev.status === "ongoing" ? " (on now)" : ""}` : ev?.status === "past" ? `${span}${ev.startTime ? ` ${ev.startTime}` : ""}${dest.endTime ? `${ev.startTime ? "–" : ", until "}${dest.endTime}` : ""} (over)` : `${londonLabel(when)}${dest.endTime && (ev?.startTime || !ev) ? `–${dest.endTime}` : ""}`, "likely", "Your ask"));
     unknowns.push(`${dest.title}: date, time and entry are as given (e.g. on the poster), not checked against a listing.`);
   } else if (h) facts.push(fact(`Open ${londonDayShort(when)}`, h.value, h.verdict, found.source, found.asOf));
   else unknowns.push(`${found.name}: opening hours not listed.`);

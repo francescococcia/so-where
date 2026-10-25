@@ -24,9 +24,11 @@ export type Destination = {
   dates?: EventDates;
 };
 
-export type EventDates = { start: string; end: string | null; status: "upcoming" | "ongoing" | "past" };
+export type EventDates = { start: string; end: string | null; status: "upcoming" | "ongoing" | "past"; /** The event's own start clock from the ask (planner sets it). */ startTime?: string | null };
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const DAY_MONTH_RE = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+(20\d{2}))?\b/gi;
+const MONTH_DAY_RE = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?![\d:.])(?:,?\s+(20\d{2}))?\b/gi;
+const DAY_RANGE_RE = /\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:[–—-]|to|until|till)\s*(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/gi;
 const iso = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 const dayBefore = (a: string, days: number) => new Date(Date.parse(`${a}T12:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
 
@@ -36,14 +38,21 @@ const dayBefore = (a: string, days: number) => new Date(Date.parse(`${a}T12:00:0
 export function eventDates(text: string, today: string, nowClock?: string, endTime?: string | null): EventDates | null {
   const ty = Number(today.slice(0, 4));
   const found: string[] = [];
-  for (const m of text.matchAll(DAY_MONTH_RE)) {
-    const d = Number(m[1]);
-    const mo = MONTHS.indexOf(m[2].toLowerCase());
+  // Day-first ("23 Oct"), month-first as on Luma ("Friday, October 23, 12:00 PM – Oct 25, 4:30 PM") and day ranges ("23–25 Oct").
+  const hits: { at: number; d: number; mon: string; y?: string }[] = [];
+  for (const m of text.matchAll(DAY_MONTH_RE)) hits.push({ at: m.index ?? 0, d: Number(m[1]), mon: m[2], y: m[3] });
+  for (const m of text.matchAll(MONTH_DAY_RE)) hits.push({ at: m.index ?? 0, d: Number(m[2]), mon: m[1], y: m[3] });
+  for (const m of text.matchAll(DAY_RANGE_RE)) hits.push({ at: m.index ?? 0, d: Number(m[1]), mon: m[3] }, { at: (m.index ?? 0) + 1, d: Number(m[2]), mon: m[3] });
+  hits.sort((a, b) => a.at - b.at);
+  for (const m of hits) {
+    const d = m.d;
+    const mo = MONTHS.indexOf(m.mon.slice(0, 3).toLowerCase());
     if (d < 1 || d > 31 || mo < 0) continue;
-    let y = m[3] ? Number(m[3]) : ty;
-    if (!m[3] && iso(y, mo, d) < dayBefore(today, 60)) y += 1;
+    let y = m.y ? Number(m.y) : ty;
+    if (!m.y && iso(y, mo, d) < dayBefore(today, 60)) y += 1;
     let v = iso(y, mo, d);
-    if (found[0] && v < found[0] && !m[3]) v = iso(y + 1, mo, d); // 30 Dec – 2 Jan
+    if (found[0] && v < found[0] && !m.y) v = iso(y + 1, mo, d); // 30 Dec – 2 Jan
+    if (found[0] === v) continue; // "23 Oct" said twice
     found.push(v);
     if (found.length === 2) break;
   }
@@ -62,7 +71,7 @@ export function shortDay(isoDay: string): string {
   return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getUTCDay()]} ${d.getUTCDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()]}`;
 }
 
-const GO_TO_RE = /^\s*(?:please\s+|can you\s+|could you\s+)*(?:(?:get|take|bring|route|send|direct)\s+(me|us|me and \w+|\w+ and me)\s+to|how (?:do|can|would) (i|we) get to|directions to|meet halfway for|meet (?:up )?halfway (?:at|for)|both get to)\s+/i;
+const GO_TO_RE = /^\s*(?:please\s+|can you\s+|could you\s+)*(?:(?:get|take|bring|route|send|direct)\s+(me|us|me and \w+|\w+ and me)\s+to|how (?:do|can|would) (i|we) get to|directions to|meet halfway for|meet (?:up )?halfway (?:at|for)|both get to|(?:let'?s\s+)?meet (?:up )?at)\s+/i;
 // The destination clause ends at the day / time / origin / sentence end.
 const DEST_END_RE = /\s+(?:on\s+(?:mon|tue|wed|thu|fri|sat|sun)\w*\b|on\s+\d{1,2}(?:st|nd|rd|th)?\s+[a-z]{3}|(?:at|from|by|for)\s+\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?\b|from\s+(?=[A-Z])|today\b|tonight\b|tomorrow\b|this\s+(?:mon|tue|wed|thu|fri|sat|sun|week|evening|afternoon|morning)\w*|next\s+\w+day\b|\(|[;.!?](?:\s|$))|[;!?]\s*$|\.$/i;
 // Not a named place: a category / search ("a pub near Angel", "coffee", "the nearest bar") stays with the normal planner.
@@ -90,9 +99,11 @@ export function parseDestination(raw: string): Destination | null {
   const titleRaw = at > 0 ? head.slice(0, at).trim() : null;
   const title = titleRaw && !ACTIVITY_RE.test(titleRaw.replace(/^(?:a|an|some)\s+/i, "")) ? titleRaw : null;
   const venue = (at > 0 ? head.slice(at + 4) : head).trim().replace(/^the\s+(?=the\s)/i, "");
-  if (venue.length < 2 || /^(me|home|work|here|there|you)$/i.test(venue) || GENERIC_RE.test(venue) || ACTIVITY_RE.test(venue)) return null;
+  if (venue.length < 2 || /^\d/.test(venue) || /^(me|home|work|here|there|you|mine|yours|my place|your place|the station)$/i.test(venue) || GENERIC_RE.test(venue) || ACTIVITY_RE.test(venue)) return null;
   const rest = `${q.slice(0, m.index)} ${peopleTail ? `${tailText}. ` : ""}${end ? after.slice(end.index) : ""}`.replace(/^\s*[.;,]\s*/, "").trim();
-  const endT = /\b\d{1,2}[:.]\d{2}\s*(?:–|-|to|until|till)\s*(\d{1,2})[:.](\d{2})\b/i.exec(after);
+  // "12:00-16:30", or Luma's "12:00 PM – Oct 25, 4:30 PM" (end on a later day, 12-hour).
+  const lumaT = /\b\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)\s*[–—-]\s*(?:[a-z]{3,9}\.?\s+\d{1,2},?\s+)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b/i.exec(after);
+  const endT = /\b\d{1,2}[:.]\d{2}\s*(?:–|-|to|until|till)\s*(\d{1,2})[:.](\d{2})\b/i.exec(after) ?? (lumaT ? (Object.assign([lumaT[0], String((Number(lumaT[1]) % 12) + (/pm/i.test(lumaT[3]) ? 12 : 0)), lumaT[2] ?? "00"], { index: lumaT.index }) as unknown as RegExpExecArray) : null);
   const who = (m[1] ?? m[2] ?? "").toLowerCase();
   const price = /£\s?\d+(?:\.\d{2})?(?:\s*[-–]\s*£?\s?\d+(?:\.\d{2})?)?/.exec(after);
   return {
@@ -100,7 +111,7 @@ export function parseDestination(raw: string): Destination | null {
     venue,
     address,
     endTime: endT ? `${endT[1].padStart(2, "0")}:${endT[2]}` : null,
-    withThem: /halfway|both/i.test(m[0]) || who === "us" || who.includes(" and "),
+    withThem: /halfway|both/i.test(m[0]) || who === "us" || who.includes(" and ") || (/meet/i.test(m[0]) && /\b(?:she|he|they)(?:'s| is| are|'re)\b/i.test(rest)),
     rest,
     free: /\bfree\b/i.test(after),
     signUp: /\bno (?:sign-?up|registration|rsvp|tickets? needed)\b/i.test(after) ? false : /\b(?:sign-?up|registration|rsvp|tickets?)\b(?:[^.;)]*\b(?:needed|required|essential))?/i.test(after) ? true : null,
@@ -111,7 +122,7 @@ export function parseDestination(raw: string): Destination | null {
 export type FoundPlace = { name: string; location: LatLng; address: string | null; tags: Record<string, string>; id: string | null; source: string; asOf: string; how: string; verdict: "confirmed" | "likely"; /** false: the venue itself wasn't found, only its street / area. */ pinned?: boolean };
 
 const UA = "SoWhere/0.1 (London meet-up planner; place lookup)";
-const nameScore = (a: string, b: string) => {
+export const nameScore = (a: string, b: string) => {
   const n = (t: string) => t.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ").replace(/['’`.]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/^the /, "");
   const x = n(a);
   const y = n(b);

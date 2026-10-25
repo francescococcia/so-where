@@ -20,6 +20,8 @@ export type PosterResponse = {
   place?: { name: string; lat: number; lng: number; address: string | null };
   suggestedQuery: string | null;
   message?: string;
+  /** Vision model that read the photo (VISION_MODEL, default gemini-4-argon; gemini-3-flash-preview if that's unavailable). */
+  model: string;
 };
 
 const err = (status: number, error: string) => Response.json({ error }, { status, headers: { "cache-control": "no-store" } });
@@ -70,7 +72,8 @@ export async function POST(req: Request) {
   if (!process.env.GEMINI_API_KEY) return err(503, "Poster reading isn't switched on here yet. Type the event and venue instead.");
   try {
     const { img, context } = await readBody(req);
-    const extracted = await extractPoster(img, { timeoutMs: Math.min(11_500, BUDGET_MS - (Date.now() - t0) - 2_000) });
+    let model = "";
+    const extracted = await extractPoster(img, { timeoutMs: Math.min(11_500, BUDGET_MS - (Date.now() - t0) - 2_000), onModel: (m) => (model = m) });
     const venue = extracted.venueName ?? extracted.address?.split(",")[0]?.trim() ?? null;
     const found = venue ? await within(resolveDestination({ venue, address: extracted.address }), BUDGET_MS - (Date.now() - t0) - 300) : null;
     const suggestedQuery = buildSuggestedQuery(extracted, context);
@@ -83,6 +86,7 @@ export async function POST(req: Request) {
         : extracted.confidence < 0.5
           ? { message: "Not fully sure I read that right: check the details before planning." }
           : {}),
+      model,
     };
     return Response.json(out, { headers: { "cache-control": "no-store" } });
   } catch (e) {

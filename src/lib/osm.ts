@@ -100,6 +100,10 @@ export type HoursCheck = {
   closesAt?: string;
   /** Minutes from `at` to closing (open only; absent when open round the clock). */
   closesInMin?: number;
+  /** London "HH:MM" of the next opening within 7 days (closed only). */
+  opensAt?: string;
+  /** Minutes from `at` to that opening (closed only). */
+  opensInMin?: number;
 };
 
 const fmt = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -123,7 +127,9 @@ export function hoursAt(tags: Record<string, string>, at: Date, location: LatLng
     if (!open) {
       const dayStart = new Date(local.getFullYear(), local.getMonth(), local.getDate());
       const ranges = oh.getOpenIntervals(dayStart, new Date(dayStart.getTime() + 86_400_000)).map(([a, b]) => `${fmt(a)}–${fmt(b)}`);
-      return { state: "closed", value: `Closed at ${fmt(local)} (${ranges.length ? ranges.join(", ") : "closed that day"})${checked}`, verdict, checkDate };
+      const next = oh.getNextChange(local, new Date(local.getTime() + 7 * 86_400_000));
+      const opens = next && oh.getState(new Date(next.getTime() + 1000)) ? { opensAt: fmt(next), opensInMin: Math.round((next.getTime() - local.getTime()) / 60_000) } : {};
+      return { state: "closed", value: `Closed at ${fmt(local)} (${ranges.length ? ranges.join(", ") : "closed that day"})${checked}`, verdict, checkDate, ...opens };
     }
     // The open stretch containing `at`, merged across midnight (getOpenIntervals splits nothing but
     // may return back-to-back intervals, e.g. "17:00-24:00" + "00:00-03:00").

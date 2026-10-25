@@ -5,6 +5,8 @@
 // Soft wishes become ranking preferences (cheaper, quieter, terrace, indoor, closer to me / them, something different).
 import { parsePlanAsk, type PlanAsk } from "@/lib/ask-local";
 import { seatingOf, weatherRank } from "@/lib/venue-weather";
+import { isLeaveQuestion } from "@/lib/leave-time";
+import { parseDestination } from "@/lib/destination";
 
 export type Pref = "cheaper" | "quieter" | "terrace" | "indoor" | "closer_you" | "closer_them" | "different";
 export type Refinement = {
@@ -62,6 +64,21 @@ export function joinRefine(prevQuery: string, refinement: string): string {
   return r ? `${prevQuery.trim().replace(/[.\s]+$/, "")}; refine: ${r}` : prevQuery;
 }
 
+// When the plan switches to "meet at <place>", the old ask's day/time and who-is-where still hold unless the new one says otherwise.
+const DAY_RE = /\b(?:today|tonight|tomorrow(?: (?:morning|afternoon|evening|night))?|this (?:morning|afternoon|evening)|(?:on |next )?(?:mon|tues|wednes|thurs|fri|satur|sun)day(?: (?:morning|afternoon|evening|night))?)\b/i;
+const TIME_RE = /\b(?:at|from|around|for) \d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?\b|\b\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)\b/i;
+const WHO_RE = /\b(?:i'?m|i am|(?:she|he|they)(?:'s|'re| is| are)|[A-Z][a-z]+(?:'s| is))\s+(?:at|in|near|by|around|from)\s+[^,;.]+/gi;
+function carryOver(oldBase: string, go: string): string[] {
+  const out: string[] = [];
+  const day = DAY_RE.exec(oldBase)?.[0];
+  if (day && !DAY_RE.test(go)) out.push(day);
+  const time = TIME_RE.exec(oldBase)?.[0];
+  if (time && !TIME_RE.test(go)) out.push(/^\d/.test(time) ? `at ${time}` : time);
+  const who = oldBase.match(WHO_RE) ?? [];
+  if (who.length && !/\b(?:i'?m|i am|she|he|they)\b/i.test(go)) out.push(`, ${who.join(", ")}`);
+  return out.length ? [out.join(" ").replace(/\s+,/g, ",")] : [];
+}
+
 /** Split an accumulated query into base + refinements. Also reads the UI's older "X. (refine: a; b)" form. */
 export function splitRefine(text: string): { base: string; refinements: string[] } {
   let t = text;
@@ -75,7 +92,12 @@ export function splitRefine(text: string): { base: string; refinements: string[]
   // Clarify answers ("; them: X") appended after a refinement belong to the base.
   const slots: string[] = [];
   const refinements = rest.map((r) => r.replace(SLOT_TOKEN, (m) => (slots.push(m.trim()), "")).trim()).filter(Boolean);
-  return { base: [base.trim(), ...slots].join(" "), refinements: [...refinements, ...extra] };
+  // "When do I leave?" questions change nothing in the plan (answered in runPlan), so they're not refinements.
+  const all = [...refinements, ...extra].filter((r) => !isLeaveQuestion(r));
+  // "Meet at <place>" / "get me to <place>" as a follow-up: that place is the new base; earlier refinements were for the old plan.
+  const go = all.map((r) => !!parseDestination(r)).lastIndexOf(true);
+  if (go >= 0) return { base: [all[go], ...carryOver(base, all[go]), ...slots].join(" "), refinements: all.slice(go + 1) };
+  return { base: [base.trim(), ...slots].join(" "), refinements: all };
 }
 
 const NUM: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, half: 0.5 };

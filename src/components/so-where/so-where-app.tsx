@@ -20,6 +20,11 @@ import { VerdictChip } from "./verdict-chip";
 import { fmtAsOf, fmtWhen, gmapsDirections } from "./format";
 import { usePlan } from "./use-plan";
 import { useSpeech } from "./use-speech";
+import { LiveVoiceButton } from "./live-voice";
+import { useLiveTools } from "./live-tools";
+
+/** Live voice (Gemini Live). Off unless NEXT_PUBLIC_LIVE_VOICE=1; the Web Speech mic stays the fallback. */
+const LIVE_VOICE = process.env.NEXT_PUBLIC_LIVE_VOICE !== "0";
 import { MapChips } from "./map-chips";
 import { friendlyDraft } from "./draft";
 import { CountUp } from "./motion-bits";
@@ -677,6 +682,7 @@ export function SoWhereApp() {
   const finished = status === "result" || status === "clarify";
   const mapResult = placeSnap?.result ?? result ?? (refining ? shown : null);
   const panelOpen = !!(placeSnap || detail);
+  const liveTools = useLiveTools({ state, view: view ?? result ?? null, selectedId: detailId ?? selectedId, ask: askOrAnswer, refine, openDetail, openSend: () => { setSendOpen(true); say("Draft ready · nothing is sent"); } });
 
   return (
     <MotionConfig reducedMotion="user">
@@ -781,7 +787,7 @@ export function SoWhereApp() {
                   className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal transition-[height] duration-200 placeholder:text-ink-3 focus:outline-none"
                 />
                 <CameraButton open={snap === "ask"} onClick={() => setSnap((v) => (v === "ask" ? null : "ask"))} />
-                {speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : null}
+                {LIVE_VOICE ? <LiveVoiceButton onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("ask") : undefined} fallbackListening={speech.listening && voiceTarget.current === "ask"} /> : speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : null}
                 <motion.button
                   type="submit"
                   disabled={!query.trim() || status === "running"}
@@ -927,7 +933,7 @@ export function SoWhereApp() {
                     className="min-w-0 flex-1 bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal placeholder:text-ink-3 focus:outline-none"
                   />
                   <CameraButton size="sm" open={snap === "chat"} onClick={() => setSnap((v) => (v === "chat" ? null : "chat"))} />
-                  {speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : null}
+                  {LIVE_VOICE ? <LiveVoiceButton size="sm" onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("chat") : undefined} fallbackListening={speech.listening && voiceTarget.current === "chat"} /> : speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : null}
                   <motion.button
                     type="submit"
                     disabled={!chat.trim() || status === "running"}

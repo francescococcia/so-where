@@ -12,9 +12,11 @@ export type Blurb = {
   bestFor?: string;
   /** Where the description comes from (the pill): Wikipedia / the venue's website / OpenStreetMap. */
   source: { name: string; url: string };
+  /** True when the text uses what the user's photo shows (place-snap); source then names "Your photo". */
+  fromPhoto?: boolean;
 };
 export type BlurbIntent = "date" | "coffee" | "friends" | "solo" | "event";
-export type BlurbInput = { id: string; name: string; kind: string; tags: Record<string, string>; location: LatLng; area?: string | null; closesAt?: string | null; url?: string };
+export type BlurbInput = { id: string; name: string; kind: string; tags: Record<string, string>; location: LatLng; area?: string | null; closesAt?: string | null; url?: string; photo?: { tags: string[]; line: string } };
 type Src = { name: string; url: string };
 export type BlurbFacts = { facts: string[]; source: Src; rich: boolean };
 export type BlurbLlm = (prompt: string, signal: AbortSignal) => Promise<{ text?: unknown; bestFor?: unknown } | null>;
@@ -25,7 +27,7 @@ const UA = "SoWhere/0.1 (London meet-up planner; venue descriptions)";
 // gemini-3-flash-preview (low thinking) took 1.7–7 s in tests. BLURB_MODEL overrides; a gemini-3 model gets thinkingLevel "low".
 const MODEL = process.env.BLURB_MODEL || "gemini-2.5-flash";
 const THINKING = /gemini-3/.test(MODEL) ? { thinkingLevel: "low" } : { thinkingBudget: 0 };
-const BUDGET_MS = 2500;
+const BUDGET_MS = 3200; // blurbs arrive as a late NDJSON line, so a little more room for the rewrite
 const CACHE = new Map<string, { at: number; v: Blurb }>();
 const TTL = 6 * 3600_000;
 
@@ -54,6 +56,29 @@ async function getJson<T>(f: typeof fetch, url: string, ms: number): Promise<T |
   }
 }
 
+const metres = (a: LatLng, b: LatLng) => {
+  const k = Math.PI / 180;
+  const dx = (b.lng - a.lng) * k * Math.cos(((a.lat + b.lat) / 2) * k);
+  const dy = (b.lat - a.lat) * k;
+  return Math.sqrt(dx * dx + dy * dy) * 6_371_000;
+};
+const FOOD_DRINK = /\b(?:pub|bar|inn|tavern|caf[eé]|coffee|restaurant|bistro|brasserie|eatery|bakery|brewery|tap ?room|wine|cocktail|gastropub|public house|hotel|food|dining|tea ?room|club|venue|diner|kitchen)\b/i;
+const OTHER_THING = /\b(?:born|was an? (?:english|british|american|scottish|irish|welsh)\b|actor|singer|footballer|politician|band|album|song|single|film|novel|book|television|tv series|village|parish|ward|borough|district|river|station|railway|church|cathedral|school|college|university|hospital|ship|company|manufacturer|football club|street in|road in|square in)\b/i;
+/** Wikipedia/Wikidata text is about this venue: similar name, and (for a pub/café/restaurant…) a food-or-drink place, not a person, street or station. */
+export function wikiFits(x: Pick<BlurbInput, "name" | "kind">, title: string, about: string): boolean {
+  if (title && !sameName(x.name, title) && !looseName(x.name, title)) return false;
+  if (FOOD_DRINK.test(x.kind || "")) return FOOD_DRINK.test(about) && !(OTHER_THING.test(about) && !/\b(?:pub|public house|bar|inn|restaurant|caf[eé])\b/i.test(about.split(/[.;]/)[0]));
+  return !/\b(?:born|actor|singer|footballer|politician|album|song)\b/i.test(about);
+}
+const looseName = (a: string, b: string) => {
+  const stop = new Set(["the", "and", "london", "bar", "pub", "cafe", "restaurant", "inn", "s"]);
+  const t = (v: string) => new Set(norm(v.replace(/\s*\([^)]*\)\s*$/, "")).split(" ").filter((w) => w.length > 2 && !stop.has(w)));
+  const x = t(a);
+  const y = t(b);
+  const both = [...x].filter((w) => y.has(w)).length;
+  return both > 0 && both >= Math.min(x.size, y.size);
+};
+
 type Wiki = { title: string; extract: string; description: string; url: string };
 async function wikipedia(f: typeof fetch, x: BlurbInput, left: () => number): Promise<Wiki | null> {
   let title: string | null = null;
@@ -69,11 +94,14 @@ async function wikipedia(f: typeof fetch, x: BlurbInput, left: () => number): Pr
   if (!title) {
     // No tag: an English Wikipedia article within 150 m whose title is this venue's name.
     const j = await getJson<{ query?: { geosearch?: { title: string; dist: number }[] } }>(f, `https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${x.location.lat}|${x.location.lng}&gsradius=150&gslimit=15&format=json&origin=*`, Math.min(1000, left()));
-    title = j?.query?.geosearch?.find((g) => sameName(x.name, g.title))?.title ?? null;
+    title = j?.query?.geosearch?.find((g) => g.dist <= 150 && sameName(x.name, g.title))?.title ?? null;
   }
-  if (!title) return description ? { title: "", extract: "", description, url: `https://www.wikidata.org/wiki/${x.tags.wikidata}` } : null;
-  const s = await getJson<{ extract?: string; description?: string; content_urls?: { desktop?: { page?: string } }; type?: string }>(f, `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`, Math.min(1200, left()));
-  if (!s || s.type === "disambiguation") return description ? { title, extract: "", description, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}` } : null;
+  if (!title) return description && wikiFits(x, "", description) ? { title: "", extract: "", description, url: `https://www.wikidata.org/wiki/${x.tags.wikidata}` } : null;
+  const s = await getJson<{ extract?: string; description?: string; content_urls?: { desktop?: { page?: string } }; type?: string; coordinates?: { lat: number; lon: number } }>(f, `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`, Math.min(1200, left()));
+  if (!s || s.type === "disambiguation") return description && wikiFits(x, title, description) ? { title, extract: "", description, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}` } : null;
+  // Same entity only: the article's name matches, it's within 150 m (when it has coordinates) and it's the same kind of place.
+  if (s.coordinates && metres(x.location, { lat: s.coordinates.lat, lng: s.coordinates.lon }) > 150) return null;
+  if (!wikiFits(x, title, `${clean(s.description, 160)} ${firstSentences(clean(s.extract, 600), 1, 300)} ${description}`)) return null;
   return { title, extract: firstSentences(clean(s.extract, 900), 3, 500), description: description || clean(s.description, 160), url: s.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}` };
 }
 
@@ -130,7 +158,7 @@ const hostOf = (u: string) => {
 export async function gatherFacts(x: BlurbInput, deps: BlurbDeps = {}): Promise<BlurbFacts> {
   const f = deps.fetch ?? fetch;
   const clock = deps.now ?? Date.now;
-  const end = clock() + Math.round((deps.budgetMs ?? BUDGET_MS) * 0.56); // leave ≥1.1 s for the rewrite
+  const end = clock() + Math.round((deps.budgetMs ?? BUDGET_MS) * 0.5); // leave ≥1.5 s for the rewrite
   const left = () => end - clock();
   const site = x.tags.website ?? x.tags["contact:website"] ?? (x.url && !/openstreetmap\.org/.test(x.url) ? x.url : undefined);
   const [wiki, meta] = await Promise.all([wikipedia(f, x, left), metaDescription(f, site, left)]);
@@ -139,6 +167,8 @@ export async function gatherFacts(x: BlurbInput, deps: BlurbDeps = {}): Promise<
   if (wiki?.description) facts.push(`Wikidata: ${wiki.description}`);
   if (meta) facts.push(`Its website says: ${meta.text}`);
   facts.push(...osmFacts(x.tags));
+  if (x.photo?.line) facts.push(`The user's photo shows: ${x.photo.line}`);
+  if (x.photo?.tags.length) facts.push(`Visible in the user's photo: ${x.photo.tags.join(", ")}`);
   const rich = facts.length > 0;
   const source: Src = wiki?.extract || wiki?.description ? { name: wiki.extract ? "Wikipedia" : "Wikidata", url: wiki.url } : meta ? { name: hostOf(meta.url), url: meta.url } : osmLink(x.id, x.tags, site);
   return { facts, source, rich };
@@ -161,9 +191,13 @@ export function blurbPrompt(x: BlurbInput, facts: string[], intent: BlurbIntent)
     "Facts (the ONLY information you may use):",
     ...facts.map((f) => `- ${f}`),
     "",
-    "Rules: 1–2 warm, plain sentences, at most 45 words, no emoji, no quotes, no brackets. Use ONLY the facts above:",
+    "Rules: 1–2 warm, plain sentences, at most 200 characters, no emoji, no quotes, no brackets. Use ONLY the facts above:",
+    "Lead with its character and what it's good for, e.g. \"Classic Victorian corner pub on a pretty terraced street, with Thai food in the back.\"",
+    "Never give the address, street number or postcode, never write \"is a pub located at\", and don't open with the venue's name.",
+    "Write in the third person (turn the website's \"we\"/\"our\" into a description); skip walking times, awards and marketing claims.",
     "do not add atmosphere, decor, food, drinks, prices, history, dates, numbers or anything else that isn't stated.",
     "If a fact is uncertain, leave it out. Don't mention Wikipedia, OSM or the website.",
+    ...(x.photo ? ["Facts from the user's photo describe only what it shows: you may use them, but never as ratings, reviews or claims about quality."] : []),
     "Don't say who should go (no 'on your own', 'for solo').",
     `bestFor: a short tag starting "Best for" naming the kind of outing (max 6 words, e.g. "Best for a cosy date", "Best for a sunny pint", "Best for catching up"), suited to ${INTENT_PHRASE[intent]} and supported by the facts, else null.`,
   ].join("\n");
@@ -196,9 +230,15 @@ export const geminiBlurbLlm: BlurbLlm = async (prompt, signal) => {
   }
 };
 
-/** Reject a rewrite that brings in numbers / years that aren't in the facts, brackets, or runs long. */
+const POSTCODE = /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/;
+const ADDRESSY = /\blocated (?:at|on)\b|\b\d+[a-z]?,?\s+(?:[A-Z][\w']+\s+){1,3}(?:Street|St|Road|Rd|Lane|Square|Place|Row|Walk|Terrace|Hill|Way|Gardens|Yard|Court|Parade|Mews|Market|Broadway|Bridge Road)\b/;
+/** Address, postcode, "located at", first-person website copy: never in a blurb. */
+export const addressy = (t: string) => POSTCODE.test(t) || ADDRESSY.test(t);
+const FIRST_PERSON = /\b(?:we|we're|we've|our|us)\b/i;
+/** Reject a rewrite that brings in numbers / years that aren't in the facts, brackets, an address, "we/our", or runs long.
+ *  Street numbers and postcodes in the facts don't count against it as long as the text leaves them out. */
 export function acceptRewrite(text: string, facts: string[]): boolean {
-  if (!text || text.length < 12 || text.length > 360 || /[[\]{}<>]/.test(text)) return false;
+  if (!text || text.length < 12 || text.length > 230 || /[[\]{}<>]/.test(text) || addressy(text) || FIRST_PERSON.test(text)) return false;
   const pool = facts.join(" ");
   return (text.match(/\d+/g) ?? []).every((n) => pool.includes(n));
 }
@@ -210,15 +250,48 @@ const tidyBestFor = (v: unknown): string | undefined => {
   return b.split(" ").length <= 7 ? b : undefined;
 };
 
+/** No rewrite: a sentence from Wikipedia / Wikidata / OSM that isn't just name + address (website copy only when it isn't "we/our"),
+ *  else the modest template plus a couple of OSM facts. */
+export function fallbackBlurb(x: BlurbInput, g: BlurbFacts): Blurb {
+  const name = norm(x.name);
+  for (const f of g.facts) {
+    const m = /^(Wikipedia|Wikidata|OSM description|Its website says): (.*)$/.exec(f);
+    if (!m) continue;
+    const sentences = m[2].match(/[^.!?]+[.!?]+(?=\s|$)/g) ?? [m[2]];
+    const keep = sentences.map((v) => v.trim()).filter((v) => v.length > 12 && !addressy(v) && !FIRST_PERSON.test(v) && !/^\S.{0,60}\b(?:is|was) an? (?:pub|bar|caf[eé]|restaurant|public house)\.?$/i.test(v) && norm(v) !== name);
+    const text = keep.reduce((a, v) => ((a ? `${a} ${v}` : v).length <= 200 ? (a ? `${a} ${v}` : v) : a), "");
+    if (text) return { text: (text.charAt(0).toUpperCase() + text.slice(1)).replace(/([^.!?])$/, "$1."), source: g.source };
+  }
+  const t = templateBlurb(x, g.source);
+  const extra = g.facts.filter((f) => !/^(Wikipedia|Wikidata|OSM description|Its website says|Run by|Open since)/.test(f)).slice(0, 2).map((f) => f.replace(/^Cuisine: (.*)$/, "$1 food").replace(/^(?:Has|Serves) /, "").replace(/^Step-free \/ wheelchair accessible$/, "step-free")).map((f) => f.charAt(0).toLowerCase() + f.slice(1));
+  return extra.length ? { ...t, text: `${t.text.replace(/\.$/, "")}, with ${extra.join(" and ")}.`.slice(0, 220) } : t;
+}
+
+const PHOTO_SRC: Src = { name: "Your photo", url: "" };
+const RATED = /\b(?:rated|ratings?|reviews?|stars?|michelin|award|top[- ]rated|must[- ]visit)\b|★|⭐|\d\s*\/\s*(?:5|10)\b/i;
+/** Did the text draw on the photo? (a visible tag, or two content words from the photo's line). */
+export function usesPhoto(text: string, photo: NonNullable<BlurbInput["photo"]>): boolean {
+  const t = text.toLowerCase();
+  if (photo.tags.some((g) => t.includes(g))) return true;
+  const words = photo.line.toLowerCase().match(/[a-z]{5,}/g) ?? [];
+  return words.filter((w) => t.includes(w)).length >= 2;
+}
+/** Label a blurb that uses the photo: source "Your photo" alone, or "<public source> + your photo". */
+function photoLabel(b: Blurb, publicFacts: boolean): Blurb {
+  return { ...b, fromPhoto: true, source: publicFacts ? { name: `${b.source.name} + your photo`, url: b.source.url } : PHOTO_SRC };
+}
+
 /** One card's blurb within the deadline: facts → Gemini rewrite (checked) → else first facts sentence → else template. */
 export async function buildBlurb(x: BlurbInput, intent: BlurbIntent, deps: BlurbDeps = {}): Promise<Blurb> {
   const key = `${x.id}|${intent}`;
-  const hit = CACHE.get(key);
+  const hit = x.photo ? undefined : CACHE.get(key); // photo blurbs are per request, never cached
   if (hit && Date.now() - hit.at < TTL) return hit.v;
   const clock = deps.now ?? Date.now;
   const t0 = clock();
   const budget = deps.budgetMs ?? BUDGET_MS;
   const g = await gatherFacts(x, deps);
+  const pub = g.facts.filter((f) => !/^(?:The user's photo shows|Visible in the user's photo):/.test(f));
+  if (x.photo) g.source = pub.length ? g.source : PHOTO_SRC;
   let out: Blurb;
   if (!g.rich) out = templateBlurb(x, g.source);
   else {
@@ -226,14 +299,22 @@ export async function buildBlurb(x: BlurbInput, intent: BlurbIntent, deps: Blurb
     const ms = budget - (clock() - t0) - 50;
     const j = llm && ms > 300 ? await llm(blurbPrompt(x, g.facts, intent), AbortSignal.timeout(ms)).catch(() => null) : null;
     const text = clean(j?.text, 360);
-    if (j && acceptRewrite(text, g.facts)) out = { text, ...(tidyBestFor(j.bestFor) ? { bestFor: tidyBestFor(j.bestFor) } : {}), source: g.source };
-    else {
+    if (j && acceptRewrite(text, g.facts) && !(x.photo && RATED.test(text))) {
+      out = { text, ...(tidyBestFor(j.bestFor) ? { bestFor: tidyBestFor(j.bestFor) } : {}), source: g.source };
+      if (x.photo && usesPhoto(text, x.photo)) out = photoLabel(out, pub.length > 0);
+    } else {
       // No rewrite: quote the first real fact plainly (Wikipedia / website wording), never invent.
-      const lead = g.facts.find((f) => /^(Wikipedia|Its website says|Wikidata|OSM description): /.test(f));
-      const plain = lead ? firstSentences(lead.replace(/^[^:]+: /, ""), 1, 240) : null;
-      out = plain ? { text: plain.charAt(0).toUpperCase() + plain.slice(1).replace(/([^.!?])$/, "$1."), source: g.source } : { ...templateBlurb(x, g.source), text: `${templateBlurb(x, g.source).text.replace(/\.$/, "")}. ${g.facts.slice(0, 2).join(". ")}.` };
+      out = fallbackBlurb(x, { ...g, facts: pub });
+      if (x.photo?.line) {
+        const line = x.photo.line.charAt(0).toUpperCase() + x.photo.line.slice(1);
+        const isTemplate = !pub.length || /^A local /.test(out.text);
+        // Template or nothing public: the photo's own line leads; else add it after the public sentence if it fits.
+        if (isTemplate) out = photoLabel({ ...out, text: `${line}.` }, false);
+        else if (out.text.length + line.length + 2 <= 200) out = photoLabel({ ...out, text: `${out.text} ${line}.` }, true);
+      }
     }
   }
+  if (x.photo) return out;
   if (CACHE.size > 500) CACHE.clear();
   CACHE.set(key, { at: Date.now(), v: out });
   return out;

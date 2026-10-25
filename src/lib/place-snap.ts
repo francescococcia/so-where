@@ -1,0 +1,300 @@
+// "Snap a place": Gemini reads a shop front / pub sign into {name, kind, signText, cuisine, confidence}, then the
+// venue is matched in MongoDB Atlas (OSM snapshot): with your location, $geoNear ≤ 300 m + fuzzy name; without it,
+// Atlas Search by name across London (several same-name places → candidates and "which area?").
+// The result is one card shaped like a plan card (hours evaluated for now, blurb via blurb.ts).
+// Privacy: the image, its text, your location and any typed area are never stored or logged.
+import type { Db } from "mongodb";
+import snapshot from "@/data/osm-snapshot.json";
+import { buildBlurb, type Blurb, type BlurbDeps } from "@/lib/blurb";
+import { nameScore } from "@/lib/destination";
+import { matchPlace } from "@/lib/gazetteer";
+import { IN_LONDON, metresBetween } from "@/lib/geo";
+import { londonDayShort } from "@/lib/london-time";
+import { visionGenerate } from "@/lib/vision";
+import { getDb, withTimeout } from "@/lib/mongo";
+import { VENUES_SEARCH_INDEX, type VenueDoc } from "@/lib/mongo-seed";
+import { addressOf, hoursAt, kindLabel } from "@/lib/osm";
+import type { PlanCardWithHours } from "@/lib/plan";
+import type { Fact, LatLng } from "@/lib/plan-types";
+import { PosterError } from "@/lib/poster";
+import { venueArea } from "@/lib/venue-area";
+
+export type SnapKind = "pub" | "cafe" | "restaurant" | "bar" | "shop" | "other";
+/** What the photo itself shows about the place: tags only for things visible (cosy, busy, terrace, outdoor seating, dog-friendly …),
+ *  line ≤90 chars. Never ratings or claims the photo can't show. null when nothing is visible beyond the sign. */
+export type SnapVibe = { tags: string[]; line: string };
+export type SnapExtract = { name: string | null; kind: SnapKind; signText: string | null; cuisine: string | null; confidence: number; vibe: SnapVibe | null };
+/** A plan-style card for the snapped place, plus flat lat/lng/address and the /api/photo lookup for it. */
+/** opensAt: London "HH:MM" of the next opening when closed now (null when open/unknown/no opening in 7 days);
+ *  opensDay: short day ("Mon") when that opening is not today, else null. */
+export type SnapCard = PlanCardWithHours & { lat: number; lng: number; address: string | null; opensAt: string | null; opensDay: string | null; photoQuery: string };
+export type SnapCandidate = { id: string; name: string; lat: number; lng: number; address: string | null; area: string | null; suggestedQuery: string };
+export type PlaceSnapResponse = {
+  extracted: SnapExtract;
+  place?: SnapCard;
+  candidates?: SnapCandidate[];
+  message?: string;
+  suggestedQuery: string | null;
+  /** Vision model that read the photo ("test-fixture" under the eval hook). */
+  model: string;
+};
+
+const KINDS: SnapKind[] = ["pub", "cafe", "restaurant", "bar", "shop", "other"];
+const S = { type: "STRING", nullable: true };
+const SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    name: S,
+    kind: { type: "STRING", enum: KINDS },
+    signText: S,
+    cuisine: S,
+    confidence: { type: "NUMBER" },
+    vibe: { type: "OBJECT", nullable: true, properties: { tags: { type: "ARRAY", items: { type: "STRING" } }, line: { type: "STRING" } }, required: ["tags", "line"] },
+  },
+  required: ["kind", "confidence"],
+  propertyOrdering: ["name", "kind", "signText", "cuisine", "confidence", "vibe"],
+};
+const PROMPT = [
+  "This photo shows a place in London: a shop front, pub sign, café or restaurant front, or its sign. Fill the JSON fields.",
+  `name: the place's name as on the sign, in normal capitalisation ("THE KINGS ARMS" → "The Kings Arms"); not a brand on an awning ad, not a street name. null if no name is readable.`,
+  `kind: pub | cafe | restaurant | bar | shop | other (other = not a venue front). signText: the main sign text exactly as printed, one line. cuisine: e.g. "thai", "italian", "coffee" if the sign shows it, else null.`,
+  "confidence 0–1 for how sure you are of the name. Never invent a name.",
+  `vibe: only what is VISIBLE in this photo. tags: up to 5 short lowercase tags such as "cosy", "busy", "quiet", "terrace", "outdoor seating", "dog-friendly" (only if a dog/bowl/sign is visible), "flower baskets", "candlelit", "big windows". line: one plain sentence ≤90 characters describing what the photo shows ("Corner pub with hanging baskets and a few tables outside"). No ratings, stars, prices, opinions of quality, or anything you can't see: don't infer tags from words on a sign (a "beer garden" sign isn't visible outdoor seating). null if nothing beyond the sign is visible.`,
+].join("\n");
+
+const str = (v: unknown, max = 120) => (typeof v === "string" && v.trim() ? v.trim().replace(/\s+/g, " ").slice(0, max) : null);
+export function cleanSnap(raw: unknown): SnapExtract {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const conf = typeof o.confidence === "number" && Number.isFinite(o.confidence) ? Math.max(0, Math.min(1, o.confidence)) : 0;
+  return { name: str(o.name, 80), kind: KINDS.find((k) => k === o.kind) ?? "other", signText: str(o.signText, 160), cuisine: str(o.cuisine, 30)?.toLowerCase() ?? null, confidence: Math.round(conf * 100) / 100, vibe: cleanVibe(o.vibe) };
+}
+
+// Ratings / quality claims a photo can't support.
+const RATING = /\b(?:rated|ratings?|reviews?|stars?|michelin|award|best|top[- ]rated|must[- ]visit|famous|popular|\d(?:\.\d)?\s*\/\s*(?:5|10))\b|★|⭐/i;
+export function cleanVibe(v: unknown): SnapVibe | null {
+  const o = v && typeof v === "object" ? (v as { tags?: unknown; line?: unknown }) : null;
+  if (!o) return null;
+  const tags = (Array.isArray(o.tags) ? o.tags : [])
+    .map((t) => str(t, 24)?.toLowerCase().replace(/[^a-z\s'-]/g, "").trim() ?? "")
+    .filter((t, i, a) => t.length >= 3 && !RATING.test(t) && a.indexOf(t) === i)
+    .slice(0, 5);
+  let line = str(o.line, 140) ?? "";
+  if (RATING.test(line) || /\d/.test(line)) line = "";
+  if (line.length > 90) line = line.slice(0, 90).replace(/\s+\S*$/, "");
+  line = line.replace(/[.!\s]+$/, "");
+  return tags.length || line ? { tags, line } : null;
+}
+
+export type SnapExtractor = (img: { mime: string; base64: string }, timeoutMs: number) => Promise<Partial<SnapExtract> & Pick<SnapExtract, "kind" | "confidence">>;
+let OVERRIDE: SnapExtractor | null = null;
+/** Test hook (evals): replace the Gemini reader with a fixture. null restores it. */
+export function setSnapExtractorForTests(fn: SnapExtractor | null) {
+  OVERRIDE = fn;
+}
+export const snapReaderReady = () => !!OVERRIDE || !!process.env.GEMINI_API_KEY;
+
+/** Gemini vision → SnapExtract. Throws PosterError with a user-facing message (never the image or its text). */
+export async function extractSnap(img: { mime: string; base64: string }, timeoutMs = 11_000, onModel?: (model: string) => void): Promise<SnapExtract> {
+  if (OVERRIDE) {
+    onModel?.("test-fixture");
+    return cleanSnap(await OVERRIDE(img, timeoutMs));
+  }
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new PosterError(503, "Photo reading isn't switched on here yet. Type the place name instead.");
+  let res: Response;
+  let model: string;
+  try {
+    ({ res, model } = await visionGenerate({
+      contents: [{ role: "user", parts: [{ inline_data: { mime_type: img.mime, data: img.base64 } }, { text: PROMPT }] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: SCHEMA, thinkingConfig: { thinkingLevel: "low" } },
+    }, key, timeoutMs));
+    onModel?.(model);
+  } catch (e) {
+    const timeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    throw new PosterError(timeout ? 504 : 502, timeout ? "Reading the sign took too long. Try again, or a closer photo." : "Couldn't reach the photo reader. Try again in a moment.");
+  }
+  if (!res.ok) throw new PosterError(res.status === 400 ? 422 : 502, res.status === 400 ? "That image couldn't be read. Try a JPEG or PNG photo." : `The photo reader is unavailable right now (${res.status}). Try again shortly.`);
+  const j = (await res.json().catch(() => null)) as { candidates?: { content?: { parts?: { text?: string }[] } }[] } | null;
+  const text = j?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  try {
+    return cleanSnap(JSON.parse(text));
+  } catch {
+    throw new PosterError(502, "Couldn't make sense of that photo. Try again with the sign filling the frame.");
+  }
+}
+
+/** ~100 m: 3 decimals (≈110 m north–south, ≈70 m east–west in London). Only valid points in London. */
+export function roundYou(p: unknown): LatLng | null {
+  const o = p && typeof p === "object" ? (p as { lat?: unknown; lng?: unknown }) : null;
+  const lat = Number(o?.lat);
+  const lng = Number(o?.lng);
+  if (!o || !Number.isFinite(lat) || !Number.isFinite(lng) || !IN_LONDON({ lat, lng })) return null;
+  return { lat: Math.round(lat * 1000) / 1000, lng: Math.round(lng * 1000) / 1000 };
+}
+
+/** "The King's Arms" ≈ "Kings Arms" ≈ "THE KINGS ARMS"; "Fish & Chips" ≈ "Fish and Chips". */
+export const snapNameScore = (a: string, b: string) => nameScore(a, b);
+
+type Venue = { id: string; name: string; location: LatLng; tags: Record<string, string>; category: string };
+const NEAR_M = 300;
+const SLACK_M = 80; // the ~100 m rounding of your location
+const MATCH = 0.8;
+const KIND_CATS: Record<SnapKind, string[]> = { pub: ["pub", "bar", "biergarten"], bar: ["bar", "pub", "biergarten"], cafe: ["cafe"], restaurant: ["restaurant", "fast_food", "cafe"], shop: [], other: [] };
+
+const fromDoc = (d: VenueDoc): Venue => ({ id: `osm-${d.osmType}-${d.osmId}`, name: d.name ?? "", location: { lat: d.location.coordinates[1], lng: d.location.coordinates[0] }, tags: d.osm_tags ?? { name: d.name ?? "" }, category: d.category });
+type SnapEl = { type: string; id: number; lat: number; lng: number; tags: Record<string, string> };
+const snapVenues = (): Venue[] =>
+  (snapshot as unknown as { elements: SnapEl[] }).elements.filter((e) => e.tags?.name).map((e) => ({ id: `osm-${e.type}-${e.id}`, name: e.tags.name, location: { lat: e.lat, lng: e.lng }, tags: e.tags, category: e.tags.amenity ?? e.tags.tourism ?? "place" }));
+
+export type SnapDeps = { db?: Db | null; blurb?: BlurbDeps; now?: Date };
+
+/** Venues within `radiusM` of `at` (Atlas $geoNear; the bundled snapshot when Mongo is unavailable). */
+async function venuesNear(at: LatLng, radiusM: number, db: Db | null): Promise<{ rows: Venue[]; via: string }> {
+  if (db) {
+    try {
+      const docs = await withTimeout(
+        db.collection<VenueDoc>("venues").aggregate<VenueDoc>([
+          { $geoNear: { near: { type: "Point", coordinates: [at.lng, at.lat] }, distanceField: "distanceM", maxDistance: radiusM, spherical: true, query: { name: { $ne: null } } } },
+          { $limit: 150 },
+        ], { maxTimeMS: 2000 }).toArray(),
+        2500,
+        "place-snap geoNear",
+      );
+      if (docs.length) return { rows: docs.map(fromDoc), via: "MongoDB Atlas $geoNear" };
+    } catch {
+      /* fall through */
+    }
+  }
+  return { rows: snapVenues().filter((v) => metresBetween(v.location, at) <= radiusM), via: "OSM snapshot" };
+}
+
+/** Same-name venues across London (Atlas Search, fuzzy; the bundled snapshot when Mongo is unavailable). */
+async function venuesNamed(name: string, db: Db | null): Promise<{ rows: Venue[]; via: string }> {
+  if (db) {
+    try {
+      const docs = await withTimeout(
+        db.collection<VenueDoc>("venues").aggregate<VenueDoc>([
+          { $search: { index: VENUES_SEARCH_INDEX, compound: { must: [{ text: { query: name, path: "name", fuzzy: { maxEdits: 1, prefixLength: 2 } } }], filter: [{ geoWithin: { circle: { center: { type: "Point", coordinates: [-0.1276, 51.5072] }, radius: 30000 }, path: "location" } }] } } },
+          { $limit: 25 },
+        ], { maxTimeMS: 2000 }).toArray(),
+        2500,
+        "place-snap name search",
+      );
+      const rows = docs.map(fromDoc).filter((v) => snapNameScore(name, v.name) >= MATCH);
+      if (rows.length) return { rows, via: "MongoDB Atlas Search" };
+    } catch {
+      /* fall through */
+    }
+  }
+  return { rows: snapVenues().filter((v) => snapNameScore(name, v.name) >= MATCH), via: "OSM snapshot" };
+}
+
+const fact = (label: string, value: string, verdict: Fact["verdict"], source: string, asOf?: string): Fact => ({ label, value, verdict, source, ...(asOf ? { asOf } : {}) });
+const fullAddress = (t: Record<string, string>) => [[t["addr:housenumber"], t["addr:street"]].filter(Boolean).join(" "), t["addr:postcode"]].filter(Boolean).join(", ") || null;
+/** "Meet at <name>" (plus street + postcode when London has several of that name, so destination.ts pins the right one). */
+const meetQuery = (v: Venue, ambiguous: boolean) => {
+  const a = ambiguous ? fullAddress(v.tags) : null;
+  return `Meet at ${v.name}${a ? `, ${a}` : ""}`;
+};
+const candidateOf = (v: Venue, ambiguous: boolean): SnapCandidate => ({ id: v.id, name: v.name, lat: v.location.lat, lng: v.location.lng, address: addressOf(v.tags), area: venueArea(v.tags, v.location), suggestedQuery: meetQuery(v, ambiguous) });
+
+/** The plan-style card, with opening hours evaluated for now and a blurb (blurb.ts rules: no address restating). */
+export async function snapCard(v: Venue, now: Date, blurbDeps: BlurbDeps = {}, why = "The place in your photo.", matched?: Fact, vibe?: SnapVibe | null): Promise<SnapCard> {
+  const h = hoursAt(v.tags, now, v.location);
+  const soon = h.state === "open" && h.closesInMin != null && h.closesInMin < 60;
+  const addr = addressOf(v.tags);
+  const area = venueArea(v.tags, v.location);
+  const facts: Fact[] = [fact(`Open ${londonDayShort(now)}`, soon ? `${h.value} · closes within the hour` : h.value, h.verdict, "OSM")];
+  if (matched) facts.push(matched);
+  if (v.tags.cuisine) facts.push(fact("Cuisine", v.tags.cuisine.replace(/[_;]/g, (c) => (c === ";" ? ", " : " ")), "likely", "OSM"));
+  if (v.tags.wheelchair) facts.push(fact("Step-free", v.tags.wheelchair === "yes" ? "Yes (OSM)" : v.tags.wheelchair === "no" ? "No (OSM)" : "Partly (OSM)", "likely", "OSM"));
+  const [, type, id] = v.id.split("-");
+  const url = v.tags.website ?? v.tags["contact:website"] ?? `https://www.openstreetmap.org/${type}/${id}`;
+  const blurb: Blurb | null = await buildBlurb({ id: v.id, name: v.name, kind: kindLabel(v.tags), tags: v.tags, location: v.location, area, closesAt: h.closesAt ?? null, url, ...(vibe ? { photo: vibe } : {}) }, "friends", blurbDeps).catch(() => null);
+  const pq = new URLSearchParams({ name: v.name, lat: String(v.location.lat), lng: String(v.location.lng), osm: v.id });
+  if (v.tags.wikidata) pq.set("wikidata", v.tags.wikidata);
+  if (v.tags.wikimedia_commons) pq.set("commons", v.tags.wikimedia_commons);
+  if (v.tags.image) pq.set("image", v.tags.image);
+  return {
+    id: v.id,
+    kind: "venue",
+    name: v.name,
+    subtitle: [kindLabel(v.tags), addr].filter(Boolean).join(" · "),
+    ...(area ? { area } : {}),
+    location: v.location,
+    lat: v.location.lat,
+    lng: v.location.lng,
+    address: addr,
+    legs: [],
+    facts,
+    why,
+    url,
+    openAtPlan: h.state === "unknown" ? null : h.state === "open",
+    closesAt: h.closesAt ?? null,
+    closingSoon: soon,
+    opensAt: h.state === "closed" ? h.opensAt ?? null : null,
+    opensDay: h.state === "closed" && h.opensInMin != null && londonDayShort(new Date(now.getTime() + h.opensInMin * 60_000)) !== londonDayShort(now) ? londonDayShort(new Date(now.getTime() + h.opensInMin * 60_000)) : null,
+    hoursKnown: h.state !== "unknown",
+    ...(blurb ? { blurb } : {}),
+    photoQuery: `/api/photo?${pq.toString()}`,
+  };
+}
+
+const NO_MATCH = "Couldn't spot that one — where are you?";
+const distinct = (rows: Venue[]) => rows.filter((v, i) => !rows.slice(0, i).some((w) => metresBetween(w.location, v.location) < 150));
+const kindFirst = (kind: SnapKind) => (v: Venue) => (KIND_CATS[kind].includes(v.category) ? 0 : 1);
+
+/** Extract → match → card. `you` is already rounded; `area` is a typed neighbourhood (follow-up to "which area?"). */
+export async function snapPlace(extracted: SnapExtract, opts: { you?: LatLng | null; area?: string | null; budgetMs?: number }, deps: SnapDeps = {}): Promise<Omit<PlaceSnapResponse, "model">> {
+  const t0 = Date.now();
+  const now = deps.now ?? new Date();
+  const base = { extracted, suggestedQuery: null };
+  if (!extracted.name || extracted.confidence < 0.3) {
+    return { ...base, message: extracted.kind === "other" && !extracted.name ? "That doesn't look like a shop front or sign. Try again with the name filling the frame." : "Couldn't read a name on that sign. Try a closer photo, or type the name." };
+  }
+  const name = extracted.name;
+  const db = deps.db !== undefined ? deps.db : await getDb(1500);
+  const areaAt = opts.area ? matchPlace(opts.area) : null;
+  const near = opts.you ?? (areaAt && areaAt.confidence !== "low" && areaAt.best ? areaAt.best.entry.location : null);
+  const blurbDeps: BlurbDeps = { ...deps.blurb, budgetMs: Math.max(800, Math.min(deps.blurb?.budgetMs ?? 3200, (opts.budgetMs ?? 14_000) - (Date.now() - t0) - 500)) };
+  const score = (v: Venue) => snapNameScore(name, v.name);
+
+  if (near) {
+    const radius = opts.you ? NEAR_M + SLACK_M : 1500;
+    const { rows, via } = await venuesNear(near, radius, db);
+    const hits = rows
+      .map((v) => ({ v, s: score(v), d: metresBetween(v.location, near) }))
+      .filter((x) => x.s >= MATCH)
+      .sort((a, b) => b.s - a.s || kindFirst(extracted.kind)(a.v) - kindFirst(extracted.kind)(b.v) || a.d - b.d);
+    if (hits.length) {
+      const v = hits[0].v;
+      const place = await snapCard(v, now, blurbDeps, `The place in your photo: the name on the sign, ${opts.you ? "right by you" : "in the area you gave"}.`, fact("Matched", `Name on the sign, ${opts.you ? "within ~300 m of you" : "in the area you gave"}`, hits[0].s >= 0.95 ? "confirmed" : "likely", via), extracted.vibe);
+      const others = distinct(hits.slice(1).map((h) => h.v)).filter((w) => metresBetween(w.location, v.location) >= 150);
+      return { ...base, place, ...(others.length ? { candidates: others.slice(0, 3).map((w) => candidateOf(w, true)) } : {}), suggestedQuery: meetQuery(v, others.length > 0), ...(extracted.confidence < 0.5 ? { message: `Not fully sure I read the sign right: is it ${v.name}?` } : {}) };
+    }
+  }
+  // No location (or nothing that name close by): search London by name.
+  const { rows, via: byName } = await venuesNamed(name, db);
+  const all = distinct(rows.sort((a, b) => score(b) - score(a) || kindFirst(extracted.kind)(a) - kindFirst(extracted.kind)(b)));
+  if (!all.length) return { ...base, message: near ? "Couldn't spot that one around there. Try a closer photo of the sign, or type the name." : NO_MATCH };
+  const ranked = near ? [...all].sort((a, b) => metresBetween(a.location, near) - metresBetween(b.location, near)) : all;
+  if (ranked.length === 1) {
+    // A single candidate is a match (the UI treats it as one), so return it as the place.
+    const v = ranked[0];
+    const where = venueArea(v.tags, v.location);
+    return {
+      ...base,
+      place: await snapCard(v, now, blurbDeps, "The place in your photo: the only one of that name in London.", fact("Matched", "Name on the sign, the only one in London", "likely", byName), extracted.vibe),
+      suggestedQuery: meetQuery(v, false),
+      ...(near ? { message: `Couldn't spot ${name} right there; the only one I know is${where ? ` in ${where}` : " further away"}.` } : {}),
+    };
+  }
+  const n = ranked.length;
+  return {
+    ...base,
+    candidates: ranked.slice(0, 3).map((v) => candidateOf(v, n > 1)),
+    message: near
+      ? `Couldn't spot ${name} right there: is it one of these?`
+      : `There are ${n} places called ${name} in London: which area are you in?`,
+  };
+}

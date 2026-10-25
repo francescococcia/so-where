@@ -1,15 +1,15 @@
 {
-  "startedAt": "2026-10-24T23:25:15.622Z",
-  "finishedAt": "2026-10-24T23:37:21.627Z",
-  "passed": 59,
-  "total": 60,
-  "rate": 0.9833333333333333,
+  "startedAt": "2026-10-25T00:43:34.320Z",
+  "finishedAt": "2026-10-25T00:53:11.906Z",
+  "passed": 70,
+  "total": 71,
+  "rate": 0.9859154929577465,
   "results": [
     {
       "id": "date-pub-halfway",
       "query": "Date on Thursday at 7. I'm at Old Street, she's around Clapham. A pub halfway, about £40 for two.",
       "pass": true,
-      "ms": 3081,
+      "ms": 8710,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -127,7 +127,7 @@
         }
       ],
       "unknowns": [
-        "Live Overpass HTTP 502; used the OSM snapshot from 2026-10-24.",
+        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
         "Line status is as of now, not for the time of the plan.",
         "Prices: none of our sources lists them, so I can't check £40.",
         "How busy or noisy it'll be: no source has this."
@@ -136,37 +136,37 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 9,
+          "ms": 11,
           "detail": "meet_halfway · intent meet_halfway · you: \"Old Street\" · other person's place found · day 2026-10-29 · time 19:00 · category pub · budget £40 (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 12,
+          "ms": 13,
           "detail": "2 of 2 places found · Read \"Clapham\" as Clapham Common · you: Old Street · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 2441,
+          "ms": 2557,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 20 min, her 19 min · next Tottenham Court Road (27/26)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 569,
-          "detail": "39 found within 500 m (OSM snapshot, live call HTTP) · 0 closed at 19:00 · 3 kept · weather: 14°C, 0% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6070,
+          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 19:00 · 3 kept · weather: 14°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 134,
+          "ms": 140,
           "detail": "1 line: Northern Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 526,
+          "ms": 120,
           "detail": "Thu 29 Oct, 19:00: 14°C, clear, 0% chance of rain"
         },
         {
@@ -181,7 +181,7 @@
       "id": "coffee-friend-sunday",
       "query": "Coffee with Sam on Sunday morning at 10 — I'm in King's Cross, he's in Brixton",
       "pass": true,
-      "ms": 8863,
+      "ms": 8537,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -315,31 +315,31 @@
         {
           "id": "compare",
           "status": "done",
-          "ms": 2791,
+          "ms": 2470,
           "detail": "12 hubs compared (24 journeys) · Victoria fairest: you 20 min, him 18 min · next Oxford Circus (17/22)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6052,
+          "ms": 6047,
           "detail": "49 found within 500 m (OSM snapshot, live call timeout) · 1 closed at 10:00 · 3 kept · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 284,
+          "ms": 117,
           "detail": "1 line: Victoria Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 134,
+          "ms": 512,
           "detail": "Sun 25 Oct, 10:00: 11°C, clear, 0% chance of rain"
         },
         {
           "id": "verify",
           "status": "done",
-          "ms": 1,
+          "ms": 0,
           "detail": "18 facts checked · 0 dropped without a source · 5 sources with as-of times"
         }
       ]
@@ -348,7 +348,7 @@
       "id": "lunch-between",
       "query": "Lunch halfway between Angel and Elephant & Castle tomorrow at 1",
       "pass": true,
-      "ms": 7968,
+      "ms": 8526,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -403,7 +403,7 @@
         {
           "name": "draftMessage has no 'them' area",
           "pass": true,
-          "got": "Hey! Fancy lunch Mon 26 Oct at 1pm? How about Malaysia Boleh, 12-14 St. John Street, EC1M (near Farringdon station)? It's about 22 min for you 🙂 https://www.myboleh.co.uk/"
+          "got": "Hey! Fancy lunch tomorrow at 1pm? How about Malaysia Boleh, 12-14 St. John Street, EC1M (near Farringdon station)? It's about 22 min for you 🙂 https://www.myboleh.co.uk/"
         },
         {
           "name": "them is rounded to an area (radius ≥ 500 m)",
@@ -446,7 +446,7 @@
           "name": "Malaysia Boleh",
           "weather": {
             "label": "Weather fit",
-            "value": "Rain likely at 13:00 (94%, 0.9 mm) - indoor seating (OSM tag)",
+            "value": "Rain likely at 13:00 (100%, 0.9 mm) - indoor seating (OSM tag)",
             "verdict": "confirmed",
             "source": "OSM snapshot + Open-Meteo",
             "asOf": "2026-10-24T19:44:45.780Z"
@@ -456,7 +456,7 @@
           "name": "Gazette Brasserie",
           "weather": {
             "label": "Weather fit",
-            "value": "Rain likely at 13:00 (94%, 0.9 mm) - indoor seating (OSM tag)",
+            "value": "Rain likely at 13:00 (100%, 0.9 mm) - indoor seating (OSM tag)",
             "verdict": "confirmed",
             "source": "OSM snapshot + Open-Meteo",
             "asOf": "2026-10-24T19:44:45.780Z"
@@ -466,7 +466,7 @@
           "name": "Camino",
           "weather": {
             "label": "Weather fit",
-            "value": "Rain likely at 13:00 (94%, 0.9 mm) - indoor seating (OSM tag)",
+            "value": "Rain likely at 13:00 (100%, 0.9 mm) - indoor seating (OSM tag)",
             "verdict": "confirmed",
             "source": "OSM snapshot + Open-Meteo",
             "asOf": "2026-10-24T19:44:45.780Z"
@@ -490,32 +490,32 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 9,
+          "ms": 10,
           "detail": "2 of 2 places found · you: Angel · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 1909,
+          "ms": 2465,
           "detail": "12 hubs compared (24 journeys) · Farringdon fairest: you 17 min, them 22 min · next Liverpool Street (22/23)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6039,
-          "detail": "70 found within 500 m (OSM snapshot, live call timeout) · 2 closed at 13:00 · 3 kept · weather: Rain likely at 13:00 (94%, 0.9 mm) → indoor/covered first (3 of 3 kept tagged indoor/covered in OSM)"
+          "ms": 6040,
+          "detail": "70 found within 500 m (OSM snapshot, live call timeout) · 2 closed at 13:00 · 3 kept · weather: Rain likely at 13:00 (100%, 0.9 mm) → indoor/covered first (3 of 3 kept tagged indoor/covered in OSM)"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 176,
-          "detail": "2 lines: 341 Good Service, Thameslink Special Service"
+          "ms": 166,
+          "detail": "2 lines: 341 Good Service, Thameslink Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 117,
-          "detail": "Mon 26 Oct, 13:00: 13°C, drizzle, 94% chance of rain"
+          "ms": 493,
+          "detail": "Mon 26 Oct, 13:00: 13°C, drizzle, 100% chance of rain"
         },
         {
           "id": "verify",
@@ -529,7 +529,7 @@
       "id": "budget-dinner-east-west",
       "query": "Dinner for two under £60 halfway between Stratford and Hammersmith on Friday at 7:30",
       "pass": true,
-      "ms": 8589,
+      "ms": 10061,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -657,32 +657,32 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 7,
+          "ms": 9,
           "detail": "2 of 2 places found · you: Stratford · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 2494,
+          "ms": 3978,
           "detail": "12 hubs compared (24 journeys) · Oxford Circus fairest: you 31 min, them 34 min · next Waterloo (31/35)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6080,
-          "detail": "188 found within 500 m (OSM snapshot, live call timeout) · 4 closed at 19:30 · 3 kept · weather: 14°C, 4% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6063,
+          "detail": "188 found within 500 m (OSM snapshot, live call timeout) · 4 closed at 19:30 · 3 kept · weather: 14°C, 12% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 174,
+          "ms": 180,
           "detail": "3 lines: Central Good Service, District Part Closure, Victoria Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 109,
-          "detail": "Fri 30 Oct, 19:30: 14°C, clear, 4% chance of rain"
+          "ms": 510,
+          "detail": "Fri 30 Oct, 19:30: 14°C, clear, 12% chance of rain"
         },
         {
           "id": "verify",
@@ -696,7 +696,7 @@
       "id": "drinks-missing-them",
       "query": "Drinks with Priya on Friday at 8, I'm at Waterloo",
       "pass": true,
-      "ms": 6014,
+      "ms": 6011,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -742,13 +742,13 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 6006,
+          "ms": 6005,
           "detail": "meet_halfway · intent meet_halfway · you: \"Waterloo\" · day 2026-10-30 · time 20:00 · category pub (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 5,
+          "ms": 3,
           "detail": "1 of 1 place found · you: Waterloo"
         },
         {
@@ -763,7 +763,7 @@
       "id": "drinks-followup-answer",
       "query": "Camden Town",
       "pass": true,
-      "ms": 9298,
+      "ms": 9609,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -880,38 +880,38 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 5,
+          "ms": 4,
           "detail": "meet_halfway · intent meet_halfway · you: \"Waterloo\" · their place from your answer · day 2026-10-30 · time 20:00 · category pub · answer merged (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 9,
+          "ms": 8,
           "detail": "2 of 2 places found · you: Waterloo · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 3213,
+          "ms": 3552,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 18 min, Priya 16 min · next Leicester Square (20/8)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6061,
-          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 20:00 · 3 kept · weather: 14°C, 11% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6040,
+          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 20:00 · 3 kept · weather: 14°C, 3% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 190,
+          "ms": 161,
           "detail": "2 lines: C10 Special Service, Northern Good Service"
         },
         {
           "id": "weather",
           "status": "done",
           "ms": 1,
-          "detail": "Fri 30 Oct, 20:00: 14°C, clear, 11% chance of rain"
+          "detail": "Fri 30 Oct, 20:00: 14°C, clear, 3% chance of rain"
         },
         {
           "id": "verify",
@@ -925,7 +925,7 @@
       "id": "halfway-no-places",
       "query": "Find somewhere halfway for me and Jo tonight",
       "pass": true,
-      "ms": 2813,
+      "ms": 2419,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -971,7 +971,7 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 2779,
+          "ms": 2416,
           "detail": "meet_halfway · intent meet_halfway · day 2026-10-25 · time 19:00 (rules)"
         },
         {
@@ -992,7 +992,7 @@
       "id": "saturday-walk-in",
       "query": "It's Saturday, what's on near me that I can just walk into?",
       "pass": true,
-      "ms": 7167,
+      "ms": 7367,
       "checks": [
         {
           "name": "intent = near_me",
@@ -1104,25 +1104,25 @@
         {
           "id": "weather",
           "status": "done",
-          "ms": 521,
-          "detail": "Sat 31 Oct, 12:00: 12°C, overcast, 11% chance of rain"
+          "ms": 134,
+          "detail": "Sat 31 Oct, 12:00: 12°C, overcast, 12% chance of rain"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6025,
+          "ms": 6039,
           "detail": "3 seed events that day · 3 within 8 km · 3 dropped as RSVP-only · 16 free-entry places within 2.5 km (OSM snapshot), 3 closed at 12:00"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 957,
+          "ms": 1087,
           "detail": "6 journeys back · 6 within 30 min"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 169,
+          "ms": 229,
           "detail": "205 Good Service, 21 Special Service"
         },
         {
@@ -1137,7 +1137,7 @@
       "id": "no-registration-events",
       "query": "Any free events with no registration near me on Saturday?",
       "pass": true,
-      "ms": 6031,
+      "ms": 6033,
       "checks": [
         {
           "name": "intent = near_me",
@@ -1237,7 +1237,7 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 1,
+          "ms": 2,
           "detail": "near_me · intent near_me · day 2026-10-31 · category event · walk-in · free (rules)"
         },
         {
@@ -1249,8 +1249,8 @@
         {
           "id": "weather",
           "status": "done",
-          "ms": 5,
-          "detail": "Sat 31 Oct, 12:00: 12°C, overcast, 11% chance of rain"
+          "ms": 8,
+          "detail": "Sat 31 Oct, 12:00: 12°C, overcast, 12% chance of rain"
         },
         {
           "id": "venues",
@@ -1261,7 +1261,7 @@
         {
           "id": "travel",
           "status": "done",
-          "ms": 5,
+          "ms": 3,
           "detail": "6 journeys back · 6 within 30 min"
         },
         {
@@ -1282,7 +1282,7 @@
       "id": "whats-on-no-location",
       "query": "What's on near me tonight?",
       "pass": true,
-      "ms": 1,
+      "ms": 2,
       "checks": [
         {
           "name": "intent = near_me",
@@ -1328,7 +1328,7 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "near_me · intent near_me · day 2026-10-25 · time 19:00 · category event (rules)"
         },
         {
@@ -1349,7 +1349,7 @@
       "id": "free-afternoon",
       "query": "Free things to do near me tomorrow afternoon",
       "pass": false,
-      "ms": 1647,
+      "ms": 7298,
       "checks": [
         {
           "name": "intent = near_me",
@@ -1431,7 +1431,7 @@
         }
       ],
       "unknowns": [
-        "Live Overpass HTTP 502; used the OSM snapshot from 2026-10-24.",
+        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
         "Museum of Methodism: opening hours not in OSM.",
         "Line status is as of now, not for the time of the plan.",
         "How busy it'll be: no source has this."
@@ -1440,7 +1440,7 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 4,
+          "ms": 5,
           "detail": "near_me · intent near_me · day 2026-10-26 · time 15:00 · category event · free (rules)"
         },
         {
@@ -1452,25 +1452,25 @@
         {
           "id": "weather",
           "status": "done",
-          "ms": 4,
-          "detail": "Mon 26 Oct, 15:00: 15°C, light drizzle, 70% chance of rain"
+          "ms": 5,
+          "detail": "Mon 26 Oct, 15:00: 15°C, light drizzle, 62% chance of rain"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 387,
+          "ms": 6017,
           "detail": "3 seed events that day · 3 within 8 km · 16 free-entry places within 2.5 km (OSM snapshot), 7 closed at 15:00"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 1069,
+          "ms": 1084,
           "detail": "9 journeys back · 9 within 30 min"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 180,
+          "ms": 187,
           "detail": "21 Special Service"
         },
         {
@@ -1485,164 +1485,7 @@
       "id": "coffee-near-me",
       "query": "Coffee near me",
       "pass": true,
-      "ms": 13020,
-      "checks": [
-        {
-          "name": "intent = near_me",
-          "pass": true,
-          "got": "near_me"
-        },
-        {
-          "name": "no clarify",
-          "pass": true,
-          "got": null
-        },
-        {
-          "name": "no '[…]' placeholder in any output string",
-          "pass": true,
-          "got": []
-        },
-        {
-          "name": "≤3 cards",
-          "pass": true,
-          "got": 3
-        },
-        {
-          "name": "≥1 card",
-          "pass": true,
-          "got": 3
-        },
-        {
-          "name": "every fact has a source",
-          "pass": true,
-          "got": 20
-        },
-        {
-          "name": "every source has asOf",
-          "pass": true,
-          "got": [
-            "Open-Meteo",
-            "OSM snapshot",
-            "TfL Journey Planner",
-            "TfL Line Status"
-          ]
-        },
-        {
-          "name": "category cafe",
-          "pass": true,
-          "got": "cafe"
-        },
-        {
-          "name": "no back-to-back walk segments",
-          "pass": true,
-          "got": [
-            "walking>bus>walking",
-            "walking>bus>walking",
-            "walking>coach>walking"
-          ]
-        }
-      ],
-      "headline": "3 cafes within 30 min of you, Sun 25 Oct, 00:45.",
-      "middle": null,
-      "cards": [
-        "Grind",
-        "Starbucks",
-        "% Arabica"
-      ],
-      "clarify": null,
-      "when": "2026-10-24T23:45:00.000Z",
-      "cardFacts": [
-        {
-          "name": "Grind",
-          "weather": {
-            "label": "Weather fit",
-            "value": "Rain likely at 00:45 (98%, 0.2 mm) - indoor seating (OSM tag)",
-            "verdict": "confirmed",
-            "source": "OSM snapshot + Open-Meteo",
-            "asOf": "2026-10-24T19:44:45.780Z"
-          }
-        },
-        {
-          "name": "Starbucks",
-          "weather": {
-            "label": "Weather fit",
-            "value": "Rain likely at 00:45 (98%, 0.2 mm) - indoor seating (OSM tag)",
-            "verdict": "confirmed",
-            "source": "OSM snapshot + Open-Meteo",
-            "asOf": "2026-10-24T19:44:45.780Z"
-          }
-        },
-        {
-          "name": "% Arabica",
-          "weather": {
-            "label": "Weather fit",
-            "value": "Rain likely at 00:45 (98%, 0.2 mm) - indoor seating (OSM tag)",
-            "verdict": "confirmed",
-            "source": "OSM snapshot + Open-Meteo",
-            "asOf": "2026-10-24T19:44:45.780Z"
-          }
-        }
-      ],
-      "unknowns": [
-        "No time given, so this is planned for about now (12:45am).",
-        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
-        "Few cafés nearby are open at 00:45, so bars open late are included.",
-        "Grind: opening hours not in OSM.",
-        "Starbucks: opening hours not in OSM.",
-        "% Arabica: opening hours not in OSM.",
-        "Line status is as of now, not for the time of the plan.",
-        "How busy it'll be: no source has this."
-      ],
-      "steps": [
-        {
-          "id": "parse",
-          "status": "done",
-          "ms": 3,
-          "detail": "near_me · intent near_me · category cafe (rules)"
-        },
-        {
-          "id": "resolve",
-          "status": "skipped",
-          "ms": 0,
-          "detail": "No places named; using your location"
-        },
-        {
-          "id": "weather",
-          "status": "done",
-          "ms": 0,
-          "detail": "Sun 25 Oct, 00:45: 13°C, light drizzle, 98% chance of rain"
-        },
-        {
-          "id": "venues",
-          "status": "done",
-          "ms": 12049,
-          "detail": "25 cafes within 1.2 km (OSM snapshot) · 5 closed at 00:45 · weather: Rain likely at 00:45 (98%, 0.2 mm) → indoor/covered first (3 of 3 kept tagged indoor/covered in OSM)"
-        },
-        {
-          "id": "travel",
-          "status": "done",
-          "ms": 962,
-          "detail": "3 journeys back · 3 within 30 min"
-        },
-        {
-          "id": "lines",
-          "status": "done",
-          "ms": 0,
-          "detail": "21 Special Service"
-        },
-        {
-          "id": "verify",
-          "status": "done",
-          "ms": 0,
-          "detail": "20 facts checked · 0 dropped without a source · 4 sources with as-of times"
-        }
-      ]
-    },
-    {
-      "id": "pub-near-station",
-      "query": "A pub near Old Street",
-      "pass": true,
-      "ms": 7158,
+      "ms": 14224,
       "checks": [
         {
           "name": "intent = near_me",
@@ -1681,7 +1524,163 @@
             "Open-Meteo",
             "OSM snapshot",
             "TfL Journey Planner",
-            "TfL Line Status",
+            "TfL Line Status"
+          ]
+        },
+        {
+          "name": "category cafe",
+          "pass": true,
+          "got": "cafe"
+        },
+        {
+          "name": "no back-to-back walk segments",
+          "pass": true,
+          "got": [
+            "walking>bus>walking",
+            "walking>bus>walking",
+            "walking>bus>walking"
+          ]
+        }
+      ],
+      "headline": "3 cafes within 30 min of you, Sun 25 Oct, 01:00.",
+      "middle": null,
+      "cards": [
+        "% Arabica",
+        "Grind",
+        "Starbucks"
+      ],
+      "clarify": null,
+      "when": "2026-10-25T01:00:00.000Z",
+      "cardFacts": [
+        {
+          "name": "% Arabica",
+          "weather": {
+            "label": "Weather fit",
+            "value": "Rain likely at 01:00 (86%) - indoor seating (OSM tag)",
+            "verdict": "confirmed",
+            "source": "OSM snapshot + Open-Meteo",
+            "asOf": "2026-10-24T19:44:45.780Z"
+          }
+        },
+        {
+          "name": "Grind",
+          "weather": {
+            "label": "Weather fit",
+            "value": "Rain likely at 01:00 (86%) - indoor seating (OSM tag)",
+            "verdict": "confirmed",
+            "source": "OSM snapshot + Open-Meteo",
+            "asOf": "2026-10-24T19:44:45.780Z"
+          }
+        },
+        {
+          "name": "Starbucks",
+          "weather": {
+            "label": "Weather fit",
+            "value": "Rain likely at 01:00 (86%) - indoor seating (OSM tag)",
+            "verdict": "confirmed",
+            "source": "OSM snapshot + Open-Meteo",
+            "asOf": "2026-10-24T19:44:45.780Z"
+          }
+        }
+      ],
+      "unknowns": [
+        "No time given, so this is planned for about now (1am).",
+        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
+        "Few cafés nearby are open at 01:00, so bars open late are included.",
+        "% Arabica: opening hours not in OSM.",
+        "Grind: opening hours not in OSM.",
+        "Starbucks: opening hours not in OSM.",
+        "Line status is as of now, not for the time of the plan.",
+        "How busy it'll be: no source has this."
+      ],
+      "steps": [
+        {
+          "id": "parse",
+          "status": "done",
+          "ms": 0,
+          "detail": "near_me · intent near_me · category cafe (rules)"
+        },
+        {
+          "id": "resolve",
+          "status": "skipped",
+          "ms": 0,
+          "detail": "No places named; using your location"
+        },
+        {
+          "id": "weather",
+          "status": "done",
+          "ms": 0,
+          "detail": "Sun 25 Oct, 01:00: 12°C, overcast, 86% chance of rain"
+        },
+        {
+          "id": "venues",
+          "status": "done",
+          "ms": 12022,
+          "detail": "25 cafes within 1.2 km (OSM snapshot) · 5 closed at 01:00 · weather: Rain likely at 01:00 (86%) → indoor/covered first (3 of 3 kept tagged indoor/covered in OSM)"
+        },
+        {
+          "id": "travel",
+          "status": "done",
+          "ms": 1976,
+          "detail": "3 journeys back · 3 within 30 min"
+        },
+        {
+          "id": "lines",
+          "status": "done",
+          "ms": 221,
+          "detail": "205 Good Service, 76 Special Service, N263 Good Service"
+        },
+        {
+          "id": "verify",
+          "status": "done",
+          "ms": 0,
+          "detail": "21 facts checked · 0 dropped without a source · 4 sources with as-of times"
+        }
+      ]
+    },
+    {
+      "id": "pub-near-station",
+      "query": "A pub near Old Street",
+      "pass": true,
+      "ms": 9225,
+      "checks": [
+        {
+          "name": "intent = near_me",
+          "pass": true,
+          "got": "near_me"
+        },
+        {
+          "name": "no clarify",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "no '[…]' placeholder in any output string",
+          "pass": true,
+          "got": []
+        },
+        {
+          "name": "≤3 cards",
+          "pass": true,
+          "got": 3
+        },
+        {
+          "name": "≥1 card",
+          "pass": true,
+          "got": 3
+        },
+        {
+          "name": "every fact has a source",
+          "pass": true,
+          "got": 18
+        },
+        {
+          "name": "every source has asOf",
+          "pass": true,
+          "got": [
+            "Open-Meteo",
+            "OSM snapshot",
+            "TfL Journey Planner",
             "TfL station list"
           ]
         },
@@ -1694,37 +1693,37 @@
           "name": "no back-to-back walk segments",
           "pass": true,
           "got": [
-            "walking>bus>walking",
-            "walking>bus>walking",
-            "walking>bus>walking"
+            "walking",
+            "walking",
+            "walking"
           ]
         }
       ],
-      "headline": "3 pubs within 30 min of Old Street, Sun 25 Oct, 00:45.",
+      "headline": "3 pubs within 30 min of Old Street, Sun 25 Oct, 01:15.",
       "middle": null,
       "cards": [
-        "All Bar One",
         "Black Rock",
+        "All Bar One",
         "Woodin's Shades"
       ],
       "clarify": null,
-      "when": "2026-10-24T23:45:00.000Z",
+      "when": "2026-10-25T01:15:00.000Z",
       "cardFacts": [
         {
-          "name": "All Bar One",
+          "name": "Black Rock",
           "weather": {
             "label": "Weather fit",
-            "value": "Rain likely at 00:45 (97%, 0.1 mm) - indoor seating (OSM tag)",
+            "value": "Rain likely at 01:15 (86%) - indoor seating (OSM tag)",
             "verdict": "confirmed",
             "source": "OSM snapshot + Open-Meteo",
             "asOf": "2026-10-24T19:44:45.780Z"
           }
         },
         {
-          "name": "Black Rock",
+          "name": "All Bar One",
           "weather": {
             "label": "Weather fit",
-            "value": "Rain likely at 00:45 (97%, 0.1 mm) - indoor seating (OSM tag)",
+            "value": "Rain likely at 01:15 (86%) - indoor seating (OSM tag)",
             "verdict": "confirmed",
             "source": "OSM snapshot + Open-Meteo",
             "asOf": "2026-10-24T19:44:45.780Z"
@@ -1734,7 +1733,7 @@
           "name": "Woodin's Shades",
           "weather": {
             "label": "Weather fit",
-            "value": "Rain likely at 00:45 (97%, 0.1 mm) - indoor seating (OSM tag)",
+            "value": "Rain likely at 01:15 (86%) - indoor seating (OSM tag)",
             "verdict": "confirmed",
             "source": "OSM snapshot + Open-Meteo",
             "asOf": "2026-10-24T19:44:45.780Z"
@@ -1742,56 +1741,55 @@
         }
       ],
       "unknowns": [
-        "No time given, so this is planned for about now (12:45am).",
+        "No time given, so this is planned for about now (1:15am).",
         "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
-        "All Bar One: opening hours not in OSM.",
         "Black Rock: opening hours not in OSM.",
+        "All Bar One: opening hours not in OSM.",
         "Woodin's Shades: opening hours not in OSM.",
-        "Line status is as of now, not for the time of the plan.",
         "How busy it'll be: no source has this."
       ],
       "steps": [
         {
           "id": "parse",
           "status": "done",
-          "ms": 1,
+          "ms": 0,
           "detail": "near_me · intent near_me · category pub (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 5,
+          "ms": 2,
           "detail": "1 of 1 place found · you: Old Street"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 143,
-          "detail": "Sun 25 Oct, 00:45: 13°C, light drizzle, 97% chance of rain"
+          "ms": 414,
+          "detail": "Sun 25 Oct, 01:15: 12°C, overcast, 86% chance of rain"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6025,
-          "detail": "79 pubs within 1.2 km (OSM snapshot) · 23 closed at 00:45 · weather: Rain likely at 00:45 (97%, 0.1 mm) → indoor/covered first (3 of 3 kept tagged indoor/covered in OSM)"
+          "ms": 6021,
+          "detail": "79 pubs within 1.2 km (OSM snapshot) · 23 closed at 01:15 · weather: Rain likely at 01:15 (86%) → indoor/covered first (3 of 3 kept tagged indoor/covered in OSM)"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 960,
+          "ms": 3193,
           "detail": "3 journeys back · 3 within 30 min"
         },
         {
           "id": "lines",
-          "status": "done",
-          "ms": 162,
-          "detail": "21 Special Service, 214 Good Service, 43 Special Service"
+          "status": "skipped",
+          "ms": 0,
+          "detail": "No TfL lines on these routes (walking or bus only)"
         },
         {
           "id": "verify",
           "status": "done",
           "ms": 0,
-          "detail": "21 facts checked · 0 dropped without a source · 5 sources with as-of times"
+          "detail": "18 facts checked · 0 dropped without a source · 4 sources with as-of times"
         }
       ]
     },
@@ -1799,7 +1797,7 @@
       "id": "nonsense-keys",
       "query": "asdf qwerty",
       "pass": true,
-      "ms": 6003,
+      "ms": 2455,
       "checks": [
         {
           "name": "asks to clarify",
@@ -1833,14 +1831,14 @@
           "Coffee near me"
         ]
       },
-      "when": "2026-10-24T23:45:00.000Z",
+      "when": "2026-10-25T01:15:00.000Z",
       "cardFacts": [],
       "unknowns": [],
       "steps": [
         {
           "id": "parse",
           "status": "done",
-          "ms": 6002,
+          "ms": 2454,
           "detail": "no intent · nothing recognised (rules)"
         },
         {
@@ -1855,7 +1853,7 @@
       "id": "nonsense-question",
       "query": "What is the meaning of life?",
       "pass": true,
-      "ms": 2459,
+      "ms": 2486,
       "checks": [
         {
           "name": "asks to clarify",
@@ -1889,14 +1887,14 @@
           "Coffee near me"
         ]
       },
-      "when": "2026-10-24T23:45:00.000Z",
+      "when": "2026-10-25T01:15:00.000Z",
       "cardFacts": [],
       "unknowns": [],
       "steps": [
         {
           "id": "parse",
           "status": "done",
-          "ms": 2458,
+          "ms": 2485,
           "detail": "no intent · nothing recognised (rules)"
         },
         {
@@ -1911,7 +1909,7 @@
       "id": "typo-greenwich-liverpolstreet",
       "query": "i nee to meet a frind tonigh check pub opern i'm in greenwich he is at liverpolstreet",
       "pass": true,
-      "ms": 8603,
+      "ms": 9342,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -2024,37 +2022,37 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "meet_halfway · intent meet_halfway · you: \"greenwich\" · other person's place found · day 2026-10-25 · time 19:00 · category pub (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 11,
+          "ms": 9,
           "detail": "2 of 2 places found · Read \"liverpolstreet\" as Liverpool Street · you: Greenwich · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 2546,
+          "ms": 3262,
           "detail": "12 hubs compared (24 journeys) · Bank fairest: you 35 min, him 14 min · next London Bridge (35/12)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6040,
+          "ms": 6061,
           "detail": "85 found within 500 m (OSM snapshot, live call timeout) · 15 closed at 19:00 · 3 kept · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 158,
+          "ms": 232,
           "detail": "2 lines: 8 Special Service, DLR Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 116,
+          "ms": 503,
           "detail": "Sun 25 Oct, 19:00: 11°C, clear, 0% chance of rain"
         },
         {
@@ -2069,7 +2067,7 @@
       "id": "me-them-slots-coffee",
       "query": "me at Waterloo, them near Camden Town, coffee Saturday 3pm",
       "pass": true,
-      "ms": 10785,
+      "ms": 7963,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -2182,7 +2180,7 @@
         }
       ],
       "unknowns": [
-        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
+        "Live Overpass HTTP 502; used the OSM snapshot from 2026-10-24.",
         "Line status is as of now, not for the time of the plan.",
         "Prices: none of our sources lists them.",
         "How busy or noisy it'll be: no source has this."
@@ -2191,38 +2189,38 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 1,
+          "ms": 3,
           "detail": "meet_halfway · intent meet_halfway · you: \"Waterloo\" · other person's place found · day 2026-10-31 · time 15:00 · category cafe (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 9,
+          "ms": 12,
           "detail": "2 of 2 places found · you: Waterloo · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 4710,
+          "ms": 7435,
           "detail": "15 hubs compared (30 journeys) · Borough fairest: you 20 min, them 16 min · next Leicester Square (20/8)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6056,
-          "detail": "27 found within 500 m (OSM snapshot, live call timeout) · 2 closed at 15:00 · 3 kept · weather: 12°C, 14% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 495,
+          "detail": "27 found within 500 m (OSM snapshot, live call HTTP) · 2 closed at 15:00 · 3 kept · weather: 12°C, 9% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 1,
+          "ms": 3,
           "detail": "2 lines: C10 Special Service, Northern Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 1,
-          "detail": "Sat 31 Oct, 15:00: 12°C, partly cloudy, 14% chance of rain"
+          "ms": 4,
+          "detail": "Sat 31 Oct, 15:00: 12°C, partly cloudy, 9% chance of rain"
         },
         {
           "id": "verify",
@@ -2236,7 +2234,7 @@
       "id": "coffee-friend-me-them",
       "query": "Coffee with a friend, me at Waterloo, them near Camden Town, Saturday 3pm",
       "pass": true,
-      "ms": 10456,
+      "ms": 8423,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -2358,38 +2356,38 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 2,
+          "ms": 6,
           "detail": "meet_halfway · intent meet_halfway · you: \"Waterloo\" · other person's place found · day 2026-10-31 · time 15:00 · category cafe (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 10,
+          "ms": 17,
           "detail": "2 of 2 places found · you: Waterloo · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 4425,
+          "ms": 2357,
           "detail": "15 hubs compared (30 journeys) · Borough fairest: you 20 min, them 16 min · next Leicester Square (20/8)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6012,
-          "detail": "27 found within 500 m (OSM snapshot, live call timeout) · 2 closed at 15:00 · 3 kept · weather: 12°C, 14% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6032,
+          "detail": "27 found within 500 m (OSM snapshot, live call timeout) · 2 closed at 15:00 · 3 kept · weather: 12°C, 9% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "2 lines: C10 Special Service, Northern Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 0,
-          "detail": "Sat 31 Oct, 15:00: 12°C, partly cloudy, 14% chance of rain"
+          "ms": 1,
+          "detail": "Sat 31 Oct, 15:00: 12°C, partly cloudy, 9% chance of rain"
         },
         {
           "id": "verify",
@@ -2403,7 +2401,7 @@
       "id": "kingsx-brixton-pair",
       "query": "kings x and brixton drinks friday 7",
       "pass": true,
-      "ms": 8356,
+      "ms": 9225,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -2525,37 +2523,37 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 7,
+          "ms": 8,
           "detail": "meet_halfway · intent meet_halfway · between A and B · day 2026-10-30 · time 19:00 · category pub (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 5,
+          "ms": 6,
           "detail": "2 of 2 places found · Read \"kings x\" as King's Cross St. Pancras · you: King's Cross St. Pancras · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 2304,
+          "ms": 3194,
           "detail": "12 hubs compared (24 journeys) · Victoria fairest: you 21 min, them 17 min · next Oxford Circus (18/23)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6034,
+          "ms": 6012,
           "detail": "29 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 19:00 · 3 kept · weather: 14°C, 12% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 1,
+          "ms": 126,
           "detail": "1 line: Victoria Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 1,
+          "ms": 2,
           "detail": "Fri 30 Oct, 19:00: 14°C, clear, 12% chance of rain"
         },
         {
@@ -2570,7 +2568,7 @@
       "id": "tonight-at-8-is-pm",
       "query": "pub with a friend tonight at 8, I am at Waterloo, they are at Camden Town",
       "pass": true,
-      "ms": 9842,
+      "ms": 3304,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -2688,7 +2686,7 @@
         }
       ],
       "unknowns": [
-        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
+        "Live Overpass HTTP 502; used the OSM snapshot from 2026-10-24.",
         "Line status is as of now, not for the time of the plan.",
         "Prices: none of our sources lists them.",
         "How busy or noisy it'll be: no source has this."
@@ -2703,25 +2701,25 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 8,
+          "ms": 9,
           "detail": "2 of 2 places found · you: Waterloo · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 3784,
+          "ms": 3131,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 18 min, them 16 min · next Leicester Square (20/8)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6043,
-          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 4 closed at 20:00 · 3 kept · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 157,
+          "detail": "39 found within 500 m (OSM snapshot, live call HTTP) · 4 closed at 20:00 · 3 kept · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "2 lines: C10 Special Service, Northern Good Service"
         },
         {
@@ -2742,7 +2740,7 @@
       "id": "two-step-clarify",
       "query": "Find somewhere halfway for me and Jo tonight",
       "pass": true,
-      "ms": 16687,
+      "ms": 15702,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -2867,31 +2865,31 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 2872,
+          "ms": 2988,
           "detail": "meet_halfway · intent meet_halfway · your place from your answer · their place from your answer · day 2026-10-25 · time 19:00 · answer merged (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 8,
+          "ms": 7,
           "detail": "2 of 2 places found · Read \"liverpolstreet\" as Liverpool Street · you: Waterloo · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 1060,
+          "ms": 1516,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 19 min, them 19 min · next London Bridge (20/12)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6018,
+          "ms": 6039,
           "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 4 closed at 19:00 · 3 kept · weather: 12°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 159,
+          "ms": 173,
           "detail": "2 lines: 35 Special Service, C10 Special Service"
         },
         {
@@ -2912,7 +2910,7 @@
       "id": "weather-rain-indoor",
       "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
       "pass": true,
-      "ms": 8792,
+      "ms": 8903,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -3056,7 +3054,7 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "meet_halfway · intent meet_halfway · you: \"Old Street\" · other person's place found · day 2026-10-30 · time 19:00 · category pub (rules)"
         },
         {
@@ -3068,25 +3066,25 @@
         {
           "id": "compare",
           "status": "done",
-          "ms": 2740,
+          "ms": 2873,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 20 min, her 19 min · next Tottenham Court Road (27/26)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6040,
+          "ms": 6017,
           "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 19:00 · 3 kept · weather: Rain likely at 19:00 (70%, 1.2 mm) → indoor/covered first (3 of 3 kept tagged indoor/covered in OSM)"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 127,
+          "ms": 111,
           "detail": "1 line: Northern Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 2,
+          "ms": 3,
           "detail": "Fri 30 Oct, 19:00: 11°C, 70% chance of rain (eval-injected)"
         },
         {
@@ -3101,7 +3099,7 @@
       "id": "weather-sun-terrace",
       "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
       "pass": true,
-      "ms": 6044,
+      "ms": 6048,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -3251,19 +3249,19 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 6,
+          "ms": 7,
           "detail": "2 of 2 places found · Read \"Clapham\" as Clapham Common · you: Old Street · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 15,
+          "ms": 13,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 20 min, her 19 min · next Tottenham Court Road (27/26)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6018,
+          "ms": 6022,
           "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 19:00 · 3 kept · weather: Dry and 21°C, sunny → terraces/beer gardens first (3 of 3 kept tagged outdoor in OSM)"
         },
         {
@@ -3275,13 +3273,13 @@
         {
           "id": "weather",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "Fri 30 Oct, 19:00: 21°C, 5% chance of rain (eval-injected)"
         },
         {
           "id": "verify",
           "status": "done",
-          "ms": 1,
+          "ms": 0,
           "detail": "21 facts checked · 0 dropped without a source · 5 sources with as-of times"
         }
       ]
@@ -3290,7 +3288,7 @@
       "id": "legs-segments-halfway",
       "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
       "pass": true,
-      "ms": 6048,
+      "ms": 6038,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -3467,38 +3465,38 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 1,
+          "ms": 0,
           "detail": "meet_halfway · intent meet_halfway · you: \"Old Street\" · other person's place found · day 2026-10-30 · time 19:00 · category pub (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 7,
+          "ms": 5,
           "detail": "2 of 2 places found · Read \"Clapham\" as Clapham Common · you: Old Street · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 13,
+          "ms": 14,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 20 min, her 19 min · next Tottenham Court Road (27/26)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6022,
-          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 19:00 · 3 kept · weather: 14°C, 10% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6014,
+          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 19:00 · 3 kept · weather: 14°C, 2% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "1 line: Northern Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 0,
-          "detail": "Fri 30 Oct, 19:00: 14°C, clear, 10% chance of rain"
+          "ms": 1,
+          "detail": "Fri 30 Oct, 19:00: 14°C, clear, 2% chance of rain"
         },
         {
           "id": "verify",
@@ -3512,7 +3510,7 @@
       "id": "no-phone-booth-museum",
       "query": "Free things to do near me tomorrow afternoon",
       "pass": true,
-      "ms": 7371,
+      "ms": 7450,
       "checks": [
         {
           "name": "intent = near_me",
@@ -3614,26 +3612,26 @@
         {
           "id": "weather",
           "status": "done",
-          "ms": 156,
+          "ms": 119,
           "detail": "Mon 26 Oct, 15:00: 15°C, light drizzle, 65% chance of rain"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6028,
+          "ms": 6022,
           "detail": "3 seed events that day · 3 within 8 km · 36 free-entry places within 2.5 km (OSM snapshot), 13 closed at 15:00"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 1142,
+          "ms": 1233,
           "detail": "9 journeys back · 8 within 30 min"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 187,
-          "detail": "73 Special Service, 91 Special Service, Metropolitan Severe Delays"
+          "ms": 184,
+          "detail": "73 Special Service, 91 Special Service, Metropolitan Good Service"
         },
         {
           "id": "verify",
@@ -3647,7 +3645,7 @@
       "id": "refine-8pm-quieter",
       "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
       "pass": true,
-      "ms": 15026,
+      "ms": 14415,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -3816,14 +3814,14 @@
         {
           "id": "compare",
           "status": "done",
-          "ms": 2899,
+          "ms": 2281,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 20 min, her 19 min · next Tottenham Court Road (25/26)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6045,
-          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 20:00 · 3 kept · weather: 14°C, 11% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6044,
+          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 20:00 · 3 kept · weather: 14°C, 3% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
@@ -3834,8 +3832,8 @@
         {
           "id": "weather",
           "status": "done",
-          "ms": 1,
-          "detail": "Fri 30 Oct, 20:00: 14°C, clear, 11% chance of rain"
+          "ms": 0,
+          "detail": "Fri 30 Oct, 20:00: 14°C, clear, 3% chance of rain"
         },
         {
           "id": "verify",
@@ -3849,7 +3847,7 @@
       "id": "refine-chain-cheaper",
       "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
       "pass": true,
-      "ms": 18165,
+      "ms": 18147,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -4009,14 +4007,14 @@
         {
           "id": "compare",
           "status": "done",
-          "ms": 14,
+          "ms": 15,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 20 min, her 19 min · next Tottenham Court Road (25/26)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6019,
-          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 20:00 · 3 kept · weather: 14°C, 11% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6016,
+          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 20:00 · 3 kept · weather: 14°C, 3% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
@@ -4028,7 +4026,7 @@
           "id": "weather",
           "status": "done",
           "ms": 0,
-          "detail": "Fri 30 Oct, 20:00: 14°C, clear, 11% chance of rain"
+          "detail": "Fri 30 Oct, 20:00: 14°C, clear, 3% chance of rain"
         },
         {
           "id": "verify",
@@ -4042,7 +4040,7 @@
       "id": "refine-near-me-terrace",
       "query": "pubs near me tonight",
       "pass": true,
-      "ms": 8592,
+      "ms": 14532,
       "checks": [
         {
           "name": "intent = near_me",
@@ -4168,7 +4166,7 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 0,
+          "ms": 2,
           "detail": "near_me · intent near_me · day 2026-10-25 · time 19:00 · category pub · refined: terrace (rules)"
         },
         {
@@ -4186,19 +4184,19 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6048,
+          "ms": 6051,
           "detail": "84 pubs within 1.2 km (OSM snapshot) · 10 closed at 19:00 · 1 closing within the hour dropped · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 874,
+          "ms": 945,
           "detail": "3 journeys back · 3 within 30 min"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 196,
+          "ms": 201,
           "detail": "141 Special Service, 21 Special Service"
         },
         {
@@ -4213,7 +4211,7 @@
       "id": "refine-closer-to-me",
       "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
       "pass": true,
-      "ms": 12095,
+      "ms": 12096,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -4363,13 +4361,13 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 4,
+          "ms": 3,
           "detail": "meet_halfway · intent meet_halfway · you: \"Old Street\" · other person's place found · day 2026-10-30 · time 19:00 · category pub · refined: closer_you (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 4,
+          "ms": 6,
           "detail": "2 of 2 places found · Read \"Clapham\" as Clapham Common · you: Old Street · their area rounded to ~500 m"
         },
         {
@@ -4381,20 +4379,20 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6018,
-          "detail": "85 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 19:00 · 3 kept · weather: 14°C, 2% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6021,
+          "detail": "85 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 19:00 · 3 kept · weather: 14°C, 10% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 218,
+          "ms": 220,
           "detail": "2 lines: 21 Special Service, Northern Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 1,
-          "detail": "Fri 30 Oct, 19:00: 14°C, clear, 2% chance of rain"
+          "ms": 2,
+          "detail": "Fri 30 Oct, 19:00: 14°C, clear, 10% chance of rain"
         },
         {
           "id": "verify",
@@ -4408,7 +4406,7 @@
       "id": "clock-tonight-past-default",
       "query": "pubs near me tonight",
       "pass": true,
-      "ms": 7112,
+      "ms": 7154,
       "checks": [
         {
           "name": "intent = near_me",
@@ -4547,7 +4545,7 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 1,
+          "ms": 0,
           "detail": "near_me · intent near_me · day 2026-10-25 · time 19:00 · category pub (rules)"
         },
         {
@@ -4565,19 +4563,19 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6024,
+          "ms": 6025,
           "detail": "84 pubs within 1.2 km (OSM snapshot) · 16 closed at 22:15 · 6 closing within the hour dropped · weather: 10°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 924,
+          "ms": 938,
           "detail": "3 journeys back · 3 within 30 min"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 159,
+          "ms": 185,
           "detail": "141 Special Service, 55 Special Service"
         },
         {
@@ -4592,7 +4590,7 @@
       "id": "clock-at-7-no-day-tomorrow",
       "query": "Drinks with Priya at 7, I'm at Old Street, she's at Clapham",
       "pass": true,
-      "ms": 9551,
+      "ms": 8379,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -4749,19 +4747,19 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "meet_halfway · intent meet_halfway · you: \"Old Street\" · other person's place found · time 19:00 · category pub (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 6,
+          "ms": 10,
           "detail": "2 of 2 places found · Read \"Clapham\" as Clapham Common · you: Old Street · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 3500,
+          "ms": 2320,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 20 min, her 19 min · next Tottenham Court Road (27/26)"
         },
         {
@@ -4773,19 +4771,19 @@
         {
           "id": "lines",
           "status": "done",
-          "ms": 2,
+          "ms": 0,
           "detail": "1 line: Northern Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 2,
+          "ms": 0,
           "detail": "Mon 26 Oct, 19:00: 16°C, partly cloudy, 0% chance of rain"
         },
         {
           "id": "verify",
           "status": "done",
-          "ms": 1,
+          "ms": 0,
           "detail": "21 facts checked · 0 dropped without a source · 5 sources with as-of times"
         }
       ]
@@ -4794,7 +4792,7 @@
       "id": "clock-tonight-at-7-next-slot",
       "query": "Drinks with Priya tonight at 7, I'm at Old Street, she's at Clapham",
       "pass": true,
-      "ms": 8848,
+      "ms": 8724,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -4958,19 +4956,19 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 7,
+          "ms": 6,
           "detail": "2 of 2 places found · Read \"Clapham\" as Clapham Common · you: Old Street · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 2796,
+          "ms": 2664,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 20 min, her 19 min · next Waterloo (22/23)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6039,
+          "ms": 6047,
           "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 7 closed at 22:15 · 3 closing within the hour dropped · 3 kept · weather: 10°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
@@ -4997,7 +4995,7 @@
       "id": "clock-late-tonight-2320",
       "query": "a drink near me tonight",
       "pass": true,
-      "ms": 7450,
+      "ms": 7105,
       "checks": [
         {
           "name": "intent = near_me",
@@ -5151,19 +5149,19 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6033,
+          "ms": 6030,
           "detail": "84 pubs within 1.2 km (OSM snapshot) · 22 closed at 23:45 · 3 closing within the hour dropped · weather: 9°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 1232,
+          "ms": 906,
           "detail": "3 journeys back · 3 within 30 min"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 179,
+          "ms": 162,
           "detail": "141 Special Service, 21 Special Service, 214 Good Service"
         },
         {
@@ -5352,7 +5350,7 @@
       "id": "hours-late-pubs-near-me",
       "query": "Pubs near Old Street tonight at 11:30pm",
       "pass": true,
-      "ms": 6942,
+      "ms": 6930,
       "checks": [
         {
           "name": "intent = near_me",
@@ -5557,25 +5555,25 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 4,
+          "ms": 3,
           "detail": "1 of 1 place found · you: Old Street"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 1,
+          "ms": 0,
           "detail": "Sun 25 Oct, 23:30: 9°C, overcast, 0% chance of rain"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6026,
+          "ms": 6033,
           "detail": "79 pubs within 1.2 km (OSM snapshot) · 21 closed at 23:30 · 3 closing within the hour dropped · weather: 9°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 904,
+          "ms": 887,
           "detail": "3 journeys back · 3 within 30 min"
         },
         {
@@ -5596,7 +5594,7 @@
       "id": "hours-late-halfway",
       "query": "Drinks tonight at 11pm. I'm at Old Street, she's around Clapham. A pub halfway.",
       "pass": true,
-      "ms": 8816,
+      "ms": 13878,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -5823,19 +5821,19 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 6,
+          "ms": 10,
           "detail": "2 of 2 places found · Read \"Clapham\" as Clapham Common · you: Old Street · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 2771,
+          "ms": 7827,
           "detail": "12 hubs compared (24 journeys) · Borough fairest: you 20 min, her 19 min · next Waterloo (22/22)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6035,
+          "ms": 6036,
           "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 10 closed at 23:00 · 3 kept · weather: 10°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
@@ -5847,7 +5845,7 @@
         {
           "id": "weather",
           "status": "done",
-          "ms": 2,
+          "ms": 3,
           "detail": "Sun 25 Oct, 23:00: 10°C, overcast, 0% chance of rain"
         },
         {
@@ -5862,7 +5860,7 @@
       "id": "solo-centre-answer",
       "query": "Let's meet tonight in the centre.",
       "pass": true,
-      "ms": 14749,
+      "ms": 17595,
       "checks": [
         {
           "name": "intent = near_me",
@@ -5965,7 +5963,7 @@
         }
       ],
       "unknowns": [
-        "Live Overpass HTTP 502; used the OSM snapshot from 2026-10-24.",
+        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
         "Museum of Freemasonry: opening hours not in OSM.",
         "Visionary BritMuseum: opening hours not in OSM.",
         "Hello Love: opening hours not in OSM.",
@@ -5976,7 +5974,7 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 5174,
+          "ms": 4059,
           "detail": "near_me · intent near_me · solo · central London → Leicester Square · day 2026-10-25 · time 19:00 · answer merged (rules)"
         },
         {
@@ -5988,25 +5986,25 @@
         {
           "id": "weather",
           "status": "done",
-          "ms": 499,
+          "ms": 503,
           "detail": "Sun 25 Oct, 19:00: 11°C, clear, 0% chance of rain"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 419,
+          "ms": 6055,
           "detail": "1 seed events that day · 1 within 8 km · 38 free-entry places within 2.5 km (OSM snapshot), 25 closed at 19:00"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 2943,
+          "ms": 1301,
           "detail": "7 journeys back · 6 within 30 min"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 195,
+          "ms": 156,
           "detail": "14 Special Service, 176 Good Service, 29 Good Service"
         },
         {
@@ -6021,7 +6019,7 @@
       "id": "solo-in-town-just-me",
       "query": "A pub in town tonight, just me",
       "pass": true,
-      "ms": 9127,
+      "ms": 7068,
       "checks": [
         {
           "name": "intent = near_me",
@@ -6200,13 +6198,13 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 1,
+          "ms": 0,
           "detail": "near_me · intent near_me · solo · central London → Leicester Square · day 2026-10-25 · time 19:00 · category pub (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 6,
+          "ms": 5,
           "detail": "1 of 1 place found · you: Leicester Square"
         },
         {
@@ -6218,13 +6216,13 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6063,
+          "ms": 6066,
           "detail": "255 pubs within 1.2 km (OSM snapshot) · 17 closed at 19:00 · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 3053,
+          "ms": 987,
           "detail": "3 journeys back · 3 within 30 min"
         },
         {
@@ -6245,7 +6243,7 @@
       "id": "journey-london-bridge-tcr",
       "query": "A pub halfway tonight at 8. I'm at London Bridge, they're near Tottenham Court Road.",
       "pass": true,
-      "ms": 3550,
+      "ms": 8536,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -6620,7 +6618,7 @@
         }
       ],
       "unknowns": [
-        "Live Overpass HTTP 502; used the OSM snapshot from 2026-10-24.",
+        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
         "Line status is as of now, not for the time of the plan.",
         "Prices: none of our sources lists them.",
         "How busy or noisy it'll be: no source has this."
@@ -6635,31 +6633,31 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 12,
+          "ms": 11,
           "detail": "2 of 2 places found · you: London Bridge · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 3005,
+          "ms": 2480,
           "detail": "12 hubs compared (24 journeys) · Waterloo fairest: you 17 min, them 20 min · next Bank (11/20)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 528,
-          "detail": "34 found within 500 m (OSM snapshot, live call HTTP) · 3 closed at 20:00 · 3 kept · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6041,
+          "detail": "34 found within 500 m (OSM snapshot, live call timeout) · 3 closed at 20:00 · 3 kept · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 122,
-          "detail": "2 lines: Jubilee Minor Delays, Northern Good Service"
+          "ms": 180,
+          "detail": "2 lines: Jubilee Good Service, Northern Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 495,
+          "ms": 518,
           "detail": "Sun 25 Oct, 20:00: 11°C, clear, 0% chance of rain"
         },
         {
@@ -6726,7 +6724,7 @@
       "id": "live-greenwich-ne-coffee",
       "query": "i wanna meet a friend for a coffe, i'm in greenwich and he lives in ne i dont know the precise position",
       "pass": true,
-      "ms": 16795,
+      "ms": 16303,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -7269,19 +7267,19 @@
         {
           "id": "compare",
           "status": "done",
-          "ms": 4707,
+          "ms": 4189,
           "detail": "12 hubs compared (24 journeys) · Bank fairest: you 35 min, him 38 min · next Liverpool Street (38/28)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 12069,
+          "ms": 12099,
           "detail": "72 found within 500 m (OSM snapshot, live call timeout) · 22 closed at 22:45 · 3 kept · weather: 10°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 200,
+          "ms": 175,
           "detail": "3 lines: 26 Special Service, DLR Good Service, Weaver Good Service"
         },
         {
@@ -7302,7 +7300,7 @@
       "id": "live-greenwich-open-italian",
       "query": "i wanna meet a friend for a coffe, i'm in greenwich and he lives in ne i dont know the precise position",
       "pass": true,
-      "ms": 244202,
+      "ms": 24288,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -7523,31 +7521,31 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 18,
+          "ms": 10,
           "detail": "2 of 2 places found · you: Greenwich · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 52,
+          "ms": 35,
           "detail": "12 hubs compared (24 journeys) · Bank fairest: you 35 min, him 38 min · next Liverpool Street (38/28)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 12074,
+          "ms": 12105,
           "detail": "72 found within 500 m (OSM snapshot, live call timeout) · 22 closed at 22:45 · 1 kept · weather: 10°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 231,
+          "ms": 0,
           "detail": "3 lines: 26 Special Service, DLR Good Service, Weaver Good Service"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 4,
+          "ms": 1,
           "detail": "Sun 25 Oct, 22:45: 10°C, mostly clear, 0% chance of rain"
         },
         {
@@ -7562,7 +7560,7 @@
       "id": "refine-is-it-open",
       "query": "pubs near me tonight",
       "pass": true,
-      "ms": 7146,
+      "ms": 6247,
       "checks": [
         {
           "name": "intent = near_me",
@@ -7783,7 +7781,7 @@
         {
           "id": "resolve",
           "status": "skipped",
-          "ms": 1,
+          "ms": 0,
           "detail": "No places named; using your location"
         },
         {
@@ -7795,19 +7793,19 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6028,
+          "ms": 6036,
           "detail": "84 pubs within 1.2 km (OSM snapshot) · 10 closed at 19:00 · 1 closing within the hour dropped · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 939,
+          "ms": 1,
           "detail": "3 journeys back · 3 within 30 min"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 169,
+          "ms": 199,
           "detail": "141 Special Service, 214 Good Service, 243 Good Service"
         },
         {
@@ -7828,7 +7826,7 @@
       "id": "refine-other-options",
       "query": "pubs near me tonight",
       "pass": true,
-      "ms": 12114,
+      "ms": 12117,
       "checks": [
         {
           "name": "intent = near_me",
@@ -7970,13 +7968,13 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6040,
+          "ms": 6050,
           "detail": "84 pubs within 1.2 km (OSM snapshot) · 10 closed at 19:00 · 1 closing within the hour dropped · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 5,
+          "ms": 1,
           "detail": "3 journeys back · 3 within 30 min"
         },
         {
@@ -7988,7 +7986,7 @@
         {
           "id": "verify",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "18 facts checked · 0 dropped without a source · 4 sources with as-of times"
         }
       ]
@@ -7997,7 +7995,7 @@
       "id": "refine-any-vegan-nearby",
       "query": "coffee near me",
       "pass": true,
-      "ms": 14107,
+      "ms": 22938,
       "checks": [
         {
           "name": "intent = near_me",
@@ -8143,7 +8141,7 @@
       ],
       "unknowns": [
         "No time given, so this is planned for about now (12:15pm).",
-        "Live Overpass HTTP 502; used the OSM snapshot from 2026-10-24.",
+        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
         "Line status is as of now, not for the time of the plan.",
         "How busy it'll be: no source has this."
       ],
@@ -8169,13 +8167,13 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6159,
+          "ms": 12073,
           "detail": "94 cafes within 1.2 km (OSM snapshot) · 13 closed at 12:15 · weather: Dry and 13°C, sunny → terraces/beer gardens first (3 of 3 kept tagged outdoor in OSM)"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 3,
+          "ms": 2,
           "detail": "3 journeys back · 3 within 30 min"
         },
         {
@@ -8196,7 +8194,7 @@
       "id": "refine-unclear-short-clarify",
       "query": "pubs near me tonight",
       "pass": true,
-      "ms": 12074,
+      "ms": 12107,
       "checks": [
         {
           "name": "intent = near_me",
@@ -8338,7 +8336,7 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6031,
+          "ms": 6028,
           "detail": "84 pubs within 1.2 km (OSM snapshot) · 10 closed at 19:00 · 1 closing within the hour dropped · weather: 11°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
@@ -8365,7 +8363,7 @@
       "id": "hours-late-coffee-near-me",
       "query": "coffee near Old Street at 22:30",
       "pass": true,
-      "ms": 7415,
+      "ms": 12569,
       "checks": [
         {
           "name": "intent = near_me",
@@ -8385,17 +8383,17 @@
         {
           "name": "≤3 cards",
           "pass": true,
-          "got": 3
+          "got": 2
         },
         {
           "name": "≥1 card",
           "pass": true,
-          "got": 3
+          "got": 2
         },
         {
           "name": "every fact has a source",
           "pass": true,
-          "got": 18
+          "got": 12
         },
         {
           "name": "every source has asOf",
@@ -8421,7 +8419,6 @@
           "pass": true,
           "got": [
             "walking>bus>walking",
-            "walking>bus>walking",
             "walking>bus>walking"
           ]
         },
@@ -8429,13 +8426,6 @@
           "name": "every card has openAtPlan/closesAt/closingSoon/hoursKnown",
           "pass": true,
           "got": [
-            {
-              "n": "Finsbury Square Garden",
-              "o": null,
-              "c": null,
-              "s": false,
-              "k": false
-            },
             {
               "n": "Polo Bar",
               "o": true,
@@ -8457,10 +8447,6 @@
           "pass": true,
           "got": [
             [
-              "Finsbury Square Garden",
-              null
-            ],
-            [
               "Polo Bar",
               true
             ],
@@ -8474,10 +8460,6 @@
           "name": "open ≥1 h after the plan time (closing-soon only as a fallback)",
           "pass": true,
           "got": [
-            [
-              "Finsbury Square Garden",
-              null
-            ],
             [
               "Polo Bar",
               null
@@ -8497,7 +8479,6 @@
           "name": "unknown-hours cards flagged hoursKnown=false",
           "pass": true,
           "got": [
-            false,
             true,
             true
           ]
@@ -8506,7 +8487,6 @@
           "name": "no card is closed at the plan time (OSM hours)",
           "pass": true,
           "got": [
-            "Hours not in OSM",
             "Open 24 hours · checked 2024-08-31",
             "Open 24 hours · checked 2023-05-24"
           ]
@@ -8515,16 +8495,14 @@
           "name": "closing-soon cards ranked last",
           "pass": true,
           "got": [
-            "Hours not in OSM",
             "Open 24 hours · checked 2024-08-31",
             "Open 24 hours · checked 2023-05-24"
           ]
         }
       ],
-      "headline": "3 cafes within 30 min of Old Street, Sun 25 Oct, 22:30.",
+      "headline": "2 cafes within 30 min of Old Street, Sun 25 Oct, 22:30.",
       "middle": null,
       "cards": [
-        "Finsbury Square Garden",
         "Polo Bar",
         "Smithfield Cafe"
       ],
@@ -8533,10 +8511,6 @@
       "unknownsTime": [],
       "when": "2026-10-25T22:30:00.000Z",
       "cardFacts": [
-        {
-          "name": "Finsbury Square Garden",
-          "weather": null
-        },
         {
           "name": "Polo Bar",
           "weather": null
@@ -8548,7 +8522,7 @@
       ],
       "unknowns": [
         "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
-        "Finsbury Square Garden: opening hours not in OSM.",
+        "1 option skipped: TfL journey time didn't come back.",
         "Line status is as of now, not for the time of the plan.",
         "How busy it'll be: no source has this."
       ],
@@ -8556,13 +8530,13 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 3,
+          "ms": 1,
           "detail": "near_me · intent near_me · time 22:30 · category cafe (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 4,
+          "ms": 5,
           "detail": "1 of 1 place found · you: Old Street"
         },
         {
@@ -8574,26 +8548,26 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 6033,
+          "ms": 6037,
           "detail": "87 cafes within 1.2 km (OSM snapshot) · 19 closed at 22:30 · weather: 10°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 966,
-          "detail": "3 journeys back · 3 within 30 min"
+          "ms": 6004,
+          "detail": "2 journeys back (1 failed) · 2 within 30 min"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 401,
-          "detail": "205 Good Service, 55 Special Service, 76 Special Service"
+          "ms": 518,
+          "detail": "205 Good Service, 55 Special Service"
         },
         {
           "id": "verify",
           "status": "done",
           "ms": 0,
-          "detail": "18 facts checked · 0 dropped without a source · 5 sources with as-of times"
+          "detail": "12 facts checked · 0 dropped without a source · 5 sources with as-of times"
         }
       ]
     },
@@ -8601,7 +8575,7 @@
       "id": "refine-focus-other-italian",
       "query": "i wanna meet a friend for a coffe, i'm in greenwich and he lives in ne i dont know the precise position",
       "pass": true,
-      "ms": 34955,
+      "ms": 30297,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -8798,13 +8772,13 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 1,
+          "ms": 2,
           "detail": "meet_halfway · intent meet_halfway · you: \"greenwich\" · other person's place found · their area approximate · category cafe · refined: cuisine (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 14,
+          "ms": 12,
           "detail": "2 of 2 places found · you: Greenwich · their area rounded to ~500 m"
         },
         {
@@ -8816,7 +8790,7 @@
         {
           "id": "venues",
           "status": "done",
-          "ms": 18065,
+          "ms": 18077,
           "detail": "77 found within 500 m (OSM snapshot, live call timeout) · 24 closed at 22:45 · 3 kept · weather: 10°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
@@ -8828,7 +8802,7 @@
         {
           "id": "weather",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "Sun 25 Oct, 22:45: 10°C, mostly clear, 0% chance of rain"
         },
         {
@@ -8843,7 +8817,7 @@
       "id": "refine-italian-only-matches",
       "query": "coffee near London Bridge station at 4pm on Saturday",
       "pass": true,
-      "ms": 20198,
+      "ms": 15591,
       "checks": [
         {
           "name": "intent = near_me",
@@ -8882,6 +8856,7 @@
             "Open-Meteo",
             "OSM snapshot",
             "TfL Journey Planner",
+            "TfL Line Status",
             "TfL station list"
           ]
         },
@@ -9013,38 +8988,38 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 6,
+          "ms": 5,
           "detail": "1 of 1 place found · you: London Bridge"
         },
         {
           "id": "weather",
           "status": "done",
           "ms": 0,
-          "detail": "Sat 31 Oct, 16:00: 11°C, partly cloudy, 8% chance of rain"
+          "detail": "Sat 31 Oct, 16:00: 11°C, partly cloudy, 15% chance of rain"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 6028,
-          "detail": "86 cafes within 1.2 km (OSM snapshot) · 11 closed at 16:00 · weather: 11°C, 8% rain - neither wet nor warm, venues not weather-ranked"
+          "ms": 6055,
+          "detail": "86 cafes within 1.2 km (OSM snapshot) · 11 closed at 16:00 · weather: 11°C, 15% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 1059,
+          "ms": 947,
           "detail": "2 journeys back · 2 within 30 min"
         },
         {
           "id": "lines",
-          "status": "failed",
-          "ms": 6001,
-          "detail": "Line status didn't load"
+          "status": "done",
+          "ms": 1517,
+          "detail": "381 Good Service"
         },
         {
           "id": "verify",
           "status": "done",
           "ms": 0,
-          "detail": "13 facts checked · 0 dropped without a source · 4 sources with as-of times"
+          "detail": "13 facts checked · 0 dropped without a source · 5 sources with as-of times"
         }
       ]
     },
@@ -9052,7 +9027,7 @@
       "id": "refine-open-keeps-plan",
       "query": "i wanna meet a friend for a coffe, i'm in greenwich and he lives in ne i dont know the precise position",
       "pass": true,
-      "ms": 12123,
+      "ms": 12128,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -9243,25 +9218,25 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 15,
+          "ms": 9,
           "detail": "2 of 2 places found · you: Greenwich · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 34,
+          "ms": 39,
           "detail": "12 hubs compared (24 journeys) · Bank fairest: you 35 min, him 38 min · next Liverpool Street (38/28)"
         },
         {
           "id": "venues",
           "status": "done",
-          "ms": 12055,
+          "ms": 12066,
           "detail": "72 found within 500 m (OSM snapshot, live call timeout) · 22 closed at 22:45 · 3 kept · weather: 10°C, 0% rain - neither wet nor warm, venues not weather-ranked"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 0,
+          "ms": 333,
           "detail": "3 lines: 26 Special Service, DLR Good Service, Weaver Good Service"
         },
         {
@@ -9401,7 +9376,7 @@
       "id": "dest-poster-event-solo",
       "query": "Get me to Jazz Night at The Vortex Jazz Club, 11 Gillett Square, N16 8AZ on Sat 31 Oct at 19:00",
       "pass": true,
-      "ms": 1950,
+      "ms": 4446,
       "checks": [
         {
           "name": "intent = near_me",
@@ -9586,31 +9561,31 @@
         {
           "id": "place",
           "status": "done",
-          "ms": 639,
+          "ms": 232,
           "detail": "The Vortex Jazz Club · postcode N16 8AZ centre · 11 Gillett Square, N16 8AZ · destination fixed, no middle search"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 1120,
+          "ms": 4004,
           "detail": "you 23 min · arriving by 19:00"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 121,
+          "ms": 103,
           "detail": "Sat 31 Oct, 19:00: 10°C, clear, 4% chance of rain"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 182,
+          "ms": 201,
           "detail": "1 line: 243 Good Service"
         },
         {
           "id": "verify",
           "status": "done",
-          "ms": 1,
+          "ms": 0,
           "detail": "7 facts checked · 0 dropped without a source · 4 sources with as-of times"
         }
       ]
@@ -9619,7 +9594,7 @@
       "id": "dest-poster-halfway",
       "query": "Meet halfway for Jazz Night at The Vortex Jazz Club, 11 Gillett Square, N16 8AZ on Fri 30 Oct at 18:00. i'm at old street and she's in clapham",
       "pass": true,
-      "ms": 1934,
+      "ms": 2330,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -9817,25 +9792,25 @@
         {
           "id": "place",
           "status": "done",
-          "ms": 80,
+          "ms": 168,
           "detail": "The Vortex Jazz Club · postcode N16 8AZ centre · 11 Gillett Square, N16 8AZ · destination fixed, no middle search"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 1467,
+          "ms": 1712,
           "detail": "you 24 min · her 46 min · arriving by 18:00"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 2,
+          "ms": 4,
           "detail": "Fri 30 Oct, 18:00: 14°C, clear, 2% chance of rain"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 376,
+          "ms": 436,
           "detail": "4 lines: 76 Special Service, Northern Good Service, Victoria Good Service, Windrush Good Service"
         },
         {
@@ -9850,7 +9825,7 @@
       "id": "dest-venue-from-station",
       "query": "how do I get to Tate Modern from Old Street tomorrow at 2pm",
       "pass": true,
-      "ms": 1722,
+      "ms": 2398,
       "checks": [
         {
           "name": "intent = near_me",
@@ -10001,37 +9976,37 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 5,
+          "ms": 7,
           "detail": "near_me · fixed destination (place) · intent near_me · you: \"Old Street\" · day 2026-10-26 · time 14:00 (rules)"
         },
         {
           "id": "resolve",
           "status": "done",
-          "ms": 3,
+          "ms": 4,
           "detail": "1 of 1 place found · you: Old Street"
         },
         {
           "id": "place",
           "status": "done",
-          "ms": 400,
+          "ms": 44,
           "detail": "Tate Modern · OSM snapshot name match · Bankside, SE1 9TG · destination fixed, no middle search"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 1123,
+          "ms": 1164,
           "detail": "you 34 min · arriving by 14:00"
         },
         {
           "id": "weather",
           "status": "done",
-          "ms": 32,
+          "ms": 116,
           "detail": "Mon 26 Oct, 14:00: 14°C, drizzle, 82% chance of rain"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 169,
+          "ms": 1155,
           "detail": "1 line: 21 Special Service"
         },
         {
@@ -10223,7 +10198,7 @@
           "name": "blurb: rewrite with invented numbers rejected → Wikipedia sentence",
           "pass": true,
           "got": {
-            "text": "The George Inn is a public house established in the medieval period on Borough High Street.",
+            "text": "The George Inn is a public house established in the medieval period on Borough High Street. It is the only surviving galleried coaching inn in London.",
             "source": {
               "name": "Wikipedia",
               "url": "https://en.wikipedia.org/wiki/George_Inn,_Southwark"
@@ -10265,7 +10240,7 @@
       "id": "dest-poster-clarify-origin",
       "query": "Get me to Encode London Hackathon at Encode Hub on Sat 23 Oct at 12:00-16:30 (Student ticket, sign-up needed)",
       "pass": true,
-      "ms": 6437,
+      "ms": 3934,
       "checks": [
         {
           "name": "intent = near_me",
@@ -10324,11 +10299,11 @@
           "name": "no back-to-back walk segments",
           "pass": true,
           "got": [
-            "walking>national-rail>bus>walking"
+            "walking>bus>overground>bus>walking"
           ]
         }
       ],
-      "headline": "Encode London Hackathon at Encode Hub was Fri 23 Oct, so it's already over. Getting there now: you 39 min.",
+      "headline": "Encode London Hackathon at Encode Hub was Fri 23 Oct, so it's already over. Getting there now: you 102 min.",
       "middle": null,
       "cards": [
         "Encode London Hackathon"
@@ -10337,7 +10312,7 @@
       "asked": [
         "my_location: Where are you? Share your location or name a station."
       ],
-      "when": "2026-10-25T00:00:00.000Z",
+      "when": "2026-10-25T01:15:00.000Z",
       "cardFacts": [
         {
           "name": "Encode London Hackathon",
@@ -10345,7 +10320,7 @@
         }
       ],
       "unknowns": [
-        "No time given, so this is planned for about now (1am).",
+        "No time given, so this is planned for about now (1:15am).",
         "Encode London Hackathon was Fri 23 Oct, so it's already over; the trip is planned for now in case you still want to go.",
         "Line status is as of now, not for the time of the plan.",
         "Encode London Hackathon: date, time and entry are as given (e.g. on the poster), not checked against a listing."
@@ -10360,32 +10335,32 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 4,
+          "ms": 3,
           "detail": "1 of 1 place found · you: Greenwich"
         },
         {
           "id": "place",
           "status": "done",
-          "ms": 36,
+          "ms": 38,
           "detail": "Encode Hub · Nominatim name match · 41 Pitfield Street, N1 6DA · destination fixed, no middle search"
         },
         {
           "id": "travel",
           "status": "done",
-          "ms": 1161,
-          "detail": "you 39 min · arriving by 01:00"
+          "ms": 3672,
+          "detail": "you 102 min · arriving by 01:15"
         },
         {
           "id": "weather",
           "status": "done",
           "ms": 1,
-          "detail": "Sun 25 Oct, 01:00: 12°C, drizzle, 88% chance of rain"
+          "detail": "Sun 25 Oct, 01:15: 12°C, overcast, 86% chance of rain"
         },
         {
           "id": "lines",
           "status": "done",
-          "ms": 5226,
-          "detail": "2 lines: 141 Special Service, Southeastern Special Service"
+          "ms": 208,
+          "detail": "3 lines: 188 Good Service, N205 Good Service, Windrush Good Service"
         },
         {
           "id": "verify",
@@ -10399,7 +10374,7 @@
       "id": "halfway-no-zero-middle",
       "query": "meet halfway for a drink tonight, I'm at Elephant and Castle and she's at Waterloo",
       "pass": true,
-      "ms": 19265,
+      "ms": 23222,
       "checks": [
         {
           "name": "intent = meet_halfway",
@@ -10507,7 +10482,6 @@
         }
       ],
       "unknowns": [
-        "TfL didn't return times for Liverpool Street, so that hub wasn't compared.",
         "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
         "Line status is as of now, not for the time of the plan.",
         "Prices: none of our sources lists them.",
@@ -10523,14 +10497,14 @@
         {
           "id": "resolve",
           "status": "done",
-          "ms": 10,
+          "ms": 11,
           "detail": "2 of 2 places found · you: Elephant & Castle · their area rounded to ~500 m"
         },
         {
           "id": "compare",
           "status": "done",
-          "ms": 13230,
-          "detail": "14 hubs compared (28 journeys; no TfL time for Liverpool Street) · Southwark fairest: you 11 min, her 14 min · next Kennington (9/18)"
+          "ms": 17188,
+          "detail": "14 hubs compared (28 journeys) · Southwark fairest: you 11 min, her 14 min · next Kennington (9/18)"
         },
         {
           "id": "venues",
@@ -10541,7 +10515,7 @@
         {
           "id": "lines",
           "status": "done",
-          "ms": 241,
+          "ms": 157,
           "detail": "2 lines: 381 Good Service, 63 Good Service"
         },
         {
@@ -10553,7 +10527,7 @@
         {
           "id": "verify",
           "status": "done",
-          "ms": 0,
+          "ms": 1,
           "detail": "18 facts checked · 0 dropped without a source · 5 sources with as-of times"
         }
       ]
@@ -10562,7 +10536,7 @@
       "id": "dest-unknown-place",
       "query": "Get me to Blorptastic Hall on Sat 31 Oct at 19:00",
       "pass": true,
-      "ms": 369,
+      "ms": 81,
       "checks": [
         {
           "name": "no clarify",
@@ -10610,19 +10584,19 @@
         {
           "id": "parse",
           "status": "done",
-          "ms": 4,
+          "ms": 5,
           "detail": "near_me · fixed destination (place) · day 2026-10-31 · time 19:00 · event upcoming (2026-10-31) (rules)"
         },
         {
           "id": "resolve",
           "status": "skipped",
-          "ms": 0,
+          "ms": 1,
           "detail": "No places named; using your location"
         },
         {
           "id": "place",
           "status": "failed",
-          "ms": 362,
+          "ms": 74,
           "detail": "No match in the OSM venues, Nominatim or a postcode"
         },
         {
@@ -10648,6 +10622,1637 @@
           "status": "done",
           "ms": 0,
           "detail": "0 facts checked · 0 dropped without a source · 1 sources with as-of times"
+        }
+      ]
+    },
+    {
+      "id": "server5-unit",
+      "query": "(unit) leave-time detection, multi-day event dates, blurb entity match + no address",
+      "pass": true,
+      "ms": 0,
+      "checks": [
+        {
+          "name": "leave question: \"a what time i need to leave form my hose?\"",
+          "pass": true,
+          "got": "a what time i need to leave form my hose?"
+        },
+        {
+          "name": "leave question: \"how early should I set off?\"",
+          "pass": true,
+          "got": "how early should I set off?"
+        },
+        {
+          "name": "leave question: \"what time do we need to leave to get there on time?\"",
+          "pass": true,
+          "got": "what time do we need to leave to get there on time?"
+        },
+        {
+          "name": "leave question: \"arrive by 11:30\"",
+          "pass": true,
+          "got": "arrive by 11:30"
+        },
+        {
+          "name": "leave question: \"and if I want to arrive at 11:30?\"",
+          "pass": true,
+          "got": "and if I want to arrive at 11:30?"
+        },
+        {
+          "name": "leave question: \"wat tim shoud i leve tomorow\"",
+          "pass": true,
+          "got": "wat tim shoud i leve tomorow"
+        },
+        {
+          "name": "leave question: \"when should i head out\"",
+          "pass": true,
+          "got": "when should i head out"
+        },
+        {
+          "name": "not a leave question: \"closer to me\"",
+          "pass": true,
+          "got": "closer to me"
+        },
+        {
+          "name": "not a leave question: \"is it open?\"",
+          "pass": true,
+          "got": "is it open?"
+        },
+        {
+          "name": "not a leave question: \"a pub instead\"",
+          "pass": true,
+          "got": "a pub instead"
+        },
+        {
+          "name": "not a leave question: \"make it 8pm somewhere quieter\"",
+          "pass": true,
+          "got": "make it 8pm somewhere quieter"
+        },
+        {
+          "name": "not a leave question: \"cheaper\"",
+          "pass": true,
+          "got": "cheaper"
+        },
+        {
+          "name": "not a leave question: \"other options?\"",
+          "pass": true,
+          "got": "other options?"
+        },
+        {
+          "name": "not a leave question: \"any italian coffee nearby?\"",
+          "pass": true,
+          "got": "any italian coffee nearby?"
+        },
+        {
+          "name": "arrive at 11:30 near a noon plan → 11:30; near a 19:00 plan '7:30' → 19:30; '9am' → 09:00",
+          "pass": true,
+          "got": [
+            "11:30",
+            "19:30"
+          ]
+        },
+        {
+          "name": "stated origin: 'from greenwich' → Greenwich; 'from my house' → none",
+          "pass": true,
+          "got": {
+            "name": "Greenwich",
+            "location": {
+              "lat": 51.478087,
+              "lng": -0.013673
+            }
+          }
+        },
+        {
+          "name": "leave questions are not refinements (plan unchanged on replan)",
+          "pass": true,
+          "got": {
+            "base": "pubs near me tonight",
+            "refinements": [
+              "cheaper"
+            ]
+          }
+        },
+        {
+          "name": "Luma 'October 23, 12:00 PM – Oct 25, 4:30 PM' → ongoing until 25 Oct",
+          "pass": true,
+          "got": {
+            "start": "2026-10-23",
+            "end": "2026-10-25",
+            "status": "ongoing"
+          }
+        },
+        {
+          "name": "'23–25 Oct' → 23rd to 25th",
+          "pass": true,
+          "got": {
+            "start": "2026-10-23",
+            "end": "2026-10-25",
+            "status": "ongoing"
+          }
+        },
+        {
+          "name": "start date only and past → over",
+          "pass": true,
+          "got": {
+            "start": "2026-10-23",
+            "end": null,
+            "status": "past"
+          }
+        },
+        {
+          "name": "Luma time range → endTime 16:30",
+          "pass": true,
+          "got": "16:30"
+        },
+        {
+          "name": "poster: endDate recovered from the printed date line",
+          "pass": true,
+          "got": "2026-10-25"
+        },
+        {
+          "name": "wiki: a Thai restaurant article doesn't fit a pub of another name",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "wiki: a footballer / station article doesn't fit a pub",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "wiki: the pub's own article fits",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "rewrite with an address or 'located at' is rejected; postcodes in facts don't block a clean one",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "fallback never restates the address: name+address → template with OSM facts",
+          "pass": true,
+          "got": "A local pub near Waterloo, with thai food."
+        }
+      ]
+    },
+    {
+      "id": "leave-time-typo-goto",
+      "query": "how do I get to Tate Modern from Old Street tomorrow at 2pm",
+      "pass": true,
+      "ms": 51,
+      "checks": [
+        {
+          "name": "intent = near_me",
+          "pass": true,
+          "got": "near_me"
+        },
+        {
+          "name": "no clarify",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "no '[…]' placeholder in any output string",
+          "pass": true,
+          "got": []
+        },
+        {
+          "name": "≤3 cards",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "≥1 card",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "every fact has a source",
+          "pass": true,
+          "got": 6
+        },
+        {
+          "name": "every source has asOf",
+          "pass": true,
+          "got": [
+            "Open-Meteo",
+            "OSM snapshot",
+            "TfL Journey Planner",
+            "TfL Line Status",
+            "TfL station list"
+          ]
+        },
+        {
+          "name": "leaveBy: arriveBy + date set",
+          "pass": true,
+          "got": {
+            "arriveBy": "14:00",
+            "date": "2026-10-26",
+            "you": "13:20"
+          }
+        },
+        {
+          "name": "leaveBy.arriveBy = 14:00",
+          "pass": true,
+          "got": "14:00"
+        },
+        {
+          "name": "leaveBy.you is HH:MM before arriveBy",
+          "pass": true,
+          "got": "13:20"
+        },
+        {
+          "name": "reply is one sentence",
+          "pass": true,
+          "got": "Leave by 13:20 to arrive at 14:00 (Mon 26 Oct): 5 min walk, then Bus 21 from City Road / Leonard Street to Bank, 34 min, so add a few minutes' buffer."
+        },
+        {
+          "name": "reply matches /^Leave by \\d\\d:\\d\\d to arrive at 14:00/i",
+          "pass": true,
+          "got": "Leave by 13:20 to arrive at 14:00 (Mon 26 Oct): 5 min walk, then Bus 21 from City Road / Leonard Street to Bank, 34 min, so add a few minutes' buffer."
+        },
+        {
+          "name": "reply avoids /Not sure what to change/i",
+          "pass": true,
+          "got": "Leave by 13:20 to arrive at 14:00 (Mon 26 Oct): 5 min walk, then Bus 21 from City Road / Leonard Street to Bank, 34 min, so add a few minutes' buffer."
+        },
+        {
+          "name": "query accumulates every refinement",
+          "pass": true,
+          "got": "how do I get to Tate Modern from Old Street tomorrow at 2pm; refine: a what time i need to leave form my hose"
+        },
+        {
+          "name": "draftMessage short, no TfL status",
+          "pass": true,
+          "got": "Tate Modern, Bankside, SE1 9TG tomorrow at 2pm https://www.tate.org.uk/visit/tate-modern"
+        },
+        {
+          "name": "no back-to-back walk segments",
+          "pass": true,
+          "got": [
+            "walking>bus>walking"
+          ]
+        },
+        {
+          "name": "same plan: cards and middle unchanged",
+          "pass": true,
+          "got": {
+            "before": [
+              "osm-way-24642569"
+            ],
+            "after": [
+              "osm-way-24642569"
+            ]
+          }
+        }
+      ],
+      "headline": "Tate Modern, Mon 26 Oct, 14:00: you 34 min.",
+      "middle": null,
+      "cards": [
+        "Tate Modern"
+      ],
+      "clarify": null,
+      "refines": [
+        "a what time i need to leave form my hose?"
+      ],
+      "reply": "Leave by 13:20 to arrive at 14:00 (Mon 26 Oct): 5 min walk, then Bus 21 from City Road / Leonard Street to Bank, 34 min, so add a few minutes' buffer.",
+      "accumulated": "how do I get to Tate Modern from Old Street tomorrow at 2pm; refine: a what time i need to leave form my hose",
+      "when": "2026-10-26T14:00:00.000Z",
+      "cardFacts": [
+        {
+          "name": "Tate Modern",
+          "weather": null
+        }
+      ],
+      "unknowns": [
+        "Line status is as of now, not for the time of the plan."
+      ],
+      "steps": [
+        {
+          "id": "parse",
+          "status": "done",
+          "ms": 4,
+          "detail": "near_me · fixed destination (place) · intent near_me · you: \"Old Street\" · day 2026-10-26 · time 14:00 (rules)"
+        },
+        {
+          "id": "resolve",
+          "status": "done",
+          "ms": 3,
+          "detail": "1 of 1 place found · you: Old Street"
+        },
+        {
+          "id": "place",
+          "status": "done",
+          "ms": 35,
+          "detail": "Tate Modern · OSM snapshot name match · Bankside, SE1 9TG · destination fixed, no middle search"
+        },
+        {
+          "id": "travel",
+          "status": "done",
+          "ms": 1,
+          "detail": "you 34 min · arriving by 14:00"
+        },
+        {
+          "id": "weather",
+          "status": "done",
+          "ms": 1,
+          "detail": "Mon 26 Oct, 14:00: 14°C, drizzle, 82% chance of rain"
+        },
+        {
+          "id": "lines",
+          "status": "done",
+          "ms": 0,
+          "detail": "1 line: 21 Special Service"
+        },
+        {
+          "id": "verify",
+          "status": "done",
+          "ms": 0,
+          "detail": "6 facts checked · 0 dropped without a source · 5 sources with as-of times"
+        },
+        {
+          "id": "refine",
+          "status": "done",
+          "ms": 3,
+          "detail": "TfL Journey Planner, arriving 14:00 Mon 26 Oct · you leave 13:20 · plan unchanged"
+        }
+      ]
+    },
+    {
+      "id": "leave-time-arrive-at",
+      "query": "how do I get to Tate Modern from Old Street tomorrow at 2pm",
+      "pass": true,
+      "ms": 1643,
+      "checks": [
+        {
+          "name": "intent = near_me",
+          "pass": true,
+          "got": "near_me"
+        },
+        {
+          "name": "no clarify",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "no '[…]' placeholder in any output string",
+          "pass": true,
+          "got": []
+        },
+        {
+          "name": "≤3 cards",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "≥1 card",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "every fact has a source",
+          "pass": true,
+          "got": 6
+        },
+        {
+          "name": "every source has asOf",
+          "pass": true,
+          "got": [
+            "Open-Meteo",
+            "OSM snapshot",
+            "TfL Journey Planner",
+            "TfL Line Status",
+            "TfL station list"
+          ]
+        },
+        {
+          "name": "leaveBy: arriveBy + date set",
+          "pass": true,
+          "got": {
+            "arriveBy": "13:30",
+            "date": "2026-10-26",
+            "you": "12:53"
+          }
+        },
+        {
+          "name": "leaveBy.arriveBy = 13:30",
+          "pass": true,
+          "got": "13:30"
+        },
+        {
+          "name": "leaveBy.you is HH:MM before arriveBy",
+          "pass": true,
+          "got": "12:53"
+        },
+        {
+          "name": "reply is one sentence",
+          "pass": true,
+          "got": "Leave by 12:53 to arrive at 13:30 (Mon 26 Oct): 8 min walk, then Northern line from Old Street to Borough, 34 min, so add a few minutes' buffer."
+        },
+        {
+          "name": "reply matches /Leave by \\d\\d:\\d\\d to arrive at 13:30/i",
+          "pass": true,
+          "got": "Leave by 12:53 to arrive at 13:30 (Mon 26 Oct): 8 min walk, then Northern line from Old Street to Borough, 34 min, so add a few minutes' buffer."
+        },
+        {
+          "name": "query accumulates every refinement",
+          "pass": true,
+          "got": "how do I get to Tate Modern from Old Street tomorrow at 2pm; refine: and if I want to arrive at 1:30"
+        },
+        {
+          "name": "draftMessage short, no TfL status",
+          "pass": true,
+          "got": "Tate Modern, Bankside, SE1 9TG tomorrow at 2pm https://www.tate.org.uk/visit/tate-modern"
+        },
+        {
+          "name": "no back-to-back walk segments",
+          "pass": true,
+          "got": [
+            "walking>bus>walking"
+          ]
+        },
+        {
+          "name": "same plan: cards and middle unchanged",
+          "pass": true,
+          "got": {
+            "before": [
+              "osm-way-24642569"
+            ],
+            "after": [
+              "osm-way-24642569"
+            ]
+          }
+        }
+      ],
+      "headline": "Tate Modern, Mon 26 Oct, 14:00: you 34 min.",
+      "middle": null,
+      "cards": [
+        "Tate Modern"
+      ],
+      "clarify": null,
+      "refines": [
+        "and if I want to arrive at 1:30?"
+      ],
+      "reply": "Leave by 12:53 to arrive at 13:30 (Mon 26 Oct): 8 min walk, then Northern line from Old Street to Borough, 34 min, so add a few minutes' buffer.",
+      "accumulated": "how do I get to Tate Modern from Old Street tomorrow at 2pm; refine: and if I want to arrive at 1:30",
+      "when": "2026-10-26T14:00:00.000Z",
+      "cardFacts": [
+        {
+          "name": "Tate Modern",
+          "weather": null
+        }
+      ],
+      "unknowns": [
+        "Line status is as of now, not for the time of the plan."
+      ],
+      "steps": [
+        {
+          "id": "parse",
+          "status": "done",
+          "ms": 3,
+          "detail": "near_me · fixed destination (place) · intent near_me · you: \"Old Street\" · day 2026-10-26 · time 14:00 (rules)"
+        },
+        {
+          "id": "resolve",
+          "status": "done",
+          "ms": 2,
+          "detail": "1 of 1 place found · you: Old Street"
+        },
+        {
+          "id": "place",
+          "status": "done",
+          "ms": 39,
+          "detail": "Tate Modern · OSM snapshot name match · Bankside, SE1 9TG · destination fixed, no middle search"
+        },
+        {
+          "id": "travel",
+          "status": "done",
+          "ms": 1,
+          "detail": "you 34 min · arriving by 14:00"
+        },
+        {
+          "id": "weather",
+          "status": "done",
+          "ms": 1,
+          "detail": "Mon 26 Oct, 14:00: 14°C, drizzle, 82% chance of rain"
+        },
+        {
+          "id": "lines",
+          "status": "done",
+          "ms": 0,
+          "detail": "1 line: 21 Special Service"
+        },
+        {
+          "id": "verify",
+          "status": "done",
+          "ms": 0,
+          "detail": "6 facts checked · 0 dropped without a source · 5 sources with as-of times"
+        },
+        {
+          "id": "refine",
+          "status": "done",
+          "ms": 1590,
+          "detail": "TfL Journey Planner, arriving 13:30 Mon 26 Oct · you leave 12:53 · plan unchanged"
+        }
+      ]
+    },
+    {
+      "id": "leave-time-halfway-both",
+      "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
+      "pass": true,
+      "ms": 21865,
+      "checks": [
+        {
+          "name": "intent = meet_halfway",
+          "pass": true,
+          "got": "meet_halfway"
+        },
+        {
+          "name": "no clarify",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "no '[…]' placeholder in any output string",
+          "pass": true,
+          "got": []
+        },
+        {
+          "name": "≤3 cards",
+          "pass": true,
+          "got": 3
+        },
+        {
+          "name": "≥1 card",
+          "pass": true,
+          "got": 3
+        },
+        {
+          "name": "every fact has a source",
+          "pass": true,
+          "got": 18
+        },
+        {
+          "name": "every source has asOf",
+          "pass": true,
+          "got": [
+            "Open-Meteo",
+            "OSM snapshot",
+            "TfL Journey Planner",
+            "TfL Line Status",
+            "TfL station list"
+          ]
+        },
+        {
+          "name": "cards have legs for you and them",
+          "pass": true
+        },
+        {
+          "name": "≥1 card",
+          "pass": true,
+          "got": 3
+        },
+        {
+          "name": "draftMessage has no 'them' area",
+          "pass": true,
+          "got": "Hey! Fancy a drink Fri 30 Oct at 7pm? How about The Royal Oak, 44 Tabard Street, SE1 (near Borough station)? It's about 19 min for you 🙂 https://www.royaloaklondon.co.uk/"
+        },
+        {
+          "name": "them is rounded to an area (radius ≥ 500 m)",
+          "pass": true
+        },
+        {
+          "name": "leaveBy: arriveBy + date set",
+          "pass": true,
+          "got": {
+            "arriveBy": "19:00",
+            "date": "2026-10-30",
+            "you": "18:35",
+            "them": "18:30"
+          }
+        },
+        {
+          "name": "leaveBy.arriveBy = 19:00",
+          "pass": true,
+          "got": "19:00"
+        },
+        {
+          "name": "leaveBy.you is HH:MM before arriveBy",
+          "pass": true,
+          "got": "18:35"
+        },
+        {
+          "name": "leaveBy.them is HH:MM before arriveBy",
+          "pass": true,
+          "got": "18:30"
+        },
+        {
+          "name": "reply is one sentence",
+          "pass": true,
+          "got": "You: leave by 18:35 (Northern line, 22 min); her: leave by 18:30 (25 min), to arrive at The Royal Oak by 19:00 (Fri 30 Oct), so add a few minutes' buffer."
+        },
+        {
+          "name": "reply matches /You: leave by \\d\\d:\\d\\d/i",
+          "pass": true,
+          "got": "You: leave by 18:35 (Northern line, 22 min); her: leave by 18:30 (25 min), to arrive at The Royal Oak by 19:00 (Fri 30 Oct), so add a few minutes' buffer."
+        },
+        {
+          "name": "reply matches /her: leave by \\d\\d:\\d\\d/i",
+          "pass": true,
+          "got": "You: leave by 18:35 (Northern line, 22 min); her: leave by 18:30 (25 min), to arrive at The Royal Oak by 19:00 (Fri 30 Oct), so add a few minutes' buffer."
+        },
+        {
+          "name": "query accumulates every refinement",
+          "pass": true,
+          "got": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham; refine: what time do we need to leave to get there on time"
+        },
+        {
+          "name": "reply has no 'them' area",
+          "pass": true,
+          "got": "You: leave by 18:35 (Northern line, 22 min); her: leave by 18:30 (25 min), to arrive at The Royal Oak by 19:00 (Fri 30 Oct), so add a few minutes' buffer."
+        },
+        {
+          "name": "draftMessage short, no TfL status",
+          "pass": true,
+          "got": "Hey! Fancy a drink Fri 30 Oct at 7pm? How about The Royal Oak, 44 Tabard Street, SE1 (near Borough station)? It's about 19 min for you 🙂 https://www.royaloaklondon.co.uk/"
+        },
+        {
+          "name": "no back-to-back walk segments",
+          "pass": true,
+          "got": [
+            "walking>tube>walking",
+            "walking>tube>walking",
+            "walking>tube>walking",
+            "walking>tube>walking",
+            "walking>tube>walking",
+            "walking>tube>walking"
+          ]
+        },
+        {
+          "name": "same plan: cards and middle unchanged",
+          "pass": true,
+          "got": {
+            "before": [
+              "osm-way-100614943",
+              "osm-node-347412853",
+              "osm-node-534961998"
+            ],
+            "after": [
+              "osm-way-100614943",
+              "osm-node-347412853",
+              "osm-node-534961998"
+            ]
+          }
+        }
+      ],
+      "headline": "Borough is the fair middle: you 20 min, her 19.",
+      "middle": "Borough",
+      "cards": [
+        "The Royal Oak",
+        "Belushi's London Bridge",
+        "The Boot And Flogger Wine Bar"
+      ],
+      "clarify": null,
+      "refines": [
+        "what time do we need to leave to get there on time?"
+      ],
+      "reply": "You: leave by 18:35 (Northern line, 22 min); her: leave by 18:30 (25 min), to arrive at The Royal Oak by 19:00 (Fri 30 Oct), so add a few minutes' buffer.",
+      "accumulated": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham; refine: what time do we need to leave to get there on time",
+      "when": "2026-10-30T19:00:00.000Z",
+      "cardFacts": [
+        {
+          "name": "The Royal Oak",
+          "weather": null
+        },
+        {
+          "name": "Belushi's London Bridge",
+          "weather": null
+        },
+        {
+          "name": "The Boot And Flogger Wine Bar",
+          "weather": null
+        }
+      ],
+      "unknowns": [
+        "TfL didn't return times for Elephant & Castle, so that hub wasn't compared.",
+        "Live Overpass timeout; used the OSM snapshot from 2026-10-24.",
+        "Line status is as of now, not for the time of the plan.",
+        "Prices: none of our sources lists them.",
+        "How busy or noisy it'll be: no source has this."
+      ],
+      "steps": [
+        {
+          "id": "parse",
+          "status": "done",
+          "ms": 1,
+          "detail": "meet_halfway · intent meet_halfway · you: \"Old Street\" · other person's place found · day 2026-10-30 · time 19:00 · category pub (rules)"
+        },
+        {
+          "id": "resolve",
+          "status": "done",
+          "ms": 6,
+          "detail": "2 of 2 places found · Read \"Clapham\" as Clapham Common · you: Old Street · their area rounded to ~500 m"
+        },
+        {
+          "id": "compare",
+          "status": "done",
+          "ms": 14838,
+          "detail": "12 hubs compared (24 journeys; no TfL time for Elephant & Castle) · Borough fairest: you 20 min, her 19 min · next Tottenham Court Road (27/26)"
+        },
+        {
+          "id": "venues",
+          "status": "done",
+          "ms": 6048,
+          "detail": "39 found within 500 m (OSM snapshot, live call timeout) · 0 closed at 19:00 · 3 kept · weather: 14°C, 2% rain - neither wet nor warm, venues not weather-ranked"
+        },
+        {
+          "id": "lines",
+          "status": "done",
+          "ms": 151,
+          "detail": "1 line: Northern Good Service"
+        },
+        {
+          "id": "weather",
+          "status": "done",
+          "ms": 3,
+          "detail": "Fri 30 Oct, 19:00: 14°C, clear, 2% chance of rain"
+        },
+        {
+          "id": "verify",
+          "status": "done",
+          "ms": 0,
+          "detail": "18 facts checked · 0 dropped without a source · 5 sources with as-of times"
+        },
+        {
+          "id": "refine",
+          "status": "done",
+          "ms": 964,
+          "detail": "TfL Journey Planner, arriving 19:00 Fri 30 Oct · you leave 18:35 · her leaves 18:30 · plan unchanged"
+        }
+      ]
+    },
+    {
+      "id": "dest-luma-multiday-ongoing",
+      "query": "Get me to Encode London Hackathon at Encode Hub on Friday, October 23, 12:00 PM – Oct 25, 4:30 PM (Student ticket, sign-up needed)",
+      "pass": true,
+      "ms": 5012,
+      "checks": [
+        {
+          "name": "intent = near_me",
+          "pass": true,
+          "got": "near_me"
+        },
+        {
+          "name": "no clarify",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "clarify never repeats",
+          "pass": true,
+          "got": [
+            "my_location: Where are you? Share your location or name a station."
+          ]
+        },
+        {
+          "name": "1 clarify step(s)",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "no '[…]' placeholder in any output string",
+          "pass": true,
+          "got": []
+        },
+        {
+          "name": "≤3 cards",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "≥1 card",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "every fact has a source",
+          "pass": true,
+          "got": 7
+        },
+        {
+          "name": "every source has asOf",
+          "pass": true,
+          "got": [
+            "Open-Meteo",
+            "OSM Nominatim",
+            "TfL Journey Planner",
+            "TfL Line Status",
+            "TfL station list"
+          ]
+        },
+        {
+          "name": "no back-to-back walk segments",
+          "pass": true,
+          "got": [
+            "walking>dlr>tube>walking"
+          ]
+        },
+        {
+          "name": "fixed destination: no middle / hub search",
+          "pass": true,
+          "got": {
+            "steps": [
+              "parse",
+              "resolve",
+              "place",
+              "travel",
+              "weather",
+              "lines",
+              "verify"
+            ]
+          }
+        },
+        {
+          "name": "one card: the place named",
+          "pass": true,
+          "got": [
+            "Encode London Hackathon"
+          ]
+        },
+        {
+          "name": "card kind = event",
+          "pass": true,
+          "got": "event"
+        },
+        {
+          "name": "card has a 'When' fact",
+          "pass": true,
+          "got": [
+            "When",
+            "Travel",
+            "Lines",
+            "Weather",
+            "Price",
+            "Sign-up",
+            "Step-free"
+          ]
+        },
+        {
+          "name": "1 leg(s)",
+          "pass": true,
+          "got": [
+            "you"
+          ]
+        },
+        {
+          "name": "headline matches /on now/i",
+          "pass": true,
+          "got": "Encode London Hackathon at Encode Hub, Sun 25 Oct, 12:00 (on now): you 48 min."
+        }
+      ],
+      "headline": "Encode London Hackathon at Encode Hub, Sun 25 Oct, 12:00 (on now): you 48 min.",
+      "middle": null,
+      "cards": [
+        "Encode London Hackathon"
+      ],
+      "clarify": null,
+      "asked": [
+        "my_location: Where are you? Share your location or name a station."
+      ],
+      "when": "2026-10-25T12:00:00.000Z",
+      "cardFacts": [
+        {
+          "name": "Encode London Hackathon",
+          "weather": null
+        }
+      ],
+      "unknowns": [
+        "Encode London Hackathon runs until Sun 25 Oct 16:30, so this is planned for today.",
+        "Line status is as of now, not for the time of the plan.",
+        "Encode London Hackathon: date, time and entry are as given (e.g. on the poster), not checked against a listing."
+      ],
+      "steps": [
+        {
+          "id": "parse",
+          "status": "done",
+          "ms": 4,
+          "detail": "near_me · fixed destination (event) · intent near_me · your place from your answer · day 2027-10-23 · time 12:00 · event ongoing (2026-10-23→2026-10-25) (rules)"
+        },
+        {
+          "id": "resolve",
+          "status": "done",
+          "ms": 3,
+          "detail": "1 of 1 place found · you: Greenwich"
+        },
+        {
+          "id": "place",
+          "status": "done",
+          "ms": 68,
+          "detail": "Encode Hub · Nominatim name match · 41 Pitfield Street, N1 6DA · destination fixed, no middle search"
+        },
+        {
+          "id": "travel",
+          "status": "done",
+          "ms": 1430,
+          "detail": "you 48 min · arriving by 12:00"
+        },
+        {
+          "id": "weather",
+          "status": "done",
+          "ms": 1,
+          "detail": "Sun 25 Oct, 12:00: 13°C, clear, 0% chance of rain"
+        },
+        {
+          "id": "lines",
+          "status": "done",
+          "ms": 3492,
+          "detail": "2 lines: DLR Good Service, Northern Good Service"
+        },
+        {
+          "id": "verify",
+          "status": "done",
+          "ms": 0,
+          "detail": "7 facts checked · 0 dropped without a source · 5 sources with as-of times"
+        }
+      ]
+    },
+    {
+      "id": "snap-kings-arms-near",
+      "query": "(unit) place-snap: sign 'THE KINGS ARMS' 150 m from Roupell St",
+      "pass": true,
+      "ms": 0,
+      "checks": [
+        {
+          "name": "HTTP 200",
+          "pass": true,
+          "got": 200
+        },
+        {
+          "name": "extracted echoed",
+          "pass": true,
+          "got": {
+            "name": "THE KINGS ARMS",
+            "kind": "pub",
+            "signText": "THE KINGS ARMS",
+            "cuisine": null,
+            "confidence": 0.9,
+            "vibe": {
+              "tags": [
+                "hanging baskets",
+                "corner pub"
+              ],
+              "line": "Victorian corner pub with hanging baskets on a terraced street"
+            }
+          }
+        },
+        {
+          "name": "model reported",
+          "pass": true,
+          "got": "test-fixture"
+        },
+        {
+          "name": "your coordinates are not echoed",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "place = The Kings Arms",
+          "pass": true,
+          "got": "The Kings Arms"
+        },
+        {
+          "name": "card shape: id, lat/lng, address, area, hours fields, photoQuery",
+          "pass": true,
+          "got": {
+            "openAtPlan": false,
+            "closesAt": null,
+            "opensAt": "11:00",
+            "hoursKnown": true
+          }
+        },
+        {
+          "name": "blurb doesn't restate the address",
+          "pass": true,
+          "got": "A Victorian corner pub on a terraced street, with hanging baskets and Thai food. It's a great spot for a relaxed catch-up."
+        },
+        {
+          "name": "vibe kept; blurb using it is labelled 'your photo', no ratings",
+          "pass": true,
+          "got": {
+            "text": "A Victorian corner pub on a terraced street, with hanging baskets and Thai food. It's a great spot for a relaxed catch-up.",
+            "bestFor": "Best for a relaxed catch-up",
+            "source": {
+              "name": "Wikipedia + your photo",
+              "url": "https://en.wikipedia.org/wiki/King's_Arms%2C_Waterloo"
+            },
+            "fromPhoto": true
+          }
+        },
+        {
+          "name": "suggestedQuery = \"Meet at The Kings Arms\"",
+          "pass": true,
+          "got": "Meet at The Kings Arms"
+        }
+      ]
+    },
+    {
+      "id": "snap-kings-arms-which-area",
+      "query": "(unit) place-snap: 'King's Arms' with no location",
+      "pass": true,
+      "ms": 0,
+      "checks": [
+        {
+          "name": "HTTP 200",
+          "pass": true,
+          "got": 200
+        },
+        {
+          "name": "extracted echoed",
+          "pass": true,
+          "got": {
+            "name": "King's Arms",
+            "kind": "pub",
+            "signText": "KING'S ARMS",
+            "cuisine": null,
+            "confidence": 0.9,
+            "vibe": null
+          }
+        },
+        {
+          "name": "model reported",
+          "pass": true,
+          "got": "test-fixture"
+        },
+        {
+          "name": "no place when unsure",
+          "pass": true
+        },
+        {
+          "name": "2–3 candidates, each with a 'Meet at' query",
+          "pass": true,
+          "got": [
+            "Meet at King's Arms, 65 Newcomen Street, SE1 1YT",
+            "Meet at The Kings Arms, 25 Roupell Street, SE1 8TB",
+            "Meet at Kings Arms, 68 Great Titchfield Street"
+          ]
+        },
+        {
+          "name": "message matches /There are \\d+ places called King's Arms in London: which area are you in\\?/",
+          "pass": true,
+          "got": "There are 4 places called King's Arms in London: which area are you in?"
+        }
+      ]
+    },
+    {
+      "id": "snap-unknown-name",
+      "query": "(unit) place-snap: a name not in London",
+      "pass": true,
+      "ms": 0,
+      "checks": [
+        {
+          "name": "HTTP 200",
+          "pass": true,
+          "got": 200
+        },
+        {
+          "name": "extracted echoed",
+          "pass": true,
+          "got": {
+            "name": "Blorptastic Café",
+            "kind": "pub",
+            "signText": "BLORPTASTIC CAFÉ",
+            "cuisine": null,
+            "confidence": 0.9,
+            "vibe": null
+          }
+        },
+        {
+          "name": "model reported",
+          "pass": true,
+          "got": "test-fixture"
+        },
+        {
+          "name": "no place when unsure",
+          "pass": true
+        },
+        {
+          "name": "message matches /^Couldn't spot that one — where are you\\?$/",
+          "pass": true,
+          "got": "Couldn't spot that one — where are you?"
+        }
+      ]
+    },
+    {
+      "id": "snap-route-parse-unit",
+      "query": "(unit) place-snap validation, roundYou, 'meet at <place>' parsing + refine reset",
+      "pass": true,
+      "ms": 0,
+      "checks": [
+        {
+          "name": "validation: gif → 415, tiny → 400, no image → 400",
+          "pass": true,
+          "got": [
+            415,
+            400,
+            400
+          ]
+        },
+        {
+          "name": "vision: argon 404 → falls back to flash, decision cached",
+          "pass": true,
+          "got": [
+            "gemini-4-argon",
+            "gemini-3-flash-preview",
+            "gemini-3-flash-preview"
+          ]
+        },
+        {
+          "name": "vision: a bad-image 400 keeps argon (no fallback)",
+          "pass": true,
+          "got": "gemini-4-argon"
+        },
+        {
+          "name": "vibe: ratings dropped from tags and line, duplicates merged",
+          "pass": true,
+          "got": {
+            "tags": [
+              "cosy",
+              "hanging baskets"
+            ],
+            "line": ""
+          }
+        },
+        {
+          "name": "vibe: line ≤90 chars",
+          "pass": true,
+          "got": {
+            "tags": [],
+            "line": "Corner pub with hanging baskets and a few tables outside, under a striped awning in the"
+          }
+        },
+        {
+          "name": "photo-only blurb: the photo's line, source 'Your photo'",
+          "pass": true,
+          "got": {
+            "text": "Corner pub with hanging baskets and a few tables outside.",
+            "source": {
+              "name": "Your photo",
+              "url": ""
+            },
+            "fromPhoto": true
+          }
+        },
+        {
+          "name": "a rewrite with ratings is rejected (falls back to the photo line)",
+          "pass": true,
+          "got": "Corner pub with hanging baskets and a few tables outside."
+        },
+        {
+          "name": "a rewrite using the photo is labelled '<source> + your photo'",
+          "pass": true,
+          "got": {
+            "name": "OpenStreetMap + your photo",
+            "url": "https://www.openstreetmap.org/node/11"
+          }
+        },
+        {
+          "name": "you rounded to ~100 m; outside London / junk → null",
+          "pass": true,
+          "got": {
+            "lat": 51.504,
+            "lng": -0.109
+          }
+        },
+        {
+          "name": "'meet at <name>' / 'get me to <name>' are fixed destinations",
+          "pass": true,
+          "got": []
+        },
+        {
+          "name": "'meet at 7pm / a pub near … / mine' are not",
+          "pass": true,
+          "got": []
+        },
+        {
+          "name": "refine 'meet at <place>' becomes the new base (day kept); later refinements still apply",
+          "pass": true,
+          "got": {
+            "base": "meet at The Kings Arms tonight",
+            "refinements": [
+              "at 8pm"
+            ]
+          }
+        },
+        {
+          "name": "…and keeps who's where + day/time, so it stays a two-person trip",
+          "pass": true,
+          "got": "meet at The Kings Arms on Friday at 7, I'm at Old Street, she's at Clapham"
+        }
+      ]
+    },
+    {
+      "id": "refine-meet-at-place",
+      "query": "Pub near me tomorrow at 7",
+      "pass": true,
+      "ms": 8912,
+      "checks": [
+        {
+          "name": "intent = near_me",
+          "pass": true,
+          "got": "near_me"
+        },
+        {
+          "name": "no clarify",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "no '[…]' placeholder in any output string",
+          "pass": true,
+          "got": []
+        },
+        {
+          "name": "≤3 cards",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "≥1 card",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "every fact has a source",
+          "pass": true,
+          "got": 5
+        },
+        {
+          "name": "every source has asOf",
+          "pass": true,
+          "got": [
+            "Open-Meteo",
+            "OSM snapshot",
+            "TfL Journey Planner",
+            "TfL Line Status"
+          ]
+        },
+        {
+          "name": "day = Mon",
+          "pass": true,
+          "got": "Mon"
+        },
+        {
+          "name": "time = 19:00",
+          "pass": true,
+          "got": "19:00"
+        },
+        {
+          "name": "reply is one sentence",
+          "pass": true,
+          "got": "Switched the plan to The Kings Arms: 12 min for you."
+        },
+        {
+          "name": "reply matches /^Switched the plan to The Kings Arms: \\d+ min for you\\.$/i",
+          "pass": true,
+          "got": "Switched the plan to The Kings Arms: 12 min for you."
+        },
+        {
+          "name": "query accumulates every refinement",
+          "pass": true,
+          "got": "Pub near me tomorrow at 7; refine: meet at The Kings Arms"
+        },
+        {
+          "name": "draftMessage short, no TfL status",
+          "pass": true,
+          "got": "The Kings Arms, 25 Roupell Street, SE1 8TB tomorrow at 7pm https://www.openstreetmap.org/way/230419025"
+        },
+        {
+          "name": "no back-to-back walk segments",
+          "pass": true,
+          "got": [
+            "walking"
+          ]
+        },
+        {
+          "name": "fixed destination: no middle / hub search",
+          "pass": true,
+          "got": {
+            "steps": [
+              "parse",
+              "resolve",
+              "place",
+              "travel",
+              "weather",
+              "lines",
+              "verify"
+            ]
+          }
+        },
+        {
+          "name": "one card: the place named",
+          "pass": true,
+          "got": [
+            "The Kings Arms"
+          ]
+        },
+        {
+          "name": "card kind = venue",
+          "pass": true,
+          "got": "venue"
+        },
+        {
+          "name": "1 leg(s)",
+          "pass": true,
+          "got": [
+            "you"
+          ]
+        },
+        {
+          "name": "headline matches /Kings Arms/i",
+          "pass": true,
+          "got": "The Kings Arms, Mon 26 Oct, 19:00: you 12 min."
+        }
+      ],
+      "headline": "The Kings Arms, Mon 26 Oct, 19:00: you 12 min.",
+      "middle": null,
+      "cards": [
+        "The Kings Arms"
+      ],
+      "clarify": null,
+      "refines": [
+        "meet at The Kings Arms"
+      ],
+      "reply": "Switched the plan to The Kings Arms: 12 min for you.",
+      "accumulated": "Pub near me tomorrow at 7; refine: meet at The Kings Arms",
+      "when": "2026-10-26T19:00:00.000Z",
+      "cardFacts": [
+        {
+          "name": "The Kings Arms",
+          "weather": null
+        }
+      ],
+      "unknowns": [],
+      "steps": [
+        {
+          "id": "parse",
+          "status": "done",
+          "ms": 1,
+          "detail": "near_me · fixed destination (place) · day 2026-10-26 · time 19:00 (rules)"
+        },
+        {
+          "id": "resolve",
+          "status": "skipped",
+          "ms": 0,
+          "detail": "No places named; using your location"
+        },
+        {
+          "id": "place",
+          "status": "done",
+          "ms": 69,
+          "detail": "The Kings Arms · OSM snapshot name match · 25 Roupell Street, SE1 8TB · destination fixed, no middle search"
+        },
+        {
+          "id": "travel",
+          "status": "done",
+          "ms": 1286,
+          "detail": "you 12 min · arriving by 19:00"
+        },
+        {
+          "id": "weather",
+          "status": "done",
+          "ms": 0,
+          "detail": "Mon 26 Oct, 19:00: 16°C, partly cloudy, 0% chance of rain"
+        },
+        {
+          "id": "lines",
+          "status": "done",
+          "ms": 0,
+          "detail": "0 lines: none used"
+        },
+        {
+          "id": "verify",
+          "status": "done",
+          "ms": 0,
+          "detail": "5 facts checked · 0 dropped without a source · 4 sources with as-of times"
+        }
+      ]
+    },
+    {
+      "id": "refine-meet-at-place-halfway",
+      "query": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham",
+      "pass": true,
+      "ms": 7982,
+      "checks": [
+        {
+          "name": "intent = meet_halfway",
+          "pass": true,
+          "got": "meet_halfway"
+        },
+        {
+          "name": "no clarify",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "no '[…]' placeholder in any output string",
+          "pass": true,
+          "got": []
+        },
+        {
+          "name": "≤3 cards",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "≥1 card",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "every fact has a source",
+          "pass": true,
+          "got": 6
+        },
+        {
+          "name": "every source has asOf",
+          "pass": true,
+          "got": [
+            "Open-Meteo",
+            "OSM snapshot",
+            "TfL Journey Planner",
+            "TfL Line Status",
+            "TfL station list"
+          ]
+        },
+        {
+          "name": "cards have legs for you and them",
+          "pass": true
+        },
+        {
+          "name": "≥1 card",
+          "pass": true,
+          "got": 1
+        },
+        {
+          "name": "draftMessage has no 'them' area",
+          "pass": true,
+          "got": "Hey! Fancy meeting at The Kings Arms Fri 30 Oct at 7pm? It's at The Kings Arms, 25 Roupell Street, SE1 8TB, about 25 min for you 🙂 https://www.openstreetmap.org/way/230419025"
+        },
+        {
+          "name": "them is rounded to an area (radius ≥ 500 m)",
+          "pass": true
+        },
+        {
+          "name": "day = Fri",
+          "pass": true,
+          "got": "Fri"
+        },
+        {
+          "name": "time = 19:00",
+          "pass": true,
+          "got": "19:00"
+        },
+        {
+          "name": "reply is one sentence",
+          "pass": true,
+          "got": "Switched the plan to The Kings Arms: 33 min for you, 25 for them."
+        },
+        {
+          "name": "reply matches /^Switched the plan to The Kings Arms: \\d+ min for you, \\d+ for them\\.$/i",
+          "pass": true,
+          "got": "Switched the plan to The Kings Arms: 33 min for you, 25 for them."
+        },
+        {
+          "name": "query accumulates every refinement",
+          "pass": true,
+          "got": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham; refine: Meet at The Kings Arms, 25 Roupell Street, SE1 8TB"
+        },
+        {
+          "name": "reply has no 'them' area",
+          "pass": true,
+          "got": "Switched the plan to The Kings Arms: 33 min for you, 25 for them."
+        },
+        {
+          "name": "draftMessage short, no TfL status",
+          "pass": true,
+          "got": "Hey! Fancy meeting at The Kings Arms Fri 30 Oct at 7pm? It's at The Kings Arms, 25 Roupell Street, SE1 8TB, about 25 min for you 🙂 https://www.openstreetmap.org/way/230419025"
+        },
+        {
+          "name": "no back-to-back walk segments",
+          "pass": true,
+          "got": [
+            "walking>tube>tube>walking",
+            "walking>tube>walking"
+          ]
+        },
+        {
+          "name": "fixed destination: no middle / hub search",
+          "pass": true,
+          "got": {
+            "steps": [
+              "parse",
+              "resolve",
+              "place",
+              "travel",
+              "weather",
+              "lines",
+              "verify"
+            ]
+          }
+        },
+        {
+          "name": "one card: the place named",
+          "pass": true,
+          "got": [
+            "The Kings Arms"
+          ]
+        },
+        {
+          "name": "card kind = venue",
+          "pass": true,
+          "got": "venue"
+        },
+        {
+          "name": "2 leg(s)",
+          "pass": true,
+          "got": [
+            "you",
+            "them"
+          ]
+        },
+        {
+          "name": "their area not in reply/draft/unknowns/steps' parse signals",
+          "pass": true,
+          "got": null
+        },
+        {
+          "name": "headline matches /Kings Arms.*you \\d+ min, her \\d+/i",
+          "pass": true,
+          "got": "The Kings Arms, Fri 30 Oct, 19:00: you 33 min, her 25."
+        }
+      ],
+      "headline": "The Kings Arms, Fri 30 Oct, 19:00: you 33 min, her 25.",
+      "middle": null,
+      "cards": [
+        "The Kings Arms"
+      ],
+      "clarify": null,
+      "refines": [
+        "Meet at The Kings Arms, 25 Roupell Street, SE1 8TB"
+      ],
+      "reply": "Switched the plan to The Kings Arms: 33 min for you, 25 for them.",
+      "accumulated": "Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham; refine: Meet at The Kings Arms, 25 Roupell Street, SE1 8TB",
+      "when": "2026-10-30T19:00:00.000Z",
+      "cardFacts": [
+        {
+          "name": "The Kings Arms",
+          "weather": null
+        }
+      ],
+      "unknowns": [
+        "Line status is as of now, not for the time of the plan."
+      ],
+      "steps": [
+        {
+          "id": "parse",
+          "status": "done",
+          "ms": 1,
+          "detail": "meet_halfway · fixed destination (place) · intent meet_halfway · you: \"Old Street\" · other person's place found · day 2026-10-30 · time 19:00 (rules)"
+        },
+        {
+          "id": "resolve",
+          "status": "done",
+          "ms": 6,
+          "detail": "2 of 2 places found · Read \"Clapham\" as Clapham Common · you: Old Street · their area rounded to ~500 m"
+        },
+        {
+          "id": "place",
+          "status": "done",
+          "ms": 195,
+          "detail": "The Kings Arms · OSM snapshot name match · 25 Roupell Street, SE1 8TB · destination fixed, no middle search"
+        },
+        {
+          "id": "travel",
+          "status": "done",
+          "ms": 1382,
+          "detail": "you 33 min · her 25 min · arriving by 19:00"
+        },
+        {
+          "id": "weather",
+          "status": "done",
+          "ms": 3,
+          "detail": "Fri 30 Oct, 19:00: 14°C, clear, 10% chance of rain"
+        },
+        {
+          "id": "lines",
+          "status": "done",
+          "ms": 191,
+          "detail": "2 lines: Jubilee Good Service, Northern Good Service"
+        },
+        {
+          "id": "verify",
+          "status": "done",
+          "ms": 0,
+          "detail": "6 facts checked · 0 dropped without a source · 5 sources with as-of times"
         }
       ]
     }

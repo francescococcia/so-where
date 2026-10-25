@@ -225,6 +225,14 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
     assert.match(venues?.detail ?? "", /events in MongoDB Atlas/);
   });
 
+  await test("place-snap: $geoNear ≤300 m + fuzzy name ('THE KINGS ARMS' → The Kings Arms, Roupell St)", async () => {
+    const { snapPlace } = await import("@/lib/place-snap");
+    const r = await snapPlace({ name: "THE KINGS ARMS", kind: "pub", signText: null, cuisine: null, confidence: 0.9, vibe: null }, { you: { lat: 51.505, lng: -0.11 } }, { db, blurb: { llm: null, fetch: (async () => new Response("{}", { status: 404 })) as typeof fetch } });
+    assert.equal(r.place?.name, "The Kings Arms");
+    assert.equal(r.place?.facts.find((f) => f.label === "Matched")?.source, "MongoDB Atlas $geoNear");
+    assert.equal(r.suggestedQuery, "Meet at The Kings Arms");
+  });
+
   await client.close();
   await resetMongoForTests();
   await server.stop();

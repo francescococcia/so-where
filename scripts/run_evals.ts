@@ -18,7 +18,12 @@ import { allStrings, scrubArea } from "@/lib/venue-area";
 import { meetDraft } from "@/lib/draft-message";
 import { fairScore, midpointStations } from "@/lib/tfl";
 import { STATIONS } from "@/lib/gazetteer";
-import { acceptRewrite, buildBlurb, type BlurbInput } from "@/lib/blurb";
+import { acceptRewrite, buildBlurb, fallbackBlurb, wikiFits, type BlurbInput } from "@/lib/blurb";
+import { arrivalClock, isLeaveQuestion, statedOrigin } from "@/lib/leave-time";
+import { splitRefine } from "@/lib/refine";
+import { POST as SNAP_POST } from "@/app/api/place-snap/route";
+import { cleanVibe, roundYou, setSnapExtractorForTests, type PlaceSnapResponse, type SnapExtract } from "@/lib/place-snap";
+import { resetVisionModelForTests, visionGenerate, VISION_FALLBACK } from "@/lib/vision";
 
 // Blurbs (Wikipedia / website / Gemini) are checked by the "server4" unit with mocks; the plan cases skip them.
 process.env.BLURBS ??= "off";
@@ -31,17 +36,19 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number } };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number } };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
 // `unit`: in-process checks of a helper (no HTTP): "hours" parses OSM opening_hours, "segments" tidies stretches.
 type HoursUnit = { oh: string; date: string; at: string; state: "open" | "closed" | "unknown"; closesAt?: string };
-type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4"; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
+type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6";
+  // server6 "snap a place": a fixture extract stands in for Gemini (test hook); the route runs for real (fixture image bytes).
+  snap?: { extract: SnapExtract; you?: { lat: number; lng: number }; area?: string; place?: string; suggestedQuery?: string; minCandidates?: number; message?: string }; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
 // `clock`: pin "now" to HH:MM London (today if still ahead, else tomorrow, so live TfL/forecast calls stay in the
 // future); `dayOffset` is then the plan's London date minus the pinned date.
-type Refined = PlanResultWithAgent & { reply?: string };
+type Refined = PlanResultWithAgent & { reply?: string; leaveBy?: { you?: string; them?: string; arriveBy: string; date: string } };
 const youMin = (r: PlanResultWithAgent) => r.cards[0]?.legs.find((l) => l.who === "you")?.minutes ?? null;
 
 const all = (JSON.parse(readFileSync("evals/plan-evals.json", "utf8")) as { cases: Case[] }).cases;
@@ -167,6 +174,115 @@ async function unitChecks(c: Case): Promise<Chk[]> {
     const ce = cleanExtract({ kind: "event", title: "X", date: "2025-10-31", startTime: "7.30", confidence: 3, url: "vortexjazz.co.uk" }, today);
     add("cleanExtract: past-year date rolls forward, 7.30 → 07:30, confidence clamped, url gets https", ce.date === "2026-10-31" && ce.startTime === "07:30" && ce.confidence === 1 && ce.url === "https://vortexjazz.co.uk", ce);
   }
+  if (c.unit === "server6" && c.snap) {
+    const sn = c.snap;
+    setSnapExtractorForTests(async () => sn.extract);
+    try {
+      const img = `data:image/jpeg;base64,${Buffer.from("fixture shopfront photo ".repeat(12)).toString("base64")}`;
+      const res = await SNAP_POST(new Request("http://local/api/place-snap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: img, ...(sn.you ? { you: sn.you } : {}), ...(sn.area ? { area: sn.area } : {}) }) }));
+      const b = (await res.json()) as PlaceSnapResponse;
+      add("HTTP 200", res.status === 200, res.status);
+      add("extracted echoed", b.extracted?.name === sn.extract.name, b.extracted);
+      add("model reported", b.model === "test-fixture", b.model);
+      const json = JSON.stringify(b);
+      if (sn.you) add("your coordinates are not echoed", !json.includes(String(sn.you.lat)) && !json.includes(String(sn.you.lng)), null);
+      if (sn.place) {
+        const p = b.place;
+        add(`place = ${sn.place}`, p?.name === sn.place, p?.name ?? b.message);
+        add("card shape: id, lat/lng, address, area, hours fields, photoQuery", !!p && !!p.id && typeof p.lat === "number" && typeof p.lng === "number" && "address" in p && "openAtPlan" in p && "closesAt" in p && "closingSoon" in p && "hoursKnown" in p && "opensAt" in p && (p.openAtPlan !== false || !!p.opensAt) && p.photoQuery.startsWith("/api/photo?"), p && { openAtPlan: p.openAtPlan, closesAt: p.closesAt, opensAt: p.opensAt, hoursKnown: p.hoursKnown });
+        add("blurb doesn't restate the address", !p?.blurb || !/located at|\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b|\d+\s+\w+\s+(?:Street|St|Road|Rd)\b/.test(p.blurb.text), p?.blurb?.text);
+        if (sn.extract.vibe) add("vibe kept; blurb using it is labelled 'your photo', no ratings", JSON.stringify(b.extracted.vibe) === JSON.stringify(sn.extract.vibe) && (!p?.blurb?.fromPhoto || /your photo/i.test(p.blurb.source.name)) && !/rated|stars?\b|reviews?/i.test(p?.blurb?.text ?? ""), p?.blurb);
+      } else add("no place when unsure", !b.place, b.place?.name);
+      if (sn.suggestedQuery) add(`suggestedQuery = "${sn.suggestedQuery}"`, b.suggestedQuery === sn.suggestedQuery, b.suggestedQuery);
+      if (sn.minCandidates) add(`${sn.minCandidates}–3 candidates, each with a 'Meet at' query`, (b.candidates?.length ?? 0) >= sn.minCandidates && (b.candidates?.length ?? 0) <= 3 && b.candidates!.every((x) => x.suggestedQuery.startsWith(`Meet at ${x.name}`)), b.candidates?.map((x) => x.suggestedQuery));
+      if (sn.message) add(`message matches /${sn.message}/`, new RegExp(sn.message).test(b.message ?? ""), b.message);
+    } finally {
+      setSnapExtractorForTests(null);
+    }
+  }
+  if (c.unit === "server6" && !c.snap) {
+    setSnapExtractorForTests(async () => ({ name: "X", kind: "pub", signText: null, cuisine: null, confidence: 0.9 }));
+    try {
+      const post = (body: unknown) => SNAP_POST(new Request("http://local/api/place-snap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
+      const gif = await post({ image: `data:image/gif;base64,${"R0lGOD".repeat(40)}` });
+      const tiny = await post({ image: "data:image/png;base64,iVBORw0KGgo=" });
+      const none = await post({ you: { lat: 51.5, lng: -0.1 } });
+      add("validation: gif → 415, tiny → 400, no image → 400", gif.status === 415 && tiny.status === 400 && none.status === 400, [gif.status, tiny.status, none.status]);
+    } finally {
+      setSnapExtractorForTests(null);
+    }
+    // Vision model: gemini-4-argon first; 404/permission → gemini-3-flash-preview, cached; a bad-image 400 doesn't switch.
+    resetVisionModelForTests();
+    const saved = process.env.VISION_MODEL;
+    delete process.env.VISION_MODEL;
+    const seen: string[] = [];
+    const fake = (async (u: string | URL | Request) => {
+      const m = /models\/([^:]+):/.exec(String(u))?.[1] ?? "";
+      seen.push(m);
+      return m === "gemini-4-argon" ? new Response('{"error":{"status":"NOT_FOUND","message":"models/gemini-4-argon is not found"}}', { status: 404 }) : new Response("{}", { status: 200 });
+    }) as typeof fetch;
+    const v1 = await visionGenerate({}, "k", 2000, { fetch: fake });
+    const v2 = await visionGenerate({}, "k", 2000, { fetch: fake });
+    add("vision: argon 404 → falls back to flash, decision cached", v1.model === VISION_FALLBACK && v2.model === VISION_FALLBACK && JSON.stringify(seen) === JSON.stringify(["gemini-4-argon", VISION_FALLBACK, VISION_FALLBACK]), seen);
+    resetVisionModelForTests();
+    const bad = (async () => new Response('{"error":{"message":"Unable to process input image"}}', { status: 400 })) as unknown as typeof fetch;
+    const v3 = await visionGenerate({}, "k", 2000, { fetch: bad });
+    add("vision: a bad-image 400 keeps argon (no fallback)", v3.model === "gemini-4-argon" && v3.res.status === 400, v3.model);
+    resetVisionModelForTests();
+    if (saved !== undefined) process.env.VISION_MODEL = saved;
+    // Photo vibe: only visible things, no ratings; the blurb uses it labelled "Your photo".
+    const vb = cleanVibe({ tags: ["Cosy", "hanging baskets", "5 stars", "top-rated", "cosy"], line: "Rated 4.5 stars by locals" });
+    add("vibe: ratings dropped from tags and line, duplicates merged", JSON.stringify(vb) === JSON.stringify({ tags: ["cosy", "hanging baskets"], line: "" }), vb);
+    const vl = cleanVibe({ tags: [], line: "Corner pub with hanging baskets and a few tables outside, under a striped awning in the sun." });
+    add("vibe: line ≤90 chars", !!vl && vl.line.length <= 90 && vl.line.startsWith("Corner pub with hanging baskets"), vl);
+    const nofetch = (async () => new Response("{}", { status: 404 })) as unknown as typeof fetch;
+    const photo = { tags: ["hanging baskets", "outdoor seating"], line: "Corner pub with hanging baskets and a few tables outside" };
+    const pin = { id: "osm-node-9", name: "The Test Arms", kind: "Pub", tags: {}, location: { lat: 51.5, lng: -0.11 }, photo };
+    const pb = await buildBlurb(pin, "friends", { llm: null, fetch: nofetch });
+    add("photo-only blurb: the photo's line, source 'Your photo'", pb.text === "Corner pub with hanging baskets and a few tables outside." && pb.source.name === "Your photo" && pb.fromPhoto === true, pb);
+    const rated = await buildBlurb({ ...pin, id: "osm-node-10" }, "friends", { llm: async () => ({ text: "Top-rated corner pub with 5 stars and hanging baskets." }), fetch: nofetch });
+    add("a rewrite with ratings is rejected (falls back to the photo line)", !/rated|stars/i.test(rated.text) && rated.source.name === "Your photo", rated.text);
+    const used = await buildBlurb({ ...pin, id: "osm-node-11", tags: { cuisine: "thai" } }, "friends", { llm: async () => ({ text: "Friendly corner pub with hanging baskets out front and Thai food inside." }), fetch: nofetch });
+    add("a rewrite using the photo is labelled '<source> + your photo'", used.fromPhoto === true && / \+ your photo$/.test(used.source.name), used.source);
+    const ry = roundYou({ lat: 51.504412, lng: -0.109104 });
+    add("you rounded to ~100 m; outside London / junk → null", ry?.lat === 51.504 && ry.lng === -0.109 && roundYou({ lat: 48.85, lng: 2.35 }) === null && roundYou("51.5,-0.1") === null, ry);
+    const yes = ["Meet at The Kings Arms", "let's meet at The George Inn tomorrow at 7pm", "Get me to The Kings Arms, 25 Roupell Street, SE1 8TB"].filter((q) => !parseDestination(q));
+    add("'meet at <name>' / 'get me to <name>' are fixed destinations", yes.length === 0, yes);
+    const no = ["meet at 7pm with Sam", "meet at a pub near angel", "meet at mine", "meet at the station"].filter((q) => parseDestination(q));
+    add("'meet at 7pm / a pub near … / mine' are not", no.length === 0, no);
+    const sr = splitRefine("pubs near bank tonight; refine: cheaper; refine: meet at The Kings Arms; refine: at 8pm");
+    add("refine 'meet at <place>' becomes the new base (day kept); later refinements still apply", sr.base === "meet at The Kings Arms tonight" && JSON.stringify(sr.refinements) === JSON.stringify(["at 8pm"]), sr);
+    const hw = splitRefine("Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham; refine: cheaper; refine: meet at The Kings Arms");
+    add("…and keeps who's where + day/time, so it stays a two-person trip", hw.base === "meet at The Kings Arms on Friday at 7, I'm at Old Street, she's at Clapham" && parseDestination(hw.base)?.withThem === true, hw.base);
+  }
+  if (c.unit === "server5") {
+    const today = "2026-10-25";
+    // "When do I leave?" follow-ups (typos included) vs real refinements.
+    for (const q of ["a what time i need to leave form my hose?", "how early should I set off?", "what time do we need to leave to get there on time?", "arrive by 11:30", "and if I want to arrive at 11:30?", "wat tim shoud i leve tomorow", "when should i head out"]) add(`leave question: "${q}"`, isLeaveQuestion(q), q);
+    for (const q of ["closer to me", "is it open?", "a pub instead", "make it 8pm somewhere quieter", "cheaper", "other options?", "any italian coffee nearby?"]) add(`not a leave question: "${q}"`, !isLeaveQuestion(q), q);
+    add("arrive at 11:30 near a noon plan → 11:30; near a 19:00 plan '7:30' → 19:30; '9am' → 09:00", arrivalClock("and if I want to arrive at 11:30?", "12:00") === "11:30" && arrivalClock("arrive by 7:30", "19:00") === "19:30" && arrivalClock("to get there by 9am", "19:00") === "09:00", [arrivalClock("and if I want to arrive at 11:30?", "12:00"), arrivalClock("arrive by 7:30", "19:00")]);
+    add("stated origin: 'from greenwich' → Greenwich; 'from my house' → none", statedOrigin("what time should i leave from greenwich?")?.name === "Greenwich" && statedOrigin("a what time i need to leave form my hose?") === null, statedOrigin("what time should i leave from greenwich?"));
+    const sr = splitRefine("pubs near me tonight; refine: cheaper; refine: what time do I need to leave");
+    add("leave questions are not refinements (plan unchanged on replan)", JSON.stringify(sr.refinements) === JSON.stringify(["cheaper"]), sr);
+    // Multi-day events: Luma's month-first line, day ranges, and the end date kept.
+    const lu = eventDates("Friday, October 23, 12:00 PM – Oct 25, 4:30 PM", today, "01:15", "16:30");
+    add("Luma 'October 23, 12:00 PM – Oct 25, 4:30 PM' → ongoing until 25 Oct", lu?.start === "2026-10-23" && lu.end === "2026-10-25" && lu.status === "ongoing", lu);
+    const dr = eventDates("on 23–25 Oct", today);
+    add("'23–25 Oct' → 23rd to 25th", dr?.start === "2026-10-23" && dr.end === "2026-10-25", dr);
+    const so = eventDates("on Sat 23 Oct at 12:00-16:30", today, "01:15", "16:30");
+    add("start date only and past → over", so?.status === "past" && so.end === null, so);
+    const dl = parseDestination("Get me to Encode London Hackathon at Encode Hub on Friday, October 23, 12:00 PM – Oct 25, 4:30 PM");
+    add("Luma time range → endTime 16:30", dl?.endTime === "16:30", dl?.endTime);
+    const cl = cleanExtract({ kind: "event", title: "Encode London Hackathon", date: "2026-10-23", endDate: null, dateText: "Friday, October 23, 12:00 PM – Oct 25, 4:30 PM", startTime: "12:00", endTime: "16:30", confidence: 0.9 }, today);
+    add("poster: endDate recovered from the printed date line", cl.endDate === "2026-10-25", cl.endDate);
+    // Blurbs: same entity only, no address, no raw name+address fallback.
+    add("wiki: a Thai restaurant article doesn't fit a pub of another name", !wikiFits({ name: "The Kings Arms", kind: "Pub" }, "Thai Square", "Thai Square is a chain of Thai restaurants"), null);
+    add("wiki: a footballer / station article doesn't fit a pub", !wikiFits({ name: "The George", kind: "Pub" }, "George (footballer)", "English footballer born 1990") && !wikiFits({ name: "Bank", kind: "Bar" }, "Bank station", "Bank is a London Underground station"), null);
+    add("wiki: the pub's own article fits", wikiFits({ name: "The King's Arms", kind: "Pub" }, "The King's Arms, Waterloo", "The King's Arms is a pub on Roupell Street in Waterloo"), null);
+    add("rewrite with an address or 'located at' is rejected; postcodes in facts don't block a clean one", !acceptRewrite("The King's Arms is a pub located at 25 Roupell Street, SE1 8TB.", ["Wikipedia: The King's Arms is a pub located at 25 Roupell Street, Waterloo, London SE1 8TB."]) && acceptRewrite("Classic Victorian corner pub on a pretty terraced street, with Thai food in the back.", ["Wikipedia: The King's Arms is a pub located at 25 Roupell Street, Waterloo, London SE1 8TB. It serves Thai cuisine."]), null);
+    const fb = fallbackBlurb({ id: "osm-node-1", name: "The King's Arms", kind: "Pub", tags: { cuisine: "thai" }, location: { lat: 51.5, lng: -0.11 }, area: "near Waterloo" }, { facts: ["Wikipedia: The King's Arms is a pub located at 25 Roupell Street, Waterloo, London SE1 8TB.", "Cuisine: thai"], source: { name: "Wikipedia", url: "https://en.wikipedia.org/wiki/X" }, rich: true });
+    add("fallback never restates the address: name+address → template with OSM facts", !/Roupell|SE1|located at/.test(fb.text) && /thai/i.test(fb.text), fb.text);
+  }
   if (c.unit === "server4") {
     const today = "2026-10-25";
     // Event dates: multi-day ongoing → today; wholly past → say so; upcoming keeps its own year.
@@ -254,6 +370,14 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
     // A "middle" on one person's doorstep isn't fair: it must sit between them, nobody at ~0 min.
     add("middle is neither person's own station", !!r.middle && !["Waterloo", "Elephant & Castle"].includes(r.middle.name), r.middle?.name ?? null);
     add("headline doesn't say anyone travels 0 min", !/\b0 min\b|, (?:her|him|them) 0\b/.test(r.headline), r.headline);
+  }
+  if (e.leaveBy) {
+    const lb = (r as Refined).leaveBy;
+    const hhmm = (v?: string) => !!v && /^\d\d:\d\d$/.test(v);
+    add("leaveBy: arriveBy + date set", !!lb && hhmm(lb.arriveBy) && /^\d{4}-\d\d-\d\d$/.test(lb.date), lb);
+    if (e.leaveBy.arriveBy) add(`leaveBy.arriveBy = ${e.leaveBy.arriveBy}`, lb?.arriveBy === e.leaveBy.arriveBy, lb?.arriveBy);
+    if (e.leaveBy.you) add("leaveBy.you is HH:MM before arriveBy", !!lb && hhmm(lb.you) && lb.you! < lb.arriveBy, lb?.you);
+    if (e.leaveBy.them) add("leaveBy.them is HH:MM before arriveBy", !!lb && hhmm(lb.them) && lb.them! < lb.arriveBy, lb?.them);
   }
   if (e.weekday) add(`day = ${e.weekday}`, londonDayShort(new Date(r.when)) === e.weekday, londonDayShort(new Date(r.when)));
   if (e.time) add(`time = ${e.time}`, londonClock(r.when) === e.time, londonClock(r.when));
