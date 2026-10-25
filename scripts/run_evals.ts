@@ -351,7 +351,10 @@ async function unitChecks(c: Case): Promise<Chk[]> {
       const st = steps.find((s) => s.id === "recheck");
       add("argon's top closes 19:30 → failures sent back once → re-picked from passing options", calls.length === 2 && !!calls[1].failures?.[0]?.includes("closes 19:30") && !calls[1].allowed!.includes("osm-node-1") && !calls[1].allowed!.includes("osm-node-5"), calls);
       add("step: 'Argon re-checked: swapped The Early Bird (closes 19:30) for The Lamb'", st?.label === "Argon re-checked: swapped The Early Bird (closes 19:30) for The Lamb", st);
-      add("verify field: rounds 2, swapped [{from,to,reason}], model", JSON.stringify(v.verify) === JSON.stringify({ rounds: 2, swapped: [{ from: "The Early Bird", to: "The Lamb", reason: "closes 19:30" }], model: "gemini-4-argon" }), v.verify);
+      add("verify field: rounds 2, swapped [{from,to,reason}], model", JSON.stringify({ rounds: v.verify.rounds, swapped: v.verify.swapped, model: v.verify.model }) === JSON.stringify({ rounds: 2, swapped: [{ from: "The Early Bird", to: "The Lamb", reason: "closes 19:30" }], model: "gemini-4-argon" }), v.verify);
+      // server14: the on-screen Argon row gets only recorded facts: Argon's proposals, the pool size, the check list,
+      // model ms, and what the shown top card passed (from its own fields), never Argon's reason text.
+      add("server14 verify row: proposed names, checked count, checks, ms summed over both rounds, passed from the top card's fields", JSON.stringify(v.verify.proposed) === JSON.stringify(["The Early Bird", "The Crown", "The Swan"]) && v.verify.checked === pool().length && !!v.verify.checks?.includes("TfL journey") && v.verify.ms === 10 && v.verify.thinking?.verify === "low" && Array.isArray(v.verify.passed) && !v.verify.passed!.some((x) => /fits/.test(x)) && v.verify.passed!.every((x) => /^(open until|on until|open then|fair split|\d+ min by TfL|weather: )/.test(x)), v.verify);
       add("final cards: the re-pick first, then argon's passing picks", JSON.stringify(v.cards.map((c) => c.name)) === JSON.stringify(["The Lamb", "The Crown", "The Swan"]), v.cards.map((c) => c.name));
       // Never fabricate: an id that isn't in the pool is never a card; a re-pick naming a failing option is overruled.
       calls.length = 0; steps.length = 0;
@@ -363,6 +366,7 @@ async function unitChecks(c: Case): Promise<Chk[]> {
       steps.length = 0;
       const r = await verifyPicks(pool(), opts);
       add("without argon: closing-soon top swapped by rules, model 'rules', one round", JSON.stringify(r.cards.map((c) => c.id)) === JSON.stringify(["osm-node-4", "osm-node-2", "osm-node-3"]) && r.verify.model === "rules" && r.verify.rounds === 1 && r.verify.swapped[0]?.reason === "closes 19:30", { cards: r.cards.map((c) => c.id), verify: r.verify });
+      add("server14: without argon the row has no proposals and no model time", (r.verify.proposed ?? []).length === 0 && r.verify.ms === undefined, r.verify);
       // Step-free asked: a card tagged wheelchair=no fails.
       add("step-free asked: wheelchair=no fails; untagged is only soft", checkCard(card("a", "A", {}, [{ label: "Step-free", value: "Wheelchair access: no (OSM tag)", verdict: "likely" }]), { stepFree: true }).hard[0] === "not step-free (OSM)" && checkCard(card("b", "B", {}, [{ label: "Step-free", value: "Not tagged in OSM", verdict: "unknown" }]), { stepFree: true }).hard.length === 0, null);
       // End to end through the route: the fixture picker invents an id; the plan still only shows real options.

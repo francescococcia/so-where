@@ -2,6 +2,7 @@
 // is missing or errors. The UI always labels these "example data". Values were
 // read off the mockups (fetched Sat 24 Oct 2026, 18:49–18:53 BST); coordinates are approximate.
 import type { AgentStep, Clarify, PlanResultWithAgent } from "@/lib/plan-types";
+import type { VerifyInfo } from "@/lib/verify";
 
 const FETCHED = "2026-10-24T17:49:00Z"; // 18:49 BST
 const FETCHED_LATE = "2026-10-24T17:53:00Z";
@@ -195,8 +196,37 @@ export const clarifyFixture: Clarify = {
   suggestions: ["Brixton", "Clapham", "Stratford"],
 };
 
-export type FixtureId = "meet" | "saturday";
-export const FIXTURES: Record<FixtureId, PlanResultWithAgent> = { meet: meetFixture, saturday: saturdayFixture };
+// ?demo=repick (ui25, EXAMPLE DATA): the meet plan, showing the verify loop when a check rejects Argon's first pick.
+// The rejected pub is real and its reason is the one checkCard() gives it: The Trinity (202-206 Borough High Street,
+// ~35 m from Borough station) has no opening_hours in our OSM snapshot (fetched 24 Oct 2026), so its hours are
+// "not listed" while the other options' are; verify.ts then sends that failure back and Argon re-picks. Model
+// timings are typical of measured Argon calls (pick ~3.7 s, re-pick ~4.8 s, low thinking), not a recording.
+const CHECKS = ["open ≥1 h at the plan time", "TfL journey", "fairness gap", "weather fit"];
+const meetVerify: VerifyInfo = { rounds: 1, swapped: [], model: "gemini-4-argon", checked: 4, proposed: ["The Blue Maid", "The George Inn", "Bunch of Grapes"], checks: CHECKS, passed: ["open until 00:00", "fair split (24 vs 23 min)"], ms: 3700, thinking: { pick: "low", verify: "low" } };
+const repickVerify: VerifyInfo = {
+  rounds: 2,
+  swapped: [{ from: "The Trinity", to: "The Blue Maid", reason: "hours not listed" }],
+  model: "gemini-4-argon",
+  checked: 4,
+  proposed: ["The Trinity", "The Blue Maid", "The George Inn"],
+  checks: CHECKS,
+  passed: ["open until 00:00", "fair split (24 vs 23 min)"],
+  ms: 8500,
+  thinking: { pick: "low", verify: "low" },
+};
+const repickSteps: AgentStep[] = [
+  ...meetSteps.slice(0, 3),
+  { id: "venues", label: "Finding pubs open at 19:00 near Borough", status: "done", detail: "4 options, hours from OSM where tagged", source: "OSM via Overpass", ms: 540 },
+  ...meetSteps.slice(4),
+  { id: "argon", label: "Argon picking from 4 checked options", status: "done", detail: "gemini-4-argon, 3.7 s: The Trinity, The Blue Maid, The George Inn", source: "gemini-4-argon", ms: 3700 },
+  { id: "argon-recheck", label: "Argon re-picking after the checks", status: "done", detail: "gemini-4-argon, 4.8 s", source: "gemini-4-argon", ms: 4800 },
+  { id: "recheck", label: "Argon re-checked: swapped The Trinity (hours not listed) for The Blue Maid", status: "done", detail: "4 options checked (open ≥1 h at the plan time, TfL journey, fairness gap, weather fit) · fairness gap 1 min · 3/3 shown pass", source: "rules", ms: 2 },
+];
+export const repickFixture: PlanResultWithAgent = { ...meetFixture, steps: repickSteps, verify: repickVerify } as PlanResultWithAgent;
+const meetWithVerify = { ...meetFixture, steps: [...meetSteps, { id: "argon", label: "Argon picking from 4 checked options", status: "done", detail: "gemini-4-argon, 3.7 s: The Blue Maid, The George Inn, Bunch of Grapes", source: "gemini-4-argon", ms: 3700 } as AgentStep, { id: "recheck", label: "Checked Argon's picks against hours, TfL and weather", status: "done", detail: "4 options checked (open ≥1 h at the plan time, TfL journey, fairness gap, weather fit) · fairness gap 1 min · 3/3 shown pass", source: "rules", ms: 2 } as AgentStep], verify: meetVerify } as PlanResultWithAgent;
+
+export type FixtureId = "meet" | "saturday" | "repick";
+export const FIXTURES: Record<FixtureId, PlanResultWithAgent> = { meet: meetWithVerify, saturday: saturdayFixture, repick: repickFixture };
 
 /** Pick the closer fixture for a typed ask (fallback only). */
 export function pickFixture(query: string): FixtureId {

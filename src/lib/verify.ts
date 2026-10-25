@@ -14,7 +14,23 @@ import { planGenerate, planModel } from "@/lib/plan-model";
 
 export type Swap = { from: string; to: string; reason: string };
 /** Optional result field (backward compatible; plan-types.ts unchanged). model: "rules" when no LLM ran. */
-export type VerifyInfo = { rounds: number; swapped: Swap[]; model: string };
+export type VerifyInfo = {
+  rounds: number;
+  swapped: Swap[];
+  model: string;
+  /** server14 (all optional, for the on-screen Argon row): options in the checked pool. */
+  checked?: number;
+  /** Argon's first proposals (names, in its order); empty when no model ran. */
+  proposed?: string[];
+  /** The checks every pick went through (same list as the "recheck" step). */
+  checks?: string[];
+  /** What the shown top card actually passed, built from its own fields (hours, TfL legs, weather fact). */
+  passed?: string[];
+  /** Model time across the pick (and re-pick), ms. */
+  ms?: number;
+  /** Thinking level used for the first pick / the re-pick after a failed check. */
+  thinking?: { pick: string; verify: string };
+};
 export type PlanResultVerified = PlanResultWithAgent & { verify?: VerifyInfo };
 
 type Hours = { openAtPlan?: boolean | null; closesAt?: string | null; closingSoon?: boolean; hoursKnown?: boolean };
@@ -58,6 +74,20 @@ export function fairnessGap(c: PlanCard): number | null {
   return a != null && b != null ? Math.abs(a - b) : null;
 }
 
+/** What a card really passed, from its own fields only (no model text): shown as "Argon verified: …". */
+export function passedOf(c: VCard): string[] {
+  const out: string[] = [];
+  const ev = c.kind === "event";
+  if (c.openAtPlan === true) out.push(c.closesAt ? `${ev ? "on" : "open"} until ${c.closesAt}` : ev ? "on then" : "open then");
+  const you = c.legs.find((l) => l.who === "you")?.minutes;
+  const them = c.legs.find((l) => l.who === "them")?.minutes;
+  if (you != null && them != null && Number.isFinite(you) && Number.isFinite(them)) out.push(`fair split (${you} vs ${them} min)`);
+  else if (you != null && Number.isFinite(you) && c.facts.some((f) => f.label === "Travel" && /tfl/i.test(f.source))) out.push(`${you} min by TfL`);
+  const fit = factOf(c, "Weather fit");
+  if (fit && fit.verdict !== "unknown" && !/outdoor only/i.test(fit.value)) out.push(`weather: ${fit.value.split(" - ")[0].toLowerCase()}`);
+  return out;
+}
+
 export type PickerCand = { id: string; name: string; kind: string; subtitle: string; minutes: number[]; facts: string[]; why: string };
 export type PickerIn = { query: string; when: string; need: number; candidates: PickerCand[]; failures?: string[]; allowed?: string[] };
 export type PickerOut = { ids: string[]; reasons: string[]; model: string; ms: number; guarded?: boolean } | null;
@@ -69,6 +99,17 @@ const SCHEMA = {
   required: ["picks"],
 };
 
+// server14: thinking levels. The first pick stays "low" (it is on every plan's critical path); the re-pick after
+// a failed check ("verify") runs only when a check rejected Argon's top pick. Measured 25 Oct 2026 (3 calls each,
+// same real candidate pool): re-pick low 3.7-5.2 s (median 4.8), medium 4.3-8.0 s (median 7.0), high timed out
+// (no answer within 12 s) 3/3; first pick low median 3.7 s, medium 4.4 s with 1/3 no answer. Medium would push a
+// re-picked plan to ~14 s, so both stay "low". PLAN_PICK_THINKING / PLAN_VERIFY_THINKING override (low|medium|high).
+const VERIFY_THINKING_DEFAULT = "low";
+const LEVELS = /^(minimal|low|medium|high)$/i;
+export const pickThinking = () => (LEVELS.test(process.env.PLAN_PICK_THINKING ?? "") ? process.env.PLAN_PICK_THINKING!.toLowerCase() : "low");
+export const verifyThinking = () => (LEVELS.test(process.env.PLAN_VERIFY_THINKING ?? "") ? process.env.PLAN_VERIFY_THINKING!.toLowerCase() : VERIFY_THINKING_DEFAULT);
+
+
 /** Argon (PLAN_MODEL) as the picker: JSON ids + one-line reasons. null on no key / off / any failure. */
 export const argonPicker: Picker = async (x) => {
   const key = process.env.GEMINI_API_KEY;
@@ -77,7 +118,7 @@ export const argonPicker: Picker = async (x) => {
   const prompt = x.failures
     ? `Our checks rejected your top pick for this plan:\n${x.failures.join("\n")}\nPick again, choosing only from these ids, which passed every check: ${x.allowed!.join(", ")}.\nAsk: "${x.query}" (plan time ${x.when}).\nOptions:\n${list}\nReturn up to ${x.need} picks, best first, each with a short reason based only on the facts listed.`
     : `You are planning an outing in London. Ask: "${x.query}" (plan time ${x.when}).\nThese options are already found and checked (TfL times, OSM hours, forecast). Pick the best ${x.need} for this ask, best first. Use only ids from the list. Prefer options that are clearly open at that time, fit the weather and what was asked. Reasons: one short line each, based only on the facts listed; do not invent facts.\nOptions:\n${list}`;
-  const body = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, responseMimeType: "application/json", responseSchema: SCHEMA, thinkingConfig: { thinkingLevel: "low" } } };
+  const body = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, responseMimeType: "application/json", responseSchema: SCHEMA, thinkingConfig: { thinkingLevel: x.failures ? verifyThinking() : pickThinking() } } };
   try {
     const call = await planGenerate(body, key, x.failures ? 12_000 : 15_000);
     if (!call.res.ok) return null;
@@ -131,7 +172,12 @@ export async function verifyPicks(pool: VCard[], o: VerifyOpts): Promise<{ cards
     for (const c of spare) if (out.length < o.max && !out.includes(c)) out.push(c);
     return out;
   };
-  const done = (cards: VCard[], rounds: number, model: string) => ({ cards, verify: { rounds, swapped, model } });
+  let proposedNames: string[] = [];
+  let modelMs = 0;
+  const done = (cards: VCard[], rounds: number, model: string): { cards: VCard[]; verify: VerifyInfo } => ({
+    cards,
+    verify: { rounds, swapped, model, checked: pool.length, proposed: proposedNames, checks: what, passed: cards[0] ? passedOf(cards[0]) : [], ...(modelMs ? { ms: modelMs, thinking: { pick: pickThinking(), verify: verifyThinking() } } : {}) },
+  });
 
   if (!pool.length || o.fixed) {
     o.begin("recheck", "Checking the plan against hours, TfL and weather")("done", pool.length ? summary(pool) : "Nothing to check");
@@ -152,6 +198,8 @@ export async function verifyPicks(pool: VCard[], o: VerifyOpts): Promise<{ cards
   const byId = new Map(pool.map((c) => [c.id, c]));
   const proposed = [...new Set(first.ids)].map((id) => byId.get(id)).filter((c): c is VCard => !!c);
   const fabricated = first.ids.filter((id) => !byId.has(id));
+  proposedNames = proposed.map((c) => c.name);
+  modelMs = first.ms;
   endPick!("done", `${first.model}${first.guarded ? " (Argon over the latency guard, flash used)" : ""}, ${secs(first.ms)}: ${proposed.map((c) => c.name).join(", ") || "no listed option"}${fabricated.length ? ` · ignored ${fabricated.length} id${fabricated.length > 1 ? "s" : ""} not in the list` : ""}${first.reasons[0] ? ` · "${first.reasons[0]}"` : ""}`, first.model);
   let model = first.model;
   let rounds = 1;
@@ -166,6 +214,7 @@ export async function verifyPicks(pool: VCard[], o: VerifyOpts): Promise<{ cards
       rounds = 2;
       const endRe = o.begin("argon-recheck", "Argon re-picking after the checks", "Gemini");
       const re = await picker({ query: o.query, when: o.whenLabel, need, candidates: cands, failures: [`${fromName}: ${reason}`], allowed: allowed.map((c) => c.id) });
+      if (re) modelMs += re.ms;
       const reTop = re?.ids.map((id) => byId.get(id)).find((c): c is VCard => !!c && allowed.includes(c));
       const to = reTop ?? allowed[0];
       endRe(re ? "done" : "failed", re ? `${re.model}, ${secs(re.ms)}${reTop ? "" : " · its answer didn't pass, used the best passing option"}` : "No answer, used the best passing option");

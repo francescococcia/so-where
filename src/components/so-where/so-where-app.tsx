@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, ArrowUp, CalendarDays, Camera, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, Languages, LocateFixed, Loader2, Mic, Navigation, PencilLine, Repeat2, Send, Sparkles, X } from "lucide-react";
+import { ArrowRight, ArrowUp, CalendarDays, Camera, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, Languages, LocateFixed, Loader2, Mic, Navigation, PencilLine, Repeat2, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import type { PlanResultWithAgent } from "@/lib/plan-types";
 import { translateDemo, type FixtureId } from "@/lib/plan-fixture";
 import type { VerifyInfo } from "@/lib/verify";
@@ -175,25 +175,62 @@ function Blind({ result, photo = false }: { result: PlanResultWithAgent; photo?:
           );
         })}
       </h2>
-      <SwapLine verify={(result as PlanResultWithAgent & { verify?: VerifyInfo }).verify} />
+      <ArgonRow verify={(result as PlanResultWithAgent & { verify?: VerifyInfo }).verify} top={result.cards[0]?.name} />
     </div>
   );
 }
 
-/** Argon's re-check changed a pick: one short line under the headline ("Argon swapped X → Y: closes 19:30"). */
-function SwapLine({ verify }: { verify?: VerifyInfo }) {
-  const sw = verify?.swapped?.[0];
-  if (!sw) return null;
-  const more = (verify?.swapped.length ?? 1) - 1;
+/** server14/ui25: the planner's pick → check → re-pick loop, on the card. Only what verify.ts recorded: the swap
+ * reason is the check that failed, "verified" lists what the top card actually passed (its own hours / TfL legs /
+ * weather fact). No model text is shown as a fact. */
+function ArgonRow({ verify, top }: { verify?: VerifyInfo; top?: string }) {
+  const [why, setWhy] = useState(false);
+  if (!verify || !top) return null;
+  const argon = /argon/i.test(verify.model);
+  const who = argon ? "Argon" : verify.model === "rules" ? "Our checks" : verify.model;
+  const sw = verify.swapped[0];
+  const picks = verify.proposed?.length ?? 0;
+  const passed = (verify.passed ?? []).slice(0, 3);
+  const secs = verify.ms ? `${(verify.ms / 1000).toFixed(1)} s` : null;
   return (
-    <motion.p initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.35 }} className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-[18px] text-ink-2" data-testid="argon-swap">
-      <Repeat2 className="mt-px size-3.5 shrink-0 text-signal-ink" aria-hidden />
-      <span>
-        <span className="font-semibold text-ink">Argon swapped</span> {sw.from} <span aria-label="for">→</span> <span className="font-semibold text-ink">{sw.to}</span>
-        {sw.reason ? <span className="text-ink-3">: {sw.reason}</span> : null}
-        {more > 0 ? <span className="text-ink-3"> · +{more} more</span> : null}
-      </span>
-    </motion.p>
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.35 }} className="mt-2.5 rounded-[12px] bg-white/65 px-2.5 py-2 ring-1 ring-white/80 backdrop-blur-md" data-testid="argon-row">
+      <p className="flex items-start gap-1.5 text-[12.5px] leading-[18px] text-ink-2" data-testid={sw ? "argon-swap" : "argon-verified"}>
+        {sw ? <Repeat2 className="mt-px size-3.5 shrink-0 text-signal-ink" aria-hidden /> : <ShieldCheck className="mt-px size-3.5 shrink-0 text-signal-ink" aria-hidden />}
+        {sw ? (
+          <span>
+            <span className="font-semibold text-ink">{argon && picks ? `Argon checked ${picks} pick${picks === 1 ? "" : "s"}` : `${who} re-checked`}</span>
+            <span className="text-ink-3"> · </span>Repicked: {sw.from}
+            {sw.reason ? <span className="text-ink-3"> ({sw.reason})</span> : null} <span aria-label="for">→</span> <span className="font-semibold text-ink">{sw.to}</span>
+            {verify.swapped.length > 1 ? <span className="text-ink-3"> · +{verify.swapped.length - 1} more</span> : null}
+          </span>
+        ) : (
+          <span>
+            <span className="font-semibold text-ink">{argon ? "Argon verified" : verify.model === "rules" ? "Checked" : `Verified (${who})`}</span>{" "}
+            {top}
+            {passed.length ? <span className="text-ink-3">: {passed.join(" · ")}</span> : null}
+          </span>
+        )}
+      </p>
+      <p className="mt-1 flex flex-wrap items-center gap-x-1.5 pl-5 text-[11.5px] leading-4 text-ink-3">
+        <span>
+          {verify.checked ?? "Its"} option{verify.checked === 1 ? "" : "s"} checked{verify.checks?.length ? `: ${verify.checks.slice(0, 3).join(", ")}` : ""}
+          {verify.rounds > 1 ? " · 2 rounds" : ""}
+          {secs && argon ? ` · ${secs}` : ""}
+        </span>
+        {argon ? (
+          <button type="button" aria-expanded={why} onClick={() => setWhy((w) => !w)} className="cursor-pointer font-semibold text-signal-ink underline decoration-signal/40 underline-offset-2 hover:decoration-signal">
+            Why Argon
+          </button>
+        ) : null}
+      </p>
+      <AnimatePresence initial={false}>
+        {why ? (
+          <motion.p key="why" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden pl-5 text-[11.5px] leading-4 text-ink-2">
+            <span className="block pt-1">One model, Argon, reads your photo or poster and weighs your ask, the TfL travel times, the forecast and the venues together to pick. Our checks then test the pick; if it fails, Argon re-picks.</span>
+          </motion.p>
+        ) : null}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -581,10 +618,10 @@ export function SoWhereApp() {
 
   useEffect(() => {
     const demo = new URLSearchParams(window.location.search).get("demo");
-    if (demo === "meet" || demo === "saturday") {
+    if (demo === "meet" || demo === "saturday" || demo === "repick") {
       showFixture(demo as FixtureId);
-      setQuery(demo === "meet" ? CHIPS[0].ask : CHIPS[3].ask);
-      setActiveChip(demo === "meet" ? "meet" : "walkin");
+      setQuery(demo === "saturday" ? CHIPS[3].ask : CHIPS[0].ask);
+      setActiveChip(demo === "saturday" ? "walkin" : "meet");
     } else if (demo === "place" || demo === "place-candidates" || demo === "place-nomatch" || demo === "place-landmark") {
       setSnapDemo(demo);
       setSnapMode("place");
