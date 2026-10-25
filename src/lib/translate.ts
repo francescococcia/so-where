@@ -110,7 +110,7 @@ export async function fromEnglish(text: string, lang: string): Promise<{ text: s
   const t = text.replace(/\s+/g, " ").trim().slice(0, 600);
   const r = await textCall(
     `Translate this short spoken reply from a London meet-up app into ${langName(lang)} (${lang}). Natural, friendly, spoken style.
-Keep venue names, station names, line names and times exactly as written; do not add anything.
+Keep venue names, station names, line names, times and app button labels in double quotes (e.g. "Send plan", "Copy text", "Share", "Directions") exactly as written, quotes included; do not add anything.
 Reply only with JSON: {"text":"<translation>"}
 Reply: ${JSON.stringify(t)}`,
   );

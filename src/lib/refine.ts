@@ -3,6 +3,7 @@
 // refinement is replayed in order, so a later time replaces an earlier one and soft wishes stack.
 // Hard overrides: time / date / place type / budget / walk-in / free / within N min / near me.
 // Soft wishes become ranking preferences (cheaper, quieter, terrace, indoor, closer to me / them, something different).
+import { fallbackReply } from "@/lib/chat-intent";
 import { parsePlanAsk, type PlanAsk } from "@/lib/ask-local";
 import { seatingOf, weatherRank } from "@/lib/venue-weather";
 import { isLeaveQuestion } from "@/lib/leave-time";
@@ -131,7 +132,7 @@ const TERRACE = /\bterrace\b|\boutside\b|\boutdoors?\b|\bbeer garden\b|\bgarden\
 const INDOOR = /\bindoors?\b|\binside\b|\bcovered\b|\bcos[yi]\b|\bout of the rain\b/i;
 const CLOSER_YOU = /\b(?:closer|nearer)\s+(?:to\s+)?(?:me|my place|my end|home)\b|\bless travel for me\b|\bshorter (?:trip|journey) for me\b/i;
 const CLOSER_THEM = /\b(?:closer|nearer)\s+(?:to\s+)?(?:her|him|them|my (?:friend|mate|date|partner)|[A-Z][a-z]+)\b/;
-const DIFFERENT = /\b(?:something|somewhere|a) (?:different|else)\b|\bdifferent (?:area|place|spot|one|options?)\b|\banother (?:area|place|spot|one|option)\b|\bother options?\b/i;
+const DIFFERENT = /\b(?:something|somewhere|a) (?:different|else)\b|\bdifferent (?:area|place|spot|one|options?)\b|\banother (?:area|place|spot|one|option)\b|\bother options?\b|\b(?:any )?alternatives?\b|\b(?:altre? (?:opzioni|posti)|alternativ[ae])\b|\b(?:otras? opciones|otros sitios|alternativas?)\b/i;
 const NEAR_ME = /\b(?:just )?near me(?: instead)?\b|\bforget (?:the )?(?:halfway|meeting)\b|\bon my own\b|\bjust me\b/i;
 const YOU_MOVED = /\b(?:i'?m|i am|im)\s+(?:now\s+)?(?:at|in|near|around|by)\s+\w/i;
 
@@ -373,9 +374,7 @@ export function refineReply(opts: {
   }
   if (!parts.length) {
     if (openAns) return `${openAns}.`;
-    return top
-      ? `Not sure what to change for ${top.name}: try a time ("8pm"), a type ("Italian", "a pub"), "quieter" or "closer to me".`
-      : `Not sure what to change: try a time ("8pm"), a type ("Italian", "a pub"), "quieter" or "closer to me".`;
+    return fallbackReply("", top?.name);
   }
   const s = cap(parts.join(" and "));
   return top ? `${s}: ${top.name}${openAns ? `; ${openAns.startsWith(top.name) ? `it${openAns.slice(top.name.length)}` : openAns}` : ""}.` : `${s}, but nothing open came up; try another time or area.`;

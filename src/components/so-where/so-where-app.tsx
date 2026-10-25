@@ -437,9 +437,16 @@ const looksPlain = (t: string) => t.trim().split(/\s+/).length <= 2 && !/[^\x00-
 /** Web Speech wants zh-CN, not the TTS cmn-CN tag. */
 const recogLang = (code?: string) => (code === "zh" ? "zh-CN" : (code && BCP47[code]) || "en-GB");
 
+/** ui30: server `followUp` on a follow-up answered without a replan (chat-intent.ts). */
+type FollowUp = { kind: string; action?: "share" | "directions" | "start_over" };
+const followUpOf = (r: unknown): FollowUp | null => {
+  const f = (r as { followUp?: FollowUp } | null)?.followUp;
+  return f && typeof f.kind === "string" ? f : null;
+};
+
 export function SoWhereApp() {
   const reduced = !!useReducedMotion();
-  const { state, submit, showFixture } = usePlan();
+  const { state, submit, showFixture, reset } = usePlan();
   const [query, setQuery] = useState("");
   const [activeChip, setActiveChip] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -537,6 +544,9 @@ export function SoWhereApp() {
   const pendingTimer = useRef<number | null>(null);
   const baseAsk = useRef("");
   const awaitingReply = useRef(false);
+  /** ui30: an off-script follow-up ("send it to my friend", "directions") pulses the matching action; never opens or sends. */
+  const [nudge, setNudge] = useState<null | "share" | "directions">(null);
+  const nudgeTimer = useRef<number | null>(null);
   const toastTimer = useRef<number | null>(null);
   const say = useCallback((text: string) => {
     setToast({ id: Date.now(), text });
@@ -650,8 +660,29 @@ export function SoWhereApp() {
   useEffect(() => {
     // The server's own failure fallback (no cards) never replaces a plan on screen; the error effect reports it.
     if (result && !result.cards.length && /^Sorry, I couldn.t plan/i.test(result.headline)) return;
-    setSelectedId(result?.cards[0]?.id ?? null);
+    // ui30: follow-ups answered from the plan on screen (share, thanks, "is it busy?") keep the cards and selection.
+    const fu = followUpOf(result);
+    if (fu?.action === "start_over") {
+      awaitingReply.current = false;
+      setRefining(false);
+      reset();
+      setShown(null);
+      setTurns([]);
+      setVoice(null);
+      talkLang.current = null;
+      setTalkCode(null);
+      baseAsk.current = "";
+      say(state.reply || "Starting fresh");
+      window.setTimeout(() => inputRef.current?.focus(), 60);
+      return;
+    }
+    if (!fu || !result?.cards.some((c) => c.id === selectedId)) setSelectedId(result?.cards[0]?.id ?? null);
     setDetailId(null);
+    if (fu?.action === "share" || fu?.action === "directions") {
+      setNudge(fu.action);
+      if (nudgeTimer.current) window.clearTimeout(nudgeTimer.current);
+      nudgeTimer.current = window.setTimeout(() => setNudge(null), 4200);
+    }
     if (result) {
       // Conversation language: a fresh ask sets it; a follow-up keeps it unless the server translated a new language.
       if (state.translated) talkLang.current = { ...state.translated, heardBy: talkLang.current?.lang === state.translated.lang && talkLang.current.heardBy && !awaitingReply.current ? talkLang.current.heardBy : state.translated.model };
@@ -668,7 +699,7 @@ export function SoWhereApp() {
         voiceOut({ id: Date.now(), text: planReply(result), leaveBy: leaveByOf(result), place: result.cards[0]?.name, autoplay: true });
       }
       setShown(result);
-      if (refining) say("Picks updated");
+      if (refining && !fu) say("Picks updated");
     }
     if (status !== "running") setRefining(false);
     // A new plan only (resultSeq), not late blurbs merged into the same one.
@@ -1219,11 +1250,11 @@ export function SoWhereApp() {
                 <AnimatePresence>{pending === "chat" ? <PendingSend ms={PENDING_MS} onCancel={cancelPending} /> : null}</AnimatePresence>
                 {status === "result" && result && !detail ? (
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => { setSendOpen(true); say("Draft ready · nothing is sent"); }} className="sw-btn sw-btn-primary min-h-11 flex-1 whitespace-nowrap rounded-[12px] px-4 text-[15px] font-semibold">
+                    <button type="button" onClick={() => { setNudge(null); setSendOpen(true); say("Draft ready · nothing is sent"); }} className={cn("sw-btn sw-btn-primary min-h-11 flex-1 whitespace-nowrap rounded-[12px] px-4 text-[15px] font-semibold", nudge === "share" && "sw-nudge")}>
                       <Send className="size-4" aria-hidden /> Send plan
                     </button>
                     {selected ? (
-                      <a href={gmapsDirections(selected.location.lat, selected.location.lng)} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3.5 text-[15px] font-medium">
+                      <a href={gmapsDirections(selected.location.lat, selected.location.lng)} target="_blank" rel="noopener noreferrer" onClick={() => setNudge(null)} className={cn("sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3.5 text-[15px] font-medium", nudge === "directions" && "sw-nudge")}>
                         <Navigation className="size-4" aria-hidden /> <span className="max-sm:sr-only">Directions</span>
                       </a>
                     ) : null}

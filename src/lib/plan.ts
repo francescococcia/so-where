@@ -5,6 +5,7 @@
 import { parsePlanAsk, SOLO_RE, type PlanAsk } from "@/lib/ask-local";
 import { LONDON_CENTER } from "@/lib/areas";
 import { arrivalClock, isLeaveQuestion, leaveTimes, type LeaveBy } from "@/lib/leave-time";
+import { chatIntent, chatReply, fallbackReply, type ChatAction, type ChatKind } from "@/lib/chat-intent";
 import { classifyQuestion, openWindow, recommendTime, splitQuestions } from "@/lib/follow-up";
 import { londonToday } from "@/lib/dates";
 import { seedEventsOn, type SeedEvent } from "@/lib/events";
@@ -35,7 +36,13 @@ export type PlanRequest = { query: string; you?: LatLng; when?: string; previous
 export type PlanFocus = { id?: string; name?: string; lat: number; lng: number };
 /** Result plus the follow-up chat fields (plan-types.ts stays unchanged): `reply` is one plain sentence about
  * what a refinement changed; `query` (already on PlanResult) is the accumulated ask to send back next turn. */
-export type PlanResultRefined = PlanResultWithAgent & { reply?: string; /** "When do I leave?" follow-ups only (see leave-time.ts). */ leaveBy?: LeaveBy };
+export type PlanResultRefined = PlanResultWithAgent & {
+  reply?: string;
+  /** "When do I leave?" follow-ups only (see leave-time.ts). */
+  leaveBy?: LeaveBy;
+  /** Off-script follow-ups answered without a replan (chat-intent.ts); `action` tells the UI what to highlight. Never sends. */
+  followUp?: { kind: ChatKind | "unknown"; action?: ChatAction };
+};
 export type StepSink = (step: AgentStep) => void;
 
 const MAX_CARDS = 3;
@@ -494,6 +501,19 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? C
     emit?.(step);
     return { ...base, query: joinRefine(req.previous.query, req.refine), steps: [...(base.steps ?? []), step], reply: a.reply, ...("leaveBy" in a && a.leaveBy ? { leaveBy: a.leaveBy } : {}) };
   }
+  const chat = !mixed && req.refine && req.previous ? chatIntent(req.refine) : null;
+  if (chat) {
+    // "Send it to my friend", "thanks", "is it busy?", "start over": answered from the plan on screen, no replan.
+    // Nothing is ever sent from here: share only tells the UI to highlight Send plan (a draft the user sends).
+    const base: PlanResultRefined = req.previous!.result?.cards?.length || chat.kind === "start_over" || chat.kind === "thanks" || chat.kind === "about"
+      ? (req.previous!.result ?? (await runPlanCore({ query: req.previous!.query, you: req.you, when: req.when }, emit, now)))
+      : await runPlanCore({ query: req.previous!.query, you: req.you, when: req.when }, emit, now);
+    const card = base.cards.length ? (req.focus && base.cards.find((c) => c.id === req.focus!.id || c.name === req.focus!.name)) || base.cards[0] : undefined;
+    const a = chatReply(chat, base, card, req.refine!);
+    const step: AgentStep = { id: "refine", label: "Answering your follow-up", status: "done", detail: `${a.detail} · plan unchanged`, source: "rules", ms: 0 };
+    emit?.(step);
+    return { ...base, query: req.previous!.query, steps: [...(base.steps ?? []), step], reply: a.reply, followUp: { kind: chat.kind, ...(a.action ? { action: a.action } : {}) } };
+  }
   const prev = req.previous?.result;
   const askOpen = !mixed && !!prev?.cards?.length && openQuestionOnly(req, londonToday(now));
   if (askOpen && prev) {
@@ -547,6 +567,15 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? C
     intent: r.intent,
   });
   if (r.them && reply.toLowerCase().includes(r.them.area.toLowerCase())) reply = reply.split(r.them.area).join("their side");
+  if (reply === fallbackReply("", top?.name)) {
+    // Nothing understood (gibberish, an unknown ask): keep the plan on screen and say what we can do, in their language.
+    reply = fallbackReply(req.refine ?? "", top?.name);
+    if (prev?.cards?.length) {
+      const step: AgentStep = { id: "refine", label: "Answering your follow-up", status: "done", detail: "Not understood · plan unchanged", source: "rules", ms: 0 };
+      emit?.(step);
+      return { ...prev, query: r.query, steps: [...(prev.steps ?? []), step], reply, followUp: { kind: "unknown" } };
+    }
+  }
   r.reply = reply;
   // Headline follows a cuisine refine: "2 Italian cafés near The Roasting Plant: …".
   const hits = rr.cuisine ? r.cards.filter((c) => c.facts.some((f) => f.label === "Cuisine" && f.verdict !== "unknown")).length : 0;

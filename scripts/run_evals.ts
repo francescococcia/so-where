@@ -31,6 +31,9 @@ import { PLAN_FALLBACK, planGenerate, resetPlanModelForTests } from "@/lib/plan-
 import { checkCard, setPlanPickerForTests, verifyPicks, type Picker, type VCard } from "@/lib/verify";
 import { embedText, vibeHybridPipeline, vibeSearch, vibeTerms } from "@/lib/mongo-vectors";
 import type { Db } from "mongodb";
+import { chatIntent, chatReply, fallbackReply } from "@/lib/chat-intent";
+import { runPlan } from "@/lib/plan";
+import { meetFixture } from "@/lib/plan-fixture";
 
 // Blurbs (Wikipedia / website / Gemini) are checked by the "server4" unit with mocks; the plan cases skip them.
 process.env.BLURBS ??= "off";
@@ -46,14 +49,14 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; /** server13: a compound follow-up, answered in several sentences. */ multiPart?: boolean; /** server13: both journeys at most this many minutes. */ maxLegMin?: number; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number; /** server8: card within maxM of this point, no such facts, never swapped by verify. */ near?: { lat: number; lng: number; maxM: number }; noFacts?: string[]; landmark?: boolean }; daysAhead?: number; /** server9: venues step detail/source matches; every card within maxM of a point. */ venuesFrom?: string; cardsNear?: { lat: number; lng: number; maxM: number }; /** server16: vibe step + chips; live Atlas (EVAL_ATLAS=1) also needs a vector match whose name matches. */ vibe?: { terms: string[]; nameMatch?: string } };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; /** server13: a compound follow-up, answered in several sentences. */ multiPart?: boolean; /** server13: both journeys at most this many minutes. */ maxLegMin?: number; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number; /** server8: card within maxM of this point, no such facts, never swapped by verify. */ near?: { lat: number; lng: number; maxM: number }; noFacts?: string[]; landmark?: boolean }; daysAhead?: number; /** server9: venues step detail/source matches; every card within maxM of a point. */ venuesFrom?: string; cardsNear?: { lat: number; lng: number; maxM: number }; /** server16: vibe step + chips; live Atlas (EVAL_ATLAS=1) also needs a vector match whose name matches. */ vibe?: { terms: string[]; nameMatch?: string }; /** server17: an off-script follow-up answered without a replan (followUp.kind; the ask is not accumulated). */ chat?: string };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
 // `unit`: in-process checks of a helper (no HTTP): "hours" parses OSM opening_hours, "segments" tidies stretches.
 type HoursUnit = { oh: string; date: string; at: string; state: "open" | "closed" | "unknown"; closesAt?: string };
-type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7" | "server8" | "server9" | "server16";
+type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7" | "server8" | "server9" | "server16" | "server17";
   // server6 "snap a place": a fixture extract stands in for Gemini (test hook); the route runs for real (fixture image bytes).
   snap?: { extract: SnapExtract; landmark?: boolean; nearbyQuery?: string; kind?: string; at?: { lat: number; lng: number; maxM: number }; you?: { lat: number; lng: number }; area?: string; place?: string; suggestedQuery?: string; minCandidates?: number; message?: string; firstCandidate?: string; noCandidates?: boolean }; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
 // `clock`: pin "now" to HH:MM London (today if still ahead, else tomorrow, so live TfL/forecast calls stay in the
@@ -443,6 +446,39 @@ async function unitChecks(c: Case): Promise<Chk[]> {
       add("LIVE Atlas: 'lively, sports on TV' near Covent Garden → a vector match named for sport (Bat & Ball / Sports Bar)", !("error" in live) && live.hits.slice(0, 5).some((h) => h.fromVector && /sport|bat & ball/i.test(h.name ?? "")), "error" in live ? live : { method: live.method, ms: live.ms, top: live.hits.slice(0, 5).map((h) => `${h.name} v=${h.fromVector} t=${h.fromText}`) });
     }
   }
+  if (c.unit === "server17") {
+    // Off-script follow-ups after a plan: share / thanks / unknown facts answered from the plan on screen, never a replan,
+    // never sent; refinements still go to the refine parser.
+    const shares = ["send it to my friend", "how do I share this", "share the route", "perfect how do I send the route to my friend", "perfetto come faccio per inviargli il percorso al mio amico", "mandalo a Marco", "inviagli il percorso", "envíaselo", "can you text him the plan"];
+    add("share intent: EN / IT / ES phrasings (incl. the reported Italian ask, raw and translated)", shares.every((q) => chatIntent(q)?.kind === "share"), shares.map((q) => [q, chatIntent(q)?.kind ?? null]));
+    const refines = ["somewhere cheaper", "8pm", "an Italian instead", "quieter please", "closer to me", "something different", "any alternatives", "is it open", "when should I leave to get there", "free entry", "less busy", "what about tomorrow at 8", "e domani alle 8?", "a pub with a terrace", "Costa coffee instead"];
+    add("refinements stay refinements (no chat intent)", refines.every((q) => chatIntent(q) === null), refines.map((q) => [q, chatIntent(q)]).filter((x) => x[1]));
+    const kinds: [string, string][] = [["thanks", "thanks"], ["ok", "thanks"], ["perfetto", "thanks"], ["gracias", "thanks"], ["is it step-free", "step_free"], ["how much is a pint there", "price"], ["quanto costa un caffè lì?", "price"], ["is it busy", "busy"], ["¿hay mucha gente?", "busy"], ["can I bring my dog", "dog"], ["si può portare il cane?", "dog"], ["is there wifi", "wifi"], ["start over", "start_over"], ["ricomincia", "start_over"], ["who are you", "about"], ["chi sei?", "about"], ["what's the weather", "weather"], ["che tempo fa?", "weather"], ["directions", "directions"], ["open in Google Maps", "directions"], ["¿cómo llego?", "directions"], ["call them", "call"], ["how long by bike", "travel_mode"], ["asdkjh qwpoe zzz", "none"]];
+    add("sweep kinds: thanks / step-free / price / busy / dog / wifi / start over / about / weather / directions / call / bike / gibberish", kinds.every(([q, k]) => (chatIntent(q)?.kind ?? "none") === k), kinds.map(([q, k]) => [q, k, chatIntent(q)?.kind ?? "none"]).filter((x) => x[1] !== x[2]));
+    const prev = meetFixture;
+    const ids = prev.cards.map((x) => x.id).join(",");
+    const ask = (q: string) => runPlan({ query: q, refine: q, previous: { query: prev.query, answer: "", result: prev } } as never);
+    let t0 = Date.now();
+    const sh = await ask("send it to my friend");
+    add("share follow-up: same plan, Send plan highlighted (followUp.action=share), says nothing is sent, draft unchanged (English), no replan (< 150 ms)",
+      sh.cards.map((x) => x.id).join(",") === ids && sh.followUp?.action === "share" && /Send plan/.test(sh.reply ?? "") && /Nothing is sent/.test(sh.reply ?? "") && sh.draftMessage === prev.draftMessage && Date.now() - t0 < 150 && sh.steps.at(-1)?.id === "refine" && /plan unchanged/.test(sh.steps.at(-1)?.detail ?? ""),
+      { reply: sh.reply, followUp: sh.followUp, ms: Date.now() - t0 });
+    const it = await ask("mandalo a Marco");
+    add("raw Italian share (translator skipped it) → Italian reply, still never sent", it.followUp?.action === "share" && /^Tocca "Send plan"/.test(it.reply ?? "") && /Non parte nulla/.test(it.reply ?? ""), it.reply);
+    const th = await ask("thanks");
+    add("thanks → short ack, no action, plan unchanged", th.followUp?.kind === "thanks" && !th.followUp?.action && (th.reply ?? "").length < 80 && th.cards.map((x) => x.id).join(",") === ids, th.reply);
+    t0 = Date.now();
+    const unknown = await Promise.all(["how much is a pint there", "is it busy", "can I bring my dog", "call them"].map(ask));
+    add("unknown facts (price / busy / dog / phone) → says we don't have it, points to the venue, no invented numbers or £", unknown.every((r) => /\bdon't\b|\bcan't\b/.test(r.reply ?? "") && !/£|\d+ ?(?:p|pence|quid)\b|\+44|\b0\d{3} ?\d{3}/.test(r.reply ?? "") && r.cards.map((x) => x.id).join(",") === ids) && Date.now() - t0 < 300, unknown.map((r) => r.reply));
+    const card = { ...prev.cards[0], facts: [...prev.cards[0].facts.filter((f) => f.label !== "Step-free"), { label: "Step-free", value: "Wheelchair access: yes (OSM tag)", verdict: "likely" }] } as typeof prev.cards[0];
+    const sf = chatReply({ kind: "step_free" }, prev, card, "is it step-free").reply;
+    const sfNo = chatReply({ kind: "step_free" }, prev, { ...card, facts: [{ label: "Step-free", value: "Not tagged in OSM", verdict: "unknown" }] } as typeof card, "is it step-free").reply;
+    add("step-free answered from the card's OSM tag; untagged → says so (never 'free entry')", /Wheelchair access: yes/.test(sf) && /isn't tagged/.test(sfNo) && !/free entry/i.test(sf + sfNo), [sf, sfNo]);
+    const so = await ask("start over");
+    add("start over → UI clears (followUp.action=start_over), no replan", so.followUp?.action === "start_over", so.followUp);
+    const fb = fallbackReply("", "Heard"), fbIt = fallbackReply("boh non lo so cosa", "Heard");
+    add("friendlier fallback, one sentence, lists what we can do (time / type / quieter / send / directions / when to leave); Italian for Italian", /^Sorry, I didn't catch that for Heard: try a time.*a type.*quieter.*send it to my friend.*directions.*when should I leave"\.$/.test(fb) && !/Not sure what to change/.test(fb) && /^Scusa, non ho capito/.test(fbIt), [fb, fbIt]);
+  }
   if (c.unit === "server9") {
     // Thin Atlas result (Atlas only holds the central hubs): the bundled snapshot, then live Overpass, top it up.
     const thin = (n = 0) => ({ places: [], source: "MongoDB Atlas (OSM snapshot 24 Oct)", asOf: "2026-10-24T19:44:45.780Z", live: false, ms: 1, note: "Venues come from the OSM snapshot of 24 Oct stored in MongoDB Atlas, not a live Overpass call", via: `Searched ${n} venues in MongoDB Atlas (2dsphere $geoNear)`, stepSource: "MongoDB Atlas $geoNear" });
@@ -673,10 +709,16 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
   }
   if (c.refines) {
     const last = c.refines[c.refines.length - 1];
-    if (!e.multiPart) add("reply is one sentence", !!r.reply && r.reply.length < 240 && !/[.!?]\s+\S/.test(r.reply.replace(/\b(?:St|Mr|Dr)\./g, "")), r.reply ?? null);
+    if (e.chat) {
+      const fu = (r as { followUp?: { kind: string; action?: string } }).followUp;
+      add(`answered as a follow-up (${e.chat}), not a replan`, fu?.kind === e.chat, fu ?? null);
+      add("ask not accumulated (a chat line never becomes a filter later)", !!base && r.query === base.query, r.query);
+      add("reply short (≤ 2 sentences)", !!r.reply && r.reply.length < 240, r.reply ?? null);
+    }
+    if (!e.multiPart && !e.chat) add("reply is one sentence", !!r.reply && r.reply.length < 240 && !/[.!?]\s+\S/.test(r.reply.replace(/\b(?:St|Mr|Dr)\./g, "")), r.reply ?? null);
     for (const m of e.replyMatch ?? []) add(`reply matches /${m}/i`, new RegExp(m, "i").test(r.reply ?? ""), r.reply ?? null);
     for (const m of e.replyNot ?? []) add(`reply avoids /${m}/i`, !new RegExp(m, "i").test(r.reply ?? ""), r.reply ?? null);
-    add("query accumulates every refinement", !!base && r.query.startsWith(base.query.replace(/\.$/, "")) && c.refines.map((q) => q.replace(/[?.!]+$/, "")).every((q) => r.query.includes(`refine: ${q}`)) && r.query.endsWith(last.replace(/[?.!]+$/, "")), r.query);
+    if (!e.chat) add("query accumulates every refinement", !!base && r.query.startsWith(base.query.replace(/\.$/, "")) && c.refines.map((q) => q.replace(/[?.!]+$/, "")).every((q) => r.query.includes(`refine: ${q}`)) && r.query.endsWith(last.replace(/[?.!]+$/, "")), r.query);
     const area = (e.themArea ?? r.them?.area ?? "").toLowerCase();
     if (area) add("reply has no 'them' area", !(r.reply ?? "").toLowerCase().includes(area), r.reply ?? null);
     add("draftMessage short, no TfL status", !!r.draftMessage && r.draftMessage.length <= 280 && !/good service|delay|disruption|closure|suspend|status/i.test(r.draftMessage), r.draftMessage);
