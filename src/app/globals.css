@@ -554,3 +554,12 @@ button.sw-map-chip:focus-visible { outline: 2px solid var(--sw-signal-strong); o
   .sw-now-card, .sw-demo-tag { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 @media (max-width: 699px) { .sw-demo-tag { display: none; } }
+
+/* ui34: hero typewriter (once per load). Each character is laid out from the start (no layout shift) and appears on
+   its own delay; a thin orange caret rides the newest character, then blinks on the last one for ~1 s and goes. */
+@keyframes sw-type-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes sw-type-caret { from { box-shadow: 2px 0 0 0 var(--sw-signal) } to { box-shadow: 2px 0 0 0 var(--sw-signal) } }
+@keyframes sw-type-blink { 0%, 49% { box-shadow: 2px 0 0 0 var(--sw-signal) } 50%, 100% { box-shadow: 2px 0 0 0 transparent } }
+.sw-type .sw-type-ch { animation: sw-type-in 1ms linear var(--d, 0ms) both, sw-type-caret 55ms step-end var(--d, 0ms); }
+.sw-type .sw-type-ch.sw-type-last { animation: sw-type-in 1ms linear var(--d, 0ms) both, sw-type-blink 0.5s step-end var(--d, 0ms) 2; }
+@media (prefers-reduced-motion: reduce) { .sw-type .sw-type-ch { animation: none !important; } }

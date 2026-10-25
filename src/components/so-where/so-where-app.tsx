@@ -275,21 +275,44 @@ function useCyclingPlaceholder(on: boolean) {
   return text;
 }
 
-const HERO = "Where shall we meet?".split(" ");
+const HERO = "Where shall we meet?";
+const HERO_ACCENT = HERO.lastIndexOf(" ") + 1; // "meet?" stays in the orange accent
+const HERO_STEP = 55; // ms per character: ~1.1 s for the whole line
+// Typewriter runs once per page load: going back to the empty state shows the line instantly.
+let heroTyped = false;
 
 function Hero() {
+  // CSS-only typewriter: every character is already laid out (full width/height reserved, no layout shift) and
+  // fades in on its own delay, so it starts at first paint without waiting for JS. Reduced motion: instant (globals.css).
+  const [typing] = useState(() => !heroTyped);
+  useEffect(() => {
+    heroTyped = true;
+  }, []);
+  const words = HERO.split(" ");
+  let at = 0;
   return (
-    <div className="relative mb-4 isolate">
-      <div aria-hidden className="pointer-events-none absolute -inset-x-5 -top-6 bottom-[-12px] -z-10 overflow-hidden rounded-[22px]">
-        <div className="sw-mesh" />
-      </div>
-      <h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.025em] text-ink" aria-label="Where shall we meet?">
-        {HERO.map((w, i) => (
-          <motion.span key={w + i} aria-hidden className="inline-block" initial={{ y: 10 }} animate={{ y: 0 }} transition={{ delay: 0.05 + i * 0.05, type: "spring", stiffness: 320, damping: 24 }}>
-            {i === HERO.length - 1 ? <span className="text-signal-ink">{w}</span> : w}
-            {i < HERO.length - 1 ? "\u00a0" : ""}
-          </motion.span>
-        ))}
+    <div className="relative mb-4">
+      <h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.025em] text-ink" aria-label={HERO}>
+        <span aria-hidden data-typed className={typing ? "sw-type" : undefined}>
+          {words.map((w, wi) => {
+            const wordStart = at;
+            at += w.length + 1;
+            const chars = (wi < words.length - 1 ? w + " " : w).split("");
+            return (
+              <span key={wi} className={cn("whitespace-nowrap", wordStart >= HERO_ACCENT && "text-signal-ink")}>
+                {chars.map((c, ci) => {
+                  const i = wordStart + ci;
+                  const last = i === HERO.length - 1;
+                  return (
+                    <span key={ci} className={cn("sw-type-ch", last && "sw-type-last")} style={typing ? ({ "--d": `${i * HERO_STEP}ms` } as React.CSSProperties) : undefined}>
+                      {c}
+                    </span>
+                  );
+                })}
+              </span>
+            );
+          })}
+        </span>
       </h1>
       <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.45, ease: [0.22, 1, 0.36, 1] }} className="mt-1.5 flex items-center gap-1 text-[14.5px] leading-[22px] text-ink-2">
         Ask like you&apos;d text a friend. <InfoTip />
