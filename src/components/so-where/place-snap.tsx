@@ -2,10 +2,15 @@
 
 // "Snap a place": point the camera at a pub / café front → POST /api/place-snap → the place on the map with
 // "Open now until 23:00", why here, and "Meet here" / "Send to a friend". The photo is only sent for that one
-// request and never stored (the data URL lives in memory until the panel is cleared).
+// request and never stored (the data URL lives in memory until the panel is cleared). Faces are blurred on the
+// device first (lib/face-blur.ts): the preview and the upload are the blurred copy, never the original.
+// Certainty (lib/snap-certainty.ts): high → show the place; medium → "Is this X, Area?" Yes / Not this one;
+// low → say what was unclear ("Too blurry to read the sign") with Retake / Type the name. Never a guessed name.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Camera, Check, ChevronRight, FlaskConical, ImageUp, Loader2, MapPin, RotateCcw, ScanLine, Search, ShieldCheck, Store, X } from "lucide-react";
+import { Camera, Check, ChevronRight, FlaskConical, HelpCircle, ImageUp, Keyboard, Loader2, MapPin, RotateCcw, ScanLine, Search, ShieldCheck, Store, X } from "lucide-react";
+import { blurFaces, warmFaceBlur, type FaceBlur } from "@/lib/face-blur";
+import { FaceChip } from "./face-chip";
 import type { Fact, LatLng, PlanCard, PlanResultWithAgent } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import type { Blurb } from "./use-plan";
@@ -14,7 +19,8 @@ import { PosterSnap, type PosterSnapProps } from "./poster-snap";
 import { useCameraSnap } from "./camera-viewfinder";
 
 // ---------- Response contract (read defensively) ----------
-export type SnapExtracted = { name: string | null; kind: string | null; signText: string | null; cuisine?: string | null; confidence: number };
+export type SnapCertainty = "high" | "medium" | "low";
+export type SnapExtracted = { name: string | null; kind: string | null; signText: string | null; cuisine?: string | null; confidence: number; certainty?: SnapCertainty; issue?: string | null };
 export type SnapPlace = {
   id?: string;
   name: string;
@@ -35,7 +41,7 @@ export type SnapPlace = {
   facts?: Fact[];
   [k: string]: unknown;
 };
-export type PlaceSnapResponse = { extracted: SnapExtracted; place?: SnapPlace | null; candidates?: SnapPlace[] | null; message?: string | null; suggestedQuery?: string | null; nearbyQuery?: string | null };
+export type PlaceSnapResponse = { extracted: SnapExtracted; place?: SnapPlace | null; candidates?: SnapPlace[] | null; message?: string | null; suggestedQuery?: string | null; nearbyQuery?: string | null; certainty?: SnapCertainty; reason?: string | null; typed?: boolean };
 
 /** What the app needs to show a matched place: a one-card result for the map + detail panel. */
 export type SnapView = { result: PlanResultWithAgent & { snapOnly: true; youKnown: boolean }; card: PlanCard; place: SnapPlace; query: string; draft: string; open: { text: string; tone: OpenTone }; example: boolean; landmark: boolean; nearbyQuery: string };
@@ -94,7 +100,7 @@ export function snapView(r: PlaceSnapResponse, p: SnapPlace, you: LatLng | null,
   return { result, card, place: p, query, draft, open, example, landmark, nearbyQuery };
 }
 
-// ---------- Demo fixtures (?demo=place | place-candidates | place-nomatch | place-landmark) ----------
+// ---------- Demo fixtures (?demo=place | place-medium | place-low | place-candidates | place-nomatch | place-landmark) ----------
 const KINGS: SnapPlace = {
   id: "demo-kings-arms", name: "The Kings Arms", kind: "pub", lat: 51.50352, lng: -0.10876, address: "25 Roupell Street, SE1", area: "Waterloo",
   openAtPlan: true, closesAt: "23:00", closingSoon: false, hoursKnown: true,
@@ -121,6 +127,8 @@ const DEMO: Record<string, PlaceSnapResponse> = {
     suggestedQuery: "Meet at the University of Greenwich",
     nearbyQuery: "Coffee near the University of Greenwich",
   },
+  "place-medium": { extracted: { name: "The Kings Arms", kind: "pub", signText: "THE KI.. ARMS", confidence: 0.7, certainty: "medium", issue: "glare" }, place: KINGS, certainty: "medium", reason: "Glare is hiding the sign", suggestedQuery: "Meet at The Kings Arms" },
+  "place-low": { extracted: { name: null, kind: "pub", signText: null, confidence: 0, certainty: "low", issue: "blurry" }, certainty: "low", reason: "Too blurry to read the sign", message: "Too blurry to read the sign", suggestedQuery: null },
   "place-nomatch": { extracted: { name: null, kind: "café", signText: "…ESPRESSO BAR", confidence: 0.3 }, message: "Couldn't match that sign to a place nearby.", suggestedQuery: null },
 };
 const DEMO_PHOTO =
@@ -138,7 +146,7 @@ const DEMO_PHOTO_LANDMARK =
 // ---------- Image prep (same limits as the poster: longest side ≤ 1600 px, JPEG ≤ 4 MB) ----------
 const MAX_SIDE = 1600;
 const MAX_BYTES = 4 * 1024 * 1024;
-async function toJpeg(src: Blob | HTMLVideoElement): Promise<Blob> {
+async function toJpeg(src: Blob | HTMLVideoElement, onBlur?: () => void): Promise<{ blob: Blob; faces: FaceBlur }> {
   let w: number, h: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, close = () => {};
   if (src instanceof HTMLVideoElement) {
     w = src.videoWidth;
@@ -173,9 +181,13 @@ async function toJpeg(src: Blob | HTMLVideoElement): Promise<Blob> {
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     draw(ctx, canvas.width, canvas.height);
+    close();
+    // Faces are blurred in this canvas before anything is shown or encoded.
+    onBlur?.();
+    const faces = await blurFaces(canvas);
     for (const q of [0.85, 0.72, 0.6]) {
       const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", q));
-      if (blob && blob.size <= MAX_BYTES) return blob;
+      if (blob && blob.size <= MAX_BYTES) return { blob, faces };
     }
     throw new Error("That photo is still too big after shrinking. Try a smaller one.");
   } finally {
@@ -197,7 +209,9 @@ const FRIENDLY: Record<number, string> = {
 
 type St =
   | { s: "idle" }
-  | { s: "scanning"; preview: string }
+  | { s: "scanning"; preview: string | null; phase?: "blur" | "read" }
+  | { s: "confirm"; preview: string; r: PlaceSnapResponse; chosen: SnapPlace; others: SnapPlace[] }
+  | { s: "unclear"; preview: string; r: PlaceSnapResponse; typing?: boolean }
   | { s: "match"; preview: string; r: PlaceSnapResponse; chosen: SnapPlace; others: SnapPlace[] }
   | { s: "pick"; preview: string; r: PlaceSnapResponse }
   | { s: "nomatch"; preview: string; r: PlaceSnapResponse }
@@ -206,7 +220,7 @@ type St =
 export type PlaceSnapProps = {
   /** Device location, already rounded to ~100 m by the caller (sent once, never stored). */
   you: LatLng | null;
-  /** ?demo=place | place-candidates | place-nomatch: canned response, labelled Example data. */
+  /** ?demo=place | place-medium | place-low | place-candidates | place-nomatch: canned response, labelled Example data. */
   demo?: string | null;
   onMatch: (v: SnapView) => void;
   className?: string;
@@ -217,6 +231,8 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
   const [area, setArea] = useState("");
   const [drag, setDrag] = useState(false);
   const [more, setMore] = useState(false);
+  const [faces, setFaces] = useState<FaceBlur | null>(null);
+  const [typed, setTyped] = useState("");
   const file = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
   const image = useRef<string | null>(null); // in memory only; dropped on clear / unmount
@@ -224,6 +240,11 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
   const demoRan = useRef(false);
   const isExample = !!demo && demo in DEMO;
 
+  // Panel open → start loading the face detector, so the first photo isn't held up.
+  useEffect(() => {
+    const t = window.setTimeout(warmFaceBlur, 400);
+    return () => window.clearTimeout(t);
+  }, []);
   useEffect(() => {
     return () => {
       abort.current?.abort();
@@ -235,8 +256,10 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
   const show = useCallback(
     (r: PlaceSnapResponse, preview: string, example: boolean) => {
       const cands = (Array.isArray(r.candidates) ? r.candidates : []).filter((c) => c && coords(c)).slice(0, 3);
-      const match = r.place && coords(r.place) ? r.place : null;
-      if (match) {
+      const match = r.place && coords(r.place) ? r.place : cands.length === 1 ? cands[0] : null;
+      if (r.certainty === "low") setSt({ s: "unclear", preview, r });
+      else if (r.certainty === "medium" && match) setSt({ s: "confirm", preview, r, chosen: match, others: cands.filter((c) => c.id !== match.id) });
+      else if (match === r.place && match) {
         const v = snapView(r, match, you, example);
         setSt({ s: "match", preview, r, chosen: match, others: cands.filter((c) => c.id !== match.id) });
         if (v) onMatch(v);
@@ -251,16 +274,17 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
   );
 
   const send = useCallback(
-    async (dataUrl: string, preview: string, hint?: string) => {
+    async (dataUrl: string | null, preview: string, hint?: string) => {
       abort.current?.abort();
       const ac = new AbortController();
       abort.current = ac;
-      setSt({ s: "scanning", preview });
+      setSt({ s: "scanning", preview, phase: "read" });
       try {
         const res = await fetch("/api/place-snap", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: dataUrl, ...(you ? { you } : {}), ...(hint ? { area: hint } : {}) }),
+          // dataUrl === null: the user typed the name instead (no photo is sent).
+          body: JSON.stringify({ ...(dataUrl ? { image: dataUrl } : { name: hint }), ...(you ? { you } : {}), ...(hint && dataUrl ? { area: hint } : {}) }),
           signal: AbortSignal.any ? AbortSignal.any([ac.signal, AbortSignal.timeout(25_000)]) : ac.signal,
         });
         const j = (await res.json().catch(() => null)) as (PlaceSnapResponse & { error?: string }) | null;
@@ -284,14 +308,14 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
         if (src.size > 25 * 1024 * 1024) return setSt({ s: "error", msg: FRIENDLY[413] });
       }
       try {
-        // Show the scan straight away (camera shots skip the idle flash while the photo shrinks).
-        if (!(src instanceof HTMLVideoElement)) {
-          if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
-          previewUrl.current = URL.createObjectURL(src);
-          setSt({ s: "scanning", preview: previewUrl.current });
-        }
-        const small = await toJpeg(src);
+        // Scan state straight away, but no preview yet: the raw photo is never shown, only the face-blurred copy.
         if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+        previewUrl.current = null;
+        setFaces(null);
+        setTyped("");
+        setSt({ s: "scanning", preview: null, phase: "blur" });
+        const { blob: small, faces: f } = await toJpeg(src);
+        setFaces(f);
         previewUrl.current = URL.createObjectURL(small);
         image.current = await toDataUrl(small);
         setArea("");
@@ -304,8 +328,30 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
   );
 
   // Live camera on every device that has one (phones: rear; laptops: webcam). Upload is the fallback.
+  const typeName = (name: string) => {
+    const n = name.trim();
+    if (n.length < 2 || st.s !== "unclear") return;
+    if (isExample) {
+      setSt({ s: "scanning", preview: st.preview, phase: "read" });
+      window.setTimeout(() => show(DEMO.place, st.preview, true), 900);
+      return;
+    }
+    void send(null, st.preview, n);
+  };
+
+  const confirm = (yes: boolean) => {
+    if (st.s !== "confirm") return;
+    if (yes) {
+      setSt({ s: "match", preview: st.preview, r: st.r, chosen: st.chosen, others: st.others });
+      const v = snapView(st.r, st.chosen, you, isExample);
+      if (v) onMatch(v);
+    } else if (st.others.length) setSt({ s: "pick", preview: st.preview, r: { ...st.r, candidates: st.others, message: "Is it one of these?" } });
+    else setSt({ s: "unclear", preview: st.preview, r: { ...st.r, reason: st.r.reason ?? "Couldn't be sure from the photo" }, typing: true });
+  };
+
   const camera = useCameraSnap({ hint: "snap the sign", onShot: (b) => void handle(b), onUpload: () => file.current?.click() });
   const snapNow = () => {
+    warmFaceBlur();
     if (st.s !== "idle") reset();
     void camera.start();
   };
@@ -315,7 +361,7 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
     if (!isExample || demoRan.current) return;
     demoRan.current = true;
     const photo = demo === "place-landmark" ? DEMO_PHOTO_LANDMARK : DEMO_PHOTO;
-    setSt({ s: "scanning", preview: photo });
+    setSt({ s: "scanning", preview: photo, phase: "read" });
     const t = window.setTimeout(() => show(DEMO[demo!], photo, true), 1700);
     return () => window.clearTimeout(t);
   }, [isExample, demo, show]);
@@ -339,6 +385,8 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
     image.current = null;
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
     previewUrl.current = null;
+    setFaces(null);
+    setTyped("");
     setSt({ s: "idle" });
     if (file.current) file.current.value = "";
   };
@@ -355,7 +403,7 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
     const a = area.trim();
     if (!a || st.s !== "nomatch") return;
     if (isExample) {
-      setSt({ s: "scanning", preview: st.preview });
+      setSt({ s: "scanning", preview: st.preview, phase: "read" });
       window.setTimeout(() => show(DEMO["place-candidates"], st.preview, true), 1200);
       return;
     }
@@ -364,6 +412,7 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
 
   const preview = st.s === "idle" || camera.active ? null : st.preview;
   const busy = st.s === "scanning";
+  const showPanel = !camera.active && st.s !== "idle" && (preview != null || busy);
 
   return (
     <section aria-label="Snap a place" className={cn("relative", className)}>
@@ -371,7 +420,7 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
 
       {camera.active ? (
         camera.panel
-      ) : !preview ? (
+      ) : !showPanel ? (
         <div
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
           onDragLeave={() => setDrag(false)}
@@ -381,21 +430,49 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
           <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={snapNow} aria-label="Snap a place: take a photo of a pub or café front" className="sw-btn sw-btn-primary min-h-11 shrink-0 rounded-full px-4 text-[14px] font-semibold">
             <Camera className="size-[18px]" aria-hidden /> Snap a place
           </motion.button>
-          <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => file.current?.click()} className="sw-chip min-h-11 shrink-0 px-3.5 text-[14px] font-medium text-ink">
+          <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => { warmFaceBlur(); file.current?.click(); }} className="sw-chip min-h-11 shrink-0 px-3.5 text-[14px] font-medium text-ink">
             <ImageUp className="size-4 text-ink-3" aria-hidden /> Upload
           </motion.button>
           <p className="min-w-0 flex-1 basis-[140px] text-[13px] leading-5 text-ink-3">Point at the sign. I&apos;ll say what it is and if it&apos;s open.</p>
         </div>
       ) : (
         <div className="flex items-start gap-3">
-          <ScanThumb src={preview} busy={busy} />
+          <ScanThumb src={preview ?? null} busy={busy} />
           <div className="min-w-0 flex-1" aria-live="polite" aria-busy={busy}>
             <AnimatePresence mode="wait" initial={false}>
               {busy ? (
                 <motion.p key="scan" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 pt-1 text-[14px] font-medium text-ink">
                   <Loader2 className="size-4 animate-spin text-signal-strong motion-reduce:animate-none" aria-hidden />
-                  <span className="sw-shimmer">Reading the sign…</span>
+                  <span className="sw-shimmer">{st.phase === "blur" ? "Blurring faces…" : "Reading the sign…"}</span>
                 </motion.p>
+              ) : st.s === "confirm" ? (
+                <motion.div key="confirm" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                  <Kicker><HelpCircle className="size-3.5" strokeWidth={2.4} aria-hidden /> Not fully sure</Kicker>
+                  <p className="mt-0.5 text-[15px] font-semibold leading-5 text-ink">Is this {st.chosen.name}{st.chosen.area ? `, ${st.chosen.area}` : ""}?</p>
+                  {st.r.reason ? <p className="mt-0.5 text-[12.5px] leading-4 text-ink-3">{st.r.reason}</p> : null}
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => confirm(true)} className="sw-btn sw-btn-primary min-h-11 rounded-full px-4 text-[14px] font-semibold"><Check className="size-4" strokeWidth={2.6} aria-hidden /> Yes</motion.button>
+                    <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => confirm(false)} className="sw-chip min-h-11 px-3.5 text-[14px] font-medium text-ink">Not this one</motion.button>
+                  </div>
+                </motion.div>
+              ) : st.s === "unclear" ? (
+                <motion.div key="unclear" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                  <Kicker>Couldn&apos;t tell</Kicker>
+                  <p className="mt-0.5 text-[14px] font-semibold leading-5 text-ink">{st.r.reason || st.r.message || "Couldn't read the sign clearly"}</p>
+                  {st.typing ? (
+                    <form onSubmit={(e) => { e.preventDefault(); typeName(typed); }} className="sw-field mt-2 flex items-center gap-1 p-1 pl-3">
+                      <label htmlFor="snap-name" className="sr-only">Place name</label>
+                      <Keyboard className="size-4 shrink-0 text-ink-3" aria-hidden />
+                      <input id="snap-name" autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Place name" autoComplete="off" enterKeyHint="search" maxLength={80} className="min-w-0 flex-1 bg-transparent py-1.5 text-[16px] leading-6 text-ink caret-signal placeholder:text-ink-3 focus:outline-none" />
+                      <button type="submit" disabled={typed.trim().length < 2} aria-label="Find that place" className="sw-btn sw-btn-primary size-10 shrink-0 rounded-full"><Search className="size-4" aria-hidden /></button>
+                    </form>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={snapNow} className="sw-btn sw-btn-primary min-h-11 rounded-full px-4 text-[14px] font-semibold"><RotateCcw className="size-4" aria-hidden /> Retake</motion.button>
+                      <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => setSt({ ...st, typing: true })} className="sw-chip min-h-11 px-3.5 text-[14px] font-medium text-ink"><Keyboard className="size-4 text-ink-3" aria-hidden /> Type the name</motion.button>
+                    </div>
+                  )}
+                </motion.div>
               ) : st.s === "match" ? (
                 <Matched key={"m" + (st.chosen.id ?? st.chosen.name)} r={st.r} p={st.chosen} hasOthers={st.others.length > 0} more={more} onMore={() => setMore((m) => !m)} />
               ) : st.s === "pick" ? (
@@ -442,6 +519,7 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
 
       <p className="mt-2 flex items-center gap-1.5 px-1 text-[11.5px] leading-4 text-ink-3">
         <ShieldCheck className="size-3.5 shrink-0" aria-hidden /> Photo isn&apos;t saved.
+        {!isExample ? <FaceChip faces={faces} /> : null}
         {isExample ? <span className="ml-auto inline-flex h-5 items-center gap-1 rounded-full bg-likely-bg px-2 text-[11px] font-semibold text-likely"><FlaskConical className="size-3" aria-hidden /> Example data</span> : null}
       </p>
     </section>
@@ -500,12 +578,12 @@ function Picker({ items, r, onPick }: { items: SnapPlace[]; r: PlaceSnapResponse
 }
 
 /** Photo thumbnail; while reading, a frosted veil with an orange scan line (static with reduced motion). */
-function ScanThumb({ src, busy }: { src: string; busy: boolean }) {
+function ScanThumb({ src, busy }: { src: string | null; busy: boolean }) {
   const reduce = useReducedMotion();
   return (
     <div className="relative h-28 w-[84px] shrink-0 overflow-hidden rounded-[12px] bg-sunk shadow-e1 ring-1 ring-black/5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="Your photo of the place" className="size-full object-cover" />
+      {src ? <img src={src} alt="Your photo of the place (faces blurred)" className="size-full object-cover" /> : <span aria-hidden className="absolute inset-0 bg-gradient-to-b from-signal-soft to-sunk" />}
       <AnimatePresence>
         {busy ? (
           <motion.div key="veil" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0">

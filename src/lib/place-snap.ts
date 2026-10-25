@@ -19,6 +19,7 @@ import { addressOf, hoursAt, kindLabel, type OsmKind } from "@/lib/osm";
 import type { PlanCardWithHours } from "@/lib/plan";
 import type { Fact, LatLng } from "@/lib/plan-types";
 import { PosterError } from "@/lib/poster";
+import { ISSUES, LEVELS, type SnapCertainty, type SnapIssue } from "@/lib/snap-certainty";
 import { venueArea } from "@/lib/venue-area";
 
 export type SnapKind = "pub" | "cafe" | "restaurant" | "bar" | "shop" | "other";
@@ -28,7 +29,7 @@ export type SnapVibe = { tags: string[]; line: string };
 /** A recognisable building / landmark (university, museum, station, church, famous building), from its architecture
  *  as well as any text. null when it's not one (or the model can't tell). */
 export type SnapLandmark = { name: string; confidence: number };
-export type SnapExtract = { name: string | null; kind: SnapKind; signText: string | null; cuisine: string | null; confidence: number; vibe: SnapVibe | null; landmark: SnapLandmark | null };
+export type SnapExtract = { name: string | null; kind: SnapKind; signText: string | null; cuisine: string | null; confidence: number; vibe: SnapVibe | null; landmark: SnapLandmark | null; /** How sure the model is that it read the place right, and what got in the way. */ certainty?: SnapCertainty; issue?: SnapIssue | null };
 /** A plan-style card for the snapped place, plus flat lat/lng/address and the /api/photo lookup for it. */
 /** opensAt: London "HH:MM" of the next opening when closed now (null when open/unknown/no opening in 7 days);
  *  opensDay: short day ("Mon") when that opening is not today, else null. */
@@ -56,17 +57,21 @@ const SCHEMA = {
     signText: S,
     cuisine: S,
     confidence: { type: "NUMBER" },
+    certainty: { type: "STRING", enum: LEVELS },
+    issue: { type: "STRING", enum: ISSUES, nullable: true },
     vibe: { type: "OBJECT", nullable: true, properties: { tags: { type: "ARRAY", items: { type: "STRING" } }, line: { type: "STRING" } }, required: ["tags", "line"] },
     landmark: { type: "OBJECT", nullable: true, properties: { name: { type: "STRING" }, confidence: { type: "NUMBER" } }, required: ["name", "confidence"] },
   },
-  required: ["kind", "confidence"],
-  propertyOrdering: ["name", "kind", "signText", "cuisine", "confidence", "vibe", "landmark"],
+  required: ["kind", "confidence", "certainty"],
+  propertyOrdering: ["name", "kind", "signText", "cuisine", "confidence", "certainty", "issue", "vibe", "landmark"],
 };
 const PROMPT = [
   "This photo shows a place in London: a shop front, pub sign, café or restaurant front, its sign, or the inside of one. Fill the JSON fields.",
   `name: the place's name as on the sign, in normal capitalisation ("THE KINGS ARMS" → "The Kings Arms"); not a brand on an awning ad, not a street name. null if no name is readable.`,
   `kind: pub | cafe | restaurant | bar | shop | other (other = not a venue). If the photo is taken inside a place, kind is what the room looks like (coffee counter → cafe, beer taps → pub). signText: only text actually on a sign (or, indoors, a brand on a banner, menu board or cups), exactly as printed, one line; not dates, times, captions, on-screen or overlay text unless clearly part of the sign. cuisine: e.g. "thai", "italian", "coffee" if the sign shows it, else null.`,
   "confidence 0–1 for how sure you are of the name. Never invent a name.",
+  `certainty: high = the name is clearly readable (or the landmark unmistakable); medium = a best guess (partly readable, a bit blurry, small or at an angle, or it could be another place); low = you cannot honestly tell (too blurry, too dark, too far, cut off, glare, no sign, not a place). Be strict: if you are filling in letters you cannot see, it is not high. If low, set name to null rather than guess.`,
+  `issue: what got in the way, or null if nothing: blurry | dark | far | cropped | glare | no_sign | ambiguous | not_a_place.`,
   `landmark: if the photo shows a recognisable building or landmark in London (a university, museum, gallery, station, church or cathedral, palace, bridge, famous building), recognised from its architecture as well as any text: {name: its usual full name ("Old Royal Naval College", "University of Greenwich", "St Paul's Cathedral"), confidence 0–1}. Also when the photo is of a screen or a print showing it. null for ordinary shops, pubs, cafés and restaurants, or if you can't tell.`,
   `vibe: only what is VISIBLE in this photo. tags: up to 5 short lowercase tags such as "cosy", "busy", "quiet", "terrace", "outdoor seating", "dog-friendly" (only if a dog/bowl/sign is visible), "flower baskets", "candlelit", "big windows". line: one plain sentence ≤90 characters describing what the photo shows ("Corner pub with hanging baskets and a few tables outside"). No ratings, stars, prices, opinions of quality, or anything you can't see: don't infer tags from words on a sign (a "beer garden" sign isn't visible outdoor seating). null if nothing beyond the sign is visible.`,
 ].join("\n");
@@ -75,7 +80,7 @@ const str = (v: unknown, max = 120) => (typeof v === "string" && v.trim() ? v.tr
 export function cleanSnap(raw: unknown): SnapExtract {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const conf = typeof o.confidence === "number" && Number.isFinite(o.confidence) ? Math.max(0, Math.min(1, o.confidence)) : 0;
-  return { name: str(o.name, 80), kind: KINDS.find((k) => k === o.kind) ?? "other", signText: str(o.signText, 160), cuisine: str(o.cuisine, 30)?.toLowerCase() ?? null, confidence: Math.round(conf * 100) / 100, vibe: cleanVibe(o.vibe), landmark: cleanLandmark(o.landmark) };
+  return { name: str(o.name, 80), kind: KINDS.find((k) => k === o.kind) ?? "other", signText: str(o.signText, 160), cuisine: str(o.cuisine, 30)?.toLowerCase() ?? null, confidence: Math.round(conf * 100) / 100, vibe: cleanVibe(o.vibe), landmark: cleanLandmark(o.landmark), certainty: LEVELS.find((l) => l === o.certainty) ?? (!str(o.name) ? "medium" : conf >= 0.8 ? "high" : conf >= 0.5 ? "medium" : "low"), issue: ISSUES.find((i) => i === o.issue) ?? null };
 }
 export function cleanLandmark(v: unknown): SnapLandmark | null {
   const o = v && typeof v === "object" ? (v as { name?: unknown; confidence?: unknown }) : null;

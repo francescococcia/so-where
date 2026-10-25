@@ -4,9 +4,11 @@
 // getUserMedia is called straight from the click (so the browser shows its permission prompt), rear camera
 // preferred, any camera otherwise (laptop webcams). Blocked → friendly copy + Upload; no camera / http → Upload.
 // Frames never leave the device except the one photo the user takes; every track is stopped on close/capture/unmount.
+// The shot goes to the caller, which blurs faces (lib/face-blur.ts) before showing or sending it.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Camera, CameraOff, ImageUp, X } from "lucide-react";
+import { Camera, CameraOff, ImageUp, ScanFace, X } from "lucide-react";
+import { warmFaceBlur } from "@/lib/face-blur";
 import { cn } from "@/lib/utils";
 
 type Cam =
@@ -49,6 +51,7 @@ export function useCameraSnap({ onShot, onUpload, hint }: { onShot: (b: Blob) =>
     const md = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
     // http (not localhost) or no API: no live camera possible → the picker (phones still offer their camera there).
     if (!window.isSecureContext || !md?.getUserMedia) return onUpload();
+    warmFaceBlur(); // load the face detector while the camera opens
     stop();
     setCam({ s: "asking" });
     let s: MediaStream | null = null;
@@ -168,6 +171,7 @@ export function CameraViewfinder({ stream, mirror, hint, onShot, onCancel, onUpl
         <span key={k} aria-hidden className={cn("pointer-events-none absolute size-6 rounded-[3px] border-white/90", k)} />
       ))}
       <p className="pointer-events-none absolute inset-x-0 top-3 text-center text-[12.5px] font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,.5)]">Get the {hint.replace(/^snap the /, "")} in frame</p>
+      <p className="pointer-events-none absolute inset-x-0 top-8 flex justify-center"><span className="inline-flex items-center gap-1 rounded-full bg-black/35 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm"><ScanFace className="size-3" aria-hidden /> Faces get blurred</span></p>
       {flash ? <span aria-hidden className="absolute inset-0 bg-white/70" /> : null}
       <div className="absolute inset-x-0 bottom-0 grid grid-cols-[1fr_auto_1fr] items-center bg-gradient-to-t from-black/60 to-transparent px-2 pb-2.5 pt-8">
         <button type="button" onClick={onCancel} className="min-h-11 justify-self-start rounded-full px-3 text-[14px] font-semibold text-white">Cancel</button>

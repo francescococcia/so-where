@@ -970,7 +970,7 @@ export function SoWhereApp() {
           transition={{ type: "spring", stiffness: 220, damping: 28, delay: 0.05 }}
           className="sw-glass relative z-10 -mt-5 flex flex-col rounded-t-[22px] lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:mt-0 lg:w-[444px] lg:rounded-[22px]"
         >
-          <div ref={scrollRef} className="flex-1 px-4 pb-6 pt-4 lg:overflow-y-auto lg:px-5 lg:pt-5">
+          <div ref={scrollRef} className="sw-scroll-fade flex-1 overscroll-contain px-4 pb-6 pt-4 lg:overflow-y-auto lg:px-5 lg:pt-5">
             <Header example={state.example || !!placeSnap?.example} reason={placeSnap?.example ? "demo link" : state.exampleReason} className="mb-5 hidden lg:flex" />
 
             {status === "idle" ? <Hero /> : null}

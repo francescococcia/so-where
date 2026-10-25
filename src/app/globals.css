@@ -508,3 +508,25 @@ button.sw-map-chip:focus-visible { outline: 2px solid var(--sw-signal-strong); o
 /* ui24: the loading radar centred on the places named in the ask (plan-map sets --scan-x/--scan-y in px) */
 .sw-scan.is-focus { background: radial-gradient(circle at var(--scan-x, 62%) var(--scan-y, 50%), transparent 0 14%, rgba(244,241,234,0) 14%, rgba(74,52,30,.08) 70%); }
 .sw-scan.is-focus::before { left: var(--scan-x, 62%); top: var(--scan-y, 50%); }
+
+/* ---------- ui26: scroll bars (thin, transparent track, orange thumb at low opacity) ----------
+   Blink/WebKit get ::-webkit-scrollbar (hover/active states). Since Chrome 121 the standard
+   scrollbar-color would override those, so the standard props go only to engines without the pseudo (Firefox). */
+:root { --sw-thumb: rgba(255, 107, 44, 0.26); --sw-thumb-hover: rgba(255, 107, 44, 0.55); --sw-thumb-active: rgba(232, 86, 20, 0.78); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background-color: var(--sw-thumb); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; min-height: 36px; transition: background-color .2s ease; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--sw-thumb-hover); }
+::-webkit-scrollbar-thumb:active { background-color: var(--sw-thumb-active); }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--sw-thumb) transparent; }
+  *:hover { scrollbar-color: var(--sw-thumb-hover) transparent; }
+}
+/* soft edge fade on the results panel; the fades sit inside its padding (pt-4/5, pb-6) so at the ends nothing is masked */
+@media (min-width: 1024px) {
+  .sw-scroll-fade {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 16px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 16px), transparent 100%);
+  }
+}

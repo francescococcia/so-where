@@ -2,10 +2,13 @@
 
 // "Snap a poster": photo (camera / file / drag-drop / paste) → downscaled JPEG → POST /api/poster →
 // "Found: <title> · <venue> · Sat 19:00" with Plan it / Edit. The photo stays on the device apart from
-// that one request (the server doesn't keep it either).
+// that one request (the server doesn't keep it either). Faces are blurred on the device first (lib/face-blur.ts):
+// the preview and the upload are the blurred copy.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useCameraSnap } from "./camera-viewfinder";
+import { blurFaces, warmFaceBlur, type FaceBlur } from "@/lib/face-blur";
+import { FaceChip } from "./face-chip";
 import { Camera, Check, ImageUp, Loader2, Pencil, RotateCcw, ScanLine, Sparkles, X } from "lucide-react";
 
 type Extracted = {
@@ -60,7 +63,7 @@ async function loadBitmap(file: Blob): Promise<{ w: number; h: number; draw: (ct
 }
 
 /** Longest side ≤ 1600 px, JPEG, ≤ 4 MB. */
-async function downscale(file: Blob): Promise<Blob> {
+async function downscale(file: Blob): Promise<{ blob: Blob; faces: FaceBlur }> {
   const bm = await loadBitmap(file);
   try {
     const k = Math.min(1, MAX_SIDE / Math.max(bm.w, bm.h));
@@ -74,9 +77,10 @@ async function downscale(file: Blob): Promise<Blob> {
     ctx.fillStyle = "#fff"; // transparent PNGs → white, not black
     ctx.fillRect(0, 0, w, h);
     bm.draw(ctx, w, h);
+    const faces = await blurFaces(canvas); // before anything is shown or sent
     for (const q of [0.85, 0.72, 0.6]) {
       const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", q));
-      if (blob && blob.size <= MAX_BYTES) return blob;
+      if (blob && blob.size <= MAX_BYTES) return { blob, faces };
     }
     throw new Error("That photo is still too big after shrinking. Try a smaller one.");
   } finally {
@@ -102,6 +106,7 @@ type State =
 export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapProps) {
   const [st, setSt] = useState<State>({ s: "idle" });
   const [drag, setDrag] = useState(false);
+  const [faces, setFaces] = useState<FaceBlur | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
   const previewUrl = useRef<string | null>(null);
@@ -112,6 +117,11 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
     previewUrl.current = blob ? URL.createObjectURL(blob) : null;
     return previewUrl.current ?? "";
   };
+  // Panel open → start loading the face detector, so the first photo isn't held up.
+  useEffect(() => {
+    const t = window.setTimeout(warmFaceBlur, 400);
+    return () => window.clearTimeout(t);
+  }, []);
   useEffect(() => () => {
     abort.current?.abort();
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
@@ -120,6 +130,7 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
   const reset = () => {
     abort.current?.abort();
     setPreview(null);
+    setFaces(null);
     setSt({ s: "idle" });
     if (input.current) input.current.value = "";
   };
@@ -134,7 +145,9 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
       abort.current = ac;
       let preview = "";
       try {
-        const small = await downscale(file);
+        setFaces(null);
+        const { blob: small, faces: f } = await downscale(file);
+        setFaces(f);
         preview = setPreview(small);
         setSt({ s: "scanning", preview });
         const fd = new FormData();
@@ -171,6 +184,7 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
   // Live camera (phone rear camera or laptop webcam); file picker when there's none / it's blocked.
   const camera = useCameraSnap({ hint: "snap the poster", onShot: (b) => void handle(b), onUpload: () => input.current?.click() });
   const snapNow = () => {
+    warmFaceBlur();
     if (st.s !== "idle") reset();
     void camera.start();
   };
@@ -218,7 +232,7 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
           >
             <Camera className="size-[18px]" aria-hidden /> Snap a poster
           </motion.button>
-          <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => input.current?.click()} className="sw-chip min-h-11 shrink-0 px-3.5 text-[14px] font-medium text-ink">
+          <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => { warmFaceBlur(); input.current?.click(); }} className="sw-chip min-h-11 shrink-0 px-3.5 text-[14px] font-medium text-ink">
             <ImageUp className="size-4 text-ink-3" aria-hidden /> Upload
           </motion.button>
           <p className="min-w-0 flex-1 basis-[140px] text-[13px] leading-5 text-ink-3">
@@ -276,6 +290,7 @@ export function PosterSnap({ onPlan, onEdit, context, className }: PosterSnapPro
       {st.s === "error" && !preview ? (
         <p role="alert" className="mt-2 px-1 text-[13px] font-medium text-signal-ink">{st.msg}</p>
       ) : null}
+      {preview && !camera.active ? <p className="mt-2 flex px-1"><FaceChip faces={faces} /></p> : null}
     </section>
   );
 }
