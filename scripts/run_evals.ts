@@ -21,12 +21,18 @@ import { STATIONS } from "@/lib/gazetteer";
 import { acceptRewrite, buildBlurb, fallbackBlurb, wikiFits, type BlurbInput } from "@/lib/blurb";
 import { arrivalClock, isLeaveQuestion, statedOrigin } from "@/lib/leave-time";
 import { splitRefine } from "@/lib/refine";
+import { metresBetween } from "@/lib/geo";
 import { POST as SNAP_POST } from "@/app/api/place-snap/route";
 import { cleanVibe, roundYou, setSnapExtractorForTests, type PlaceSnapResponse, type SnapExtract } from "@/lib/place-snap";
 import { resetVisionModelForTests, visionGenerate, VISION_FALLBACK } from "@/lib/vision";
+import { PLAN_FALLBACK, planGenerate, resetPlanModelForTests } from "@/lib/plan-model";
+import { checkCard, setPlanPickerForTests, verifyPicks, type Picker, type VCard } from "@/lib/verify";
 
 // Blurbs (Wikipedia / website / Gemini) are checked by the "server4" unit with mocks; the plan cases skip them.
 process.env.BLURBS ??= "off";
+// The planner model (Argon) is checked by the "server7" unit with a fixture picker; plan cases use our own
+// ranking unless EVAL_ARGON=1 (then the verify loop calls the real PLAN_MODEL; see the timings in the report).
+process.env.PLAN_ARGON ??= process.env.EVAL_ARGON ? "on" : "off";
 
 function pinnedNow(hhmm: string): Date {
   const [hh, mm] = hhmm.split(":").map(Number);
@@ -36,16 +42,16 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number } };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number }; daysAhead?: number };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
 // `unit`: in-process checks of a helper (no HTTP): "hours" parses OSM opening_hours, "segments" tidies stretches.
 type HoursUnit = { oh: string; date: string; at: string; state: "open" | "closed" | "unknown"; closesAt?: string };
-type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6";
+type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7";
   // server6 "snap a place": a fixture extract stands in for Gemini (test hook); the route runs for real (fixture image bytes).
-  snap?: { extract: SnapExtract; you?: { lat: number; lng: number }; area?: string; place?: string; suggestedQuery?: string; minCandidates?: number; message?: string }; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
+  snap?: { extract: SnapExtract; you?: { lat: number; lng: number }; area?: string; place?: string; suggestedQuery?: string; minCandidates?: number; message?: string; firstCandidate?: string; noCandidates?: boolean }; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
 // `clock`: pin "now" to HH:MM London (today if still ahead, else tomorrow, so live TfL/forecast calls stay in the
 // future); `dayOffset` is then the plan's London date minus the pinned date.
 type Refined = PlanResultWithAgent & { reply?: string; leaveBy?: { you?: string; them?: string; arriveBy: string; date: string } };
@@ -174,7 +180,7 @@ async function unitChecks(c: Case): Promise<Chk[]> {
     const ce = cleanExtract({ kind: "event", title: "X", date: "2025-10-31", startTime: "7.30", confidence: 3, url: "vortexjazz.co.uk" }, today);
     add("cleanExtract: past-year date rolls forward, 7.30 → 07:30, confidence clamped, url gets https", ce.date === "2026-10-31" && ce.startTime === "07:30" && ce.confidence === 1 && ce.url === "https://vortexjazz.co.uk", ce);
   }
-  if (c.unit === "server6" && c.snap) {
+  if ((c.unit === "server6" || c.unit === "server7") && c.snap) {
     const sn = c.snap;
     setSnapExtractorForTests(async () => sn.extract);
     try {
@@ -196,6 +202,13 @@ async function unitChecks(c: Case): Promise<Chk[]> {
       if (sn.suggestedQuery) add(`suggestedQuery = "${sn.suggestedQuery}"`, b.suggestedQuery === sn.suggestedQuery, b.suggestedQuery);
       if (sn.minCandidates) add(`${sn.minCandidates}–3 candidates, each with a 'Meet at' query`, (b.candidates?.length ?? 0) >= sn.minCandidates && (b.candidates?.length ?? 0) <= 3 && b.candidates!.every((x) => x.suggestedQuery.startsWith(`Meet at ${x.name}`)), b.candidates?.map((x) => x.suggestedQuery));
       if (sn.message) add(`message matches /${sn.message}/`, new RegExp(sn.message).test(b.message ?? ""), b.message);
+      if (c.unit === "server7") {
+        add("vibe kept in the response", JSON.stringify(b.extracted.vibe ?? null) === JSON.stringify(sn.extract.vibe ?? null), b.extracted.vibe);
+        if (sn.firstCandidate) add(`first candidate = ${sn.firstCandidate}`, b.candidates?.[0]?.name === sn.firstCandidate, b.candidates?.map((x) => x.name));
+        if (sn.noCandidates) add("no candidates without a location", !b.candidates?.length, b.candidates?.length);
+        const at = sn.you ?? null;
+        if (at && b.candidates?.length) add("every candidate within ~250 m (+100 m rounding)", b.candidates.every((x) => metresBetween(at, x) <= 350), b.candidates.map((x) => Math.round(metresBetween(at, x))));
+      }
     } finally {
       setSnapExtractorForTests(null);
     }
@@ -254,6 +267,92 @@ async function unitChecks(c: Case): Promise<Chk[]> {
     add("refine 'meet at <place>' becomes the new base (day kept); later refinements still apply", sr.base === "meet at The Kings Arms tonight" && JSON.stringify(sr.refinements) === JSON.stringify(["at 8pm"]), sr);
     const hw = splitRefine("Drinks with Priya on Friday at 7, I'm at Old Street, she's at Clapham; refine: cheaper; refine: meet at The Kings Arms");
     add("…and keeps who's where + day/time, so it stays a two-person trip", hw.base === "meet at The Kings Arms on Friday at 7, I'm at Old Street, she's at Clapham" && parseDestination(hw.base)?.withThem === true, hw.base);
+  }
+  if (c.unit === "server7" && !c.snap) {
+    // Planner model: Argon first; 404 → flash (cached); over the latency guard → flash for that call only.
+    resetPlanModelForTests();
+    const saved = process.env.PLAN_MODEL;
+    delete process.env.PLAN_MODEL;
+    const seen: string[] = [];
+    const nf = (async (u: string | URL | Request) => {
+      const m = /models\/([^:]+):/.exec(String(u))?.[1] ?? "";
+      seen.push(m);
+      return m === "gemini-4-argon" ? new Response('{"error":{"status":"NOT_FOUND","message":"models/gemini-4-argon is not found"}}', { status: 404 }) : new Response("{}", { status: 200 });
+    }) as typeof fetch;
+    const p1 = await planGenerate({}, "k", 3000, { fetch: nf });
+    const p2 = await planGenerate({}, "k", 3000, { fetch: nf });
+    add("planner: argon 404 → flash, decision cached", p1.model === PLAN_FALLBACK && p2.model === PLAN_FALLBACK && JSON.stringify(seen) === JSON.stringify(["gemini-4-argon", PLAN_FALLBACK, PLAN_FALLBACK]), seen);
+    resetPlanModelForTests();
+    const slowSeen: string[] = [];
+    const slow = (async (u: string | URL | Request, init?: RequestInit) => {
+      const m = /models\/([^:]+):/.exec(String(u))?.[1] ?? "";
+      slowSeen.push(m);
+      if (m !== "gemini-4-argon") return new Response("{}", { status: 200 });
+      const hold = setTimeout(() => {}, 10_000); // AbortSignal.timeout's timer is unref'd; keep the loop alive like a socket would
+      return new Promise<Response>((_res, rej) => init?.signal?.addEventListener("abort", () => (clearTimeout(hold), rej(Object.assign(new Error("timeout"), { name: "TimeoutError" })))));
+    }) as typeof fetch;
+    const g1 = await planGenerate({}, "k", 5000, { fetch: slow, guardMs: 300 });
+    const g2 = await planGenerate({}, "k", 5000, { fetch: slow, guardMs: 300 });
+    add("planner: argon over the guard → flash for that call, argon tried again next call", g1.guarded && g1.model === PLAN_FALLBACK && g2.guarded && JSON.stringify(slowSeen) === JSON.stringify(["gemini-4-argon", PLAN_FALLBACK, "gemini-4-argon", PLAN_FALLBACK]), { slowSeen, ms: g1.ms });
+    resetPlanModelForTests();
+    if (saved !== undefined) process.env.PLAN_MODEL = saved;
+
+    // Verification loop on synthetic cards.
+    const card = (id: string, name: string, h: Partial<VCard>, facts: { label: string; value: string; verdict?: string }[] = []): VCard => ({
+      id, kind: "venue", name, subtitle: "Pub", location: { lat: 51.5, lng: -0.1 }, why: "test",
+      legs: [{ who: "you", minutes: 12, summary: "test" }],
+      facts: [{ label: "Travel", value: "TfL planner: 12 min", verdict: "confirmed", source: "TfL" }, ...facts.map((f) => ({ verdict: "confirmed", source: "OSM", ...f }))] as VCard["facts"],
+      openAtPlan: true, closesAt: "23:00", closingSoon: false, hoursKnown: true, ...h,
+    } as VCard);
+    const pool = () => [
+      card("osm-node-1", "The Early Bird", { closesAt: "19:30", closingSoon: true }),
+      card("osm-node-2", "The Crown", {}),
+      card("osm-node-3", "The Swan", {}),
+      card("osm-node-4", "The Lamb", {}),
+      card("osm-node-5", "The Ship", {}, [{ label: "Weather fit", value: "Rain likely at 19:00 (80%) - outdoor only per OSM" }]),
+    ];
+    const steps: { id: string; label: string; detail?: string }[] = [];
+    const begin = (id: string, label: string) => { const s: { id: string; label: string; detail?: string } = { id, label }; steps.push(s); return (_st: string, d?: string) => { if (d) s.detail = d; }; };
+    const at = new Date();
+    const opts = { begin, query: "pub near me at 7pm", when: at, whenLabel: "Sun 19:00", max: 3 };
+    const calls: { failures?: string[]; allowed?: string[]; ids: string[] }[] = [];
+    const fixture = (answers: string[][]): Picker => async (x) => {
+      const ids = answers[calls.length] ?? [];
+      calls.push({ failures: x.failures, allowed: x.allowed, ids });
+      return { ids, reasons: ids.map(() => "fits"), model: "gemini-4-argon", ms: 5 };
+    };
+    add("checks: closes 19:30 is a hard failure; outdoor-only in rain too", JSON.stringify(checkCard(pool()[0]).hard) === JSON.stringify(["closes 19:30"]) && checkCard(pool()[4]).hard[0] === "outdoor only, rain likely", [checkCard(pool()[0]), checkCard(pool()[4])]);
+    setPlanPickerForTests(fixture([["osm-node-1", "osm-node-2", "osm-node-3"], ["osm-node-4"]]));
+    try {
+      const v = await verifyPicks(pool(), opts);
+      const st = steps.find((s) => s.id === "recheck");
+      add("argon's top closes 19:30 → failures sent back once → re-picked from passing options", calls.length === 2 && !!calls[1].failures?.[0]?.includes("closes 19:30") && !calls[1].allowed!.includes("osm-node-1") && !calls[1].allowed!.includes("osm-node-5"), calls);
+      add("step: 'Argon re-checked: swapped The Early Bird (closes 19:30) for The Lamb'", st?.label === "Argon re-checked: swapped The Early Bird (closes 19:30) for The Lamb", st);
+      add("verify field: rounds 2, swapped [{from,to,reason}], model", JSON.stringify(v.verify) === JSON.stringify({ rounds: 2, swapped: [{ from: "The Early Bird", to: "The Lamb", reason: "closes 19:30" }], model: "gemini-4-argon" }), v.verify);
+      add("final cards: the re-pick first, then argon's passing picks", JSON.stringify(v.cards.map((c) => c.name)) === JSON.stringify(["The Lamb", "The Crown", "The Swan"]), v.cards.map((c) => c.name));
+      // Never fabricate: an id that isn't in the pool is never a card; a re-pick naming a failing option is overruled.
+      calls.length = 0; steps.length = 0;
+      setPlanPickerForTests(fixture([["osm-node-999", "osm-node-3"], ["osm-node-5"]]));
+      const f = await verifyPicks(pool(), opts);
+      add("invented id → re-pick; a failing re-pick is overruled by the best passing option", f.cards.every((c) => /^osm-node-[1-5]$/.test(c.id)) && f.cards[0].id === "osm-node-2" && f.verify.swapped[0]?.from === "an option not in our data" && f.verify.model === "gemini-4-argon", { cards: f.cards.map((c) => c.id), verify: f.verify });
+      // No Argon (off / failed): our own order; only hard failures swap; model "rules".
+      setPlanPickerForTests(async () => null);
+      steps.length = 0;
+      const r = await verifyPicks(pool(), opts);
+      add("without argon: closing-soon top swapped by rules, model 'rules', one round", JSON.stringify(r.cards.map((c) => c.id)) === JSON.stringify(["osm-node-4", "osm-node-2", "osm-node-3"]) && r.verify.model === "rules" && r.verify.rounds === 1 && r.verify.swapped[0]?.reason === "closes 19:30", { cards: r.cards.map((c) => c.id), verify: r.verify });
+      // Step-free asked: a card tagged wheelchair=no fails.
+      add("step-free asked: wheelchair=no fails; untagged is only soft", checkCard(card("a", "A", {}, [{ label: "Step-free", value: "Wheelchair access: no (OSM tag)", verdict: "likely" }]), { stepFree: true }).hard[0] === "not step-free (OSM)" && checkCard(card("b", "B", {}, [{ label: "Step-free", value: "Not tagged in OSM", verdict: "unknown" }]), { stepFree: true }).hard.length === 0, null);
+      // End to end through the route: the fixture picker invents an id; the plan still only shows real options.
+      steps.length = 0;
+      setPlanPickerForTests(async (x) => ({ ids: ["osm-node-424242", ...x.candidates.slice(1, 3).map((c) => c.id)], reasons: [], model: "gemini-4-argon", ms: 1 }));
+      const e = await post({ query: "Pubs near me tonight", you: { lat: 51.5256, lng: -0.0875 } });
+      const b = e.body as Refined & { verify?: { rounds: number; swapped: { from: string; to: string; reason: string }[]; model: string } };
+      const sw = b.steps?.find((s) => s.id === "recheck");
+      add("route: verify field present, invented id swapped for a real option, streamed step label", e.status === 200 && b.cards.length > 0 && b.cards.length <= 3 && !b.cards.some((c) => c.id.includes("424242")) && b.verify?.rounds === 2 && b.verify.swapped[0]?.from === "an option not in our data" && /^Argon re-checked: swapped an option not in our data \(not in the checked options\) for /.test(sw?.label ?? ""), { cards: b.cards?.map((c) => c.name), verify: b.verify, step: sw?.label });
+      add("route: the draft follows the final top pick", !b.cards[0] || b.draftMessage.includes(b.cards[0].name), b.draftMessage);
+    } finally {
+      setPlanPickerForTests(null);
+    }
   }
   if (c.unit === "server5") {
     const today = "2026-10-25";
@@ -380,6 +479,11 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
     if (e.leaveBy.them) add("leaveBy.them is HH:MM before arriveBy", !!lb && hhmm(lb.them) && lb.them! < lb.arriveBy, lb?.them);
   }
   if (e.weekday) add(`day = ${e.weekday}`, londonDayShort(new Date(r.when)) === e.weekday, londonDayShort(new Date(r.when)));
+  // Clock-relative day ("tomorrow afternoon"): the plan's London date minus today's (pinned clock, else the real one).
+  if (e.daysAhead !== undefined) {
+    const d = dayDiff(londonToday(new Date(r.when)), londonToday(pinned ?? new Date()));
+    add(`day = today + ${e.daysAhead}`, d === e.daysAhead, { when: r.when, today: londonToday(pinned ?? new Date()) });
+  }
   if (e.time) add(`time = ${e.time}`, londonClock(r.when) === e.time, londonClock(r.when));
   if (e.budgetGBP) add(`budget £${e.budgetGBP}`, r.filters.budgetGBP === e.budgetGBP, r.filters.budgetGBP);
   if (e.category) add(`category ${e.category}`, r.filters.category === e.category, r.filters.category);

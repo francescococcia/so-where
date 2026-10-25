@@ -22,6 +22,7 @@ import { goDraft, meetDraft, nearDraft } from "@/lib/draft-message";
 import { eventDates, parseDestination, resolveDestination, shortDay, type Destination } from "@/lib/destination";
 import type { Blurb } from "@/lib/blurb";
 import { mentionsArea, sameArea, scrubArea, venueArea } from "@/lib/venue-area";
+import { STEP_FREE_ASK, verifyPicks, type PlanResultVerified } from "@/lib/verify";
 
 export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string; /** Refine only: the result on screen, so "is it open?" answers without replanning. Echoed, never stored. */ result?: PlanResultWithAgent }; refine?: string;
   /** Refine only: the place the user has selected (a card), so "other Italian places in the area" searches around it and excludes it. Never stored. */
@@ -33,6 +34,8 @@ export type PlanResultRefined = PlanResultWithAgent & { reply?: string; /** "Whe
 export type StepSink = (step: AgentStep) => void;
 
 const MAX_CARDS = 3;
+/** Options built as cards before the verification loop picks the final MAX_CARDS (verify.ts). */
+const POOL = 6;
 /** Leg plus the optional per-stretch `segments` the UI's journey.tsx reads (plan-types.ts stays unchanged). */
 type LegWithSegments = Leg & { segments?: LegSegment[] };
 const walkOn = (segs: LegSegment[], from: { name: string; location: LatLng }, to: { name: string; location: LatLng }, minutes: number): LegSegment[] =>
@@ -273,7 +276,7 @@ function venuePick(res: OsmResult, at: Date, wm?: WeatherMode, prefs?: Pref[], c
   const keep = open.sort((a, b) => cu(a.p) - cu(b.p) || pr(a.p) - pr(b.p) || wr(a.p) - wr(b.p) || soon(a.h) - soon(b.h) || rank[a.h.verdict] - rank[b.h.verdict] || a.p.distanceM - b.p.distanceM);
   // With ≥1 cuisine match, cards are only the matches; non-matches fill in only when there are none (the reply says so).
   const hits = cuisine ? keep.filter((x) => cuisineMatch(x.p.tags, cuisine)) : [];
-  return { picks: (hits.length ? hits : keep).slice(0, MAX_CARDS), total: rows.length, closed, soonDropped };
+  return { picks: (hits.length ? hits : keep).slice(0, MAX_CARDS), pool: (hits.length ? hits : keep).slice(0, POOL), total: rows.length, closed, soonDropped };
 }
 
 /** Weather-fit fact for a venue card (empty when the forecast doesn't change the choice). */
@@ -563,6 +566,7 @@ async function finish(ctx: Ctx, r: PlanResultWithAgent): Promise<PlanResultWithA
     r.draftMessage = scrubArea(r.draftMessage, r.them.area);
     dropped++;
   }
+  await verifyStage(ctx, r);
   r.cards = r.cards.slice(0, MAX_CARDS);
   r.sources = [...ctx.sources.entries()].map(([name, asOf]) => ({ name, asOf })).sort((a, b) => a.name.localeCompare(b.name));
   r.unknowns = [...new Set(ctx.unknowns)];
@@ -572,6 +576,30 @@ async function finish(ctx: Ctx, r: PlanResultWithAgent): Promise<PlanResultWithA
   // sending the result and before ending the response, so serverless doesn't freeze the insert mid-flight.
   PLAN_RUN_WRITES.set(r, recordPlanRun(r, Date.now() - (RUN_STARTED.get(r.steps) ?? Date.now())));
   return r;
+}
+
+/** Verification loop (verify.ts): Argon proposes, deterministic checks dispose; ≤ MAX_CARDS of the pool stay.
+ *  Then the draft follows the final top pick, and per-card unknowns only cover cards still shown. */
+const REDRAFT = new WeakMap<PlanResultWithAgent, (cards: PlanCard[]) => string>();
+const FIXED = new WeakSet<PlanResultWithAgent>();
+async function verifyStage(ctx: Ctx, r: PlanResultWithAgent) {
+  const before = r.cards.map((c) => c.id).join();
+  const pool = r.cards;
+  const query = r.them ? scrubArea(ctx.text, r.them.area) : ctx.text;
+  const v = await verifyPicks(pool, { begin: ctx.begin, query, when: ctx.when, whenLabel: londonLabel(ctx.when), fixed: FIXED.has(r), max: MAX_CARDS, stepFree: STEP_FREE_ASK.test(ctx.text), maxMinutes: r.intent === "near_me" && !FIXED.has(r) ? ctx.ask.maxMinutes ?? 30 : undefined });
+  r.cards = v.cards;
+  (r as PlanResultVerified).verify = v.verify;
+  const redo = REDRAFT.get(r);
+  if (redo && r.cards.map((c) => c.id).join() !== pool.slice(0, MAX_CARDS).map((c) => c.id).join()) r.draftMessage = redo(r.cards);
+  if (before === r.cards.map((c) => c.id).join()) return;
+  const shown = new Set(r.cards.map((c) => c.name));
+  const dropped = new Set(pool.filter((c) => !r.cards.includes(c)).map((c) => c.name));
+  ctx.unknowns.splice(0, ctx.unknowns.length, ...ctx.unknowns.filter((u) => {
+    const m = u.match(/^(.+): opening hours not in OSM\.$/);
+    if (m) return shown.has(m[1]) || !dropped.has(m[1]);
+    if (/^Event prices and whether you can walk in/.test(u)) return r.cards.some((c) => c.kind === "event");
+    return true;
+  }));
 }
 
 /** OSM tags behind each card (for blurbs: wikipedia / wikidata / description …); request memory only. */
@@ -663,7 +691,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   const themPath = trimPathStart(best.b.path, 500, metresBetween);
   const themSegs = trimSegmentsStart(best.b.segments, 500, metresBetween);
   const hubEnd = { name: best.hub.name, location: result.middle.location };
-  result.cards = osm.pk.picks.map(({ p, h }): PlanCardWithHours => {
+  result.cards = osm.pk.pool.map(({ p, h }): PlanCardWithHours => {
     const walk = walkMinutes(metresBetween(result.middle!.location, p.location));
     const addr = addressOf(p.tags);
     const venueEnd = { name: p.tags.name, location: p.location };
@@ -696,14 +724,19 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
       ...cardHours(h),
     };
   });
-  result.cards.forEach((c, i) => CARD_TAGS.set(c, osm.pk.picks[i].p.tags));
+  result.cards.forEach((c, i) => CARD_TAGS.set(c, osm.pk.pool[i].p.tags));
   if (!result.cards.length) unknowns.push(`No open ${kind}s found within 500 m of ${best.hub.name} in OSM.`);
   const hubWhy = hp.why === "closer_you" ? "is closer to you" : hp.why === "closer_them" ? `is closer to ${who}` : hp.why === "different" ? "is the next fairest middle" : "is the fair middle";
   result.headline = `${best.hub.name} ${hubWhy}: you ${best.a.minutes} min, ${who} ${best.b.minutes}.`;
-  const top = osm.pk.picks[0]?.p;
   // Short, friendly, paste-ready: no line status or forecast; their journey time only, never their area.
   // The hub's name only when it isn't their own area (the message goes to them; their area is never in it).
-  result.draftMessage = meetDraft({ venue: top?.tags.name, address: (top && addressOf(top.tags)) || undefined, hub: sameArea(best.hub.name, themArea.area) ? undefined : best.hub.name, when, category: ask.category, themMinutes: best.b.minutes, url: top ? (top.tags.website ?? top.tags["contact:website"] ?? osmUrl(top)) : undefined, now: ctx.now });
+  // Drafted from the top card; redrafted after the verification loop picks the final top.
+  const draft = (cards: PlanCard[]) => {
+    const top = cards[0];
+    return meetDraft({ venue: top?.name, address: (top && addressOf(cardTags(top))) || undefined, hub: sameArea(best.hub.name, themArea.area) ? undefined : best.hub.name, when, category: ask.category, themMinutes: best.b.minutes, url: top?.url, now: ctx.now });
+  };
+  result.draftMessage = draft(result.cards);
+  REDRAFT.set(result, draft);
   return finish(ctx, result);
 }
 
@@ -774,7 +807,7 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
     prefs?.includes("closer_you") ? a.j.minutes - b.j.minutes :
     ask.walkIn || ask.free ? walkScore(a.c) - walkScore(b.c) || prC(a.c) - prC(b.c) || a.j.minutes - b.j.minutes : (a.c.kind === "event" ? 0 : 1) - (b.c.kind === "event" ? 0 : 1) || prC(a.c) - prC(b.c) || wrC(a.c) - wrC(b.c) || a.j.minutes - b.j.minutes,
   );
-  const chosen = prefs?.includes("different") && within.length > MAX_CARDS ? within.slice(MAX_CARDS, MAX_CARDS * 2) : within.slice(0, MAX_CARDS);
+  const chosen = prefs?.includes("different") && within.length > MAX_CARDS ? within.slice(MAX_CARDS, MAX_CARDS + POOL) : within.slice(0, POOL);
   const lineIds = [...new Set(chosen.flatMap((x) => x.j.lines.map((l) => l.id)))];
   const endLines = begin("lines", "Checking line status", "TfL");
   const ls = lineIds.length ? await lineStatus(lineIds) : null;
@@ -850,12 +883,14 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   if (chosen.some((x) => x.c.kind === "event")) unknowns.push("Event prices and whether you can walk in: the seed listings don't say.");
   if (lineIds.length) unknowns.push("Line status is as of now, not for the time of the plan.");
   unknowns.push("How busy it'll be: no source has this.");
-  const n = result.cards.length;
+  const n = Math.min(result.cards.length, MAX_CARDS); // the verification loop shows ≤ MAX_CARDS of the pool
   const what = ask.walkIn ? "walk-in option" : venueKind ? venueKind === "pub" ? "pub" : venueKind : "option";
   result.headline = n
     ? `${n} ${what}${n > 1 ? "s" : ""} within ${maxMin} min of ${ctx.youName ?? "you"}, ${londonLabel(when)}.`
     : `Nothing open in our data within ${maxMin} min of ${ctx.youName ?? "you"} at ${londonLabel(when)}.`;
-  result.draftMessage = nearDraft({ picks: chosen.map(({ c }, i) => ({ name: result.cards[i].name, event: c.kind === "event", free: c.kind === "place" && c.p.tags.fee === "no", url: result.cards[i].url })), when, now: ctx.now });
+  const draft = (cards: PlanCard[]) => nearDraft({ picks: cards.slice(0, MAX_CARDS).map((c) => ({ name: c.name, event: c.kind === "event", free: c.kind !== "event" && cardTags(c).fee === "no", url: c.url })), when, now: ctx.now });
+  result.draftMessage = draft(result.cards);
+  REDRAFT.set(result, draft);
   return finish(ctx, result);
 }
 
@@ -866,6 +901,7 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
   const { ask, when, begin, unknowns, sources, dest } = ctx;
   const who = ask.themWho;
   const result: PlanResultWithAgent = { ...ctx.base, intent: ctx.them ? "meet_halfway" : "near_me", you: { lat: ctx.you.lat, lng: ctx.you.lng } };
+  FIXED.add(result);
   if (ctx.them && ctx.themTyped) {
     const area = roundToArea(ctx.them.location);
     result.them = { area: ctx.themTyped.replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\(Approx\.\)/, "(approx.)"), center: area.center, radiusM: area.radiusM };

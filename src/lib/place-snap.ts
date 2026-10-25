@@ -13,7 +13,8 @@ import { londonDayShort } from "@/lib/london-time";
 import { visionGenerate } from "@/lib/vision";
 import { getDb, withTimeout } from "@/lib/mongo";
 import { VENUES_SEARCH_INDEX, type VenueDoc } from "@/lib/mongo-seed";
-import { addressOf, hoursAt, kindLabel } from "@/lib/osm";
+import { findVenues } from "@/lib/mongo-venues";
+import { addressOf, hoursAt, kindLabel, type OsmKind } from "@/lib/osm";
 import type { PlanCardWithHours } from "@/lib/plan";
 import type { Fact, LatLng } from "@/lib/plan-types";
 import { PosterError } from "@/lib/poster";
@@ -55,9 +56,9 @@ const SCHEMA = {
   propertyOrdering: ["name", "kind", "signText", "cuisine", "confidence", "vibe"],
 };
 const PROMPT = [
-  "This photo shows a place in London: a shop front, pub sign, café or restaurant front, or its sign. Fill the JSON fields.",
+  "This photo shows a place in London: a shop front, pub sign, café or restaurant front, its sign, or the inside of one. Fill the JSON fields.",
   `name: the place's name as on the sign, in normal capitalisation ("THE KINGS ARMS" → "The Kings Arms"); not a brand on an awning ad, not a street name. null if no name is readable.`,
-  `kind: pub | cafe | restaurant | bar | shop | other (other = not a venue front). signText: the main sign text exactly as printed, one line. cuisine: e.g. "thai", "italian", "coffee" if the sign shows it, else null.`,
+  `kind: pub | cafe | restaurant | bar | shop | other (other = not a venue). If the photo is taken inside a place, kind is what the room looks like (coffee counter → cafe, beer taps → pub). signText: the main sign text exactly as printed, one line; indoors, any visible words such as a brand on a banner, menu board or cups. cuisine: e.g. "thai", "italian", "coffee" if the sign shows it, else null.`,
   "confidence 0–1 for how sure you are of the name. Never invent a name.",
   `vibe: only what is VISIBLE in this photo. tags: up to 5 short lowercase tags such as "cosy", "busy", "quiet", "terrace", "outdoor seating", "dog-friendly" (only if a dog/bowl/sign is visible), "flower baskets", "candlelit", "big windows". line: one plain sentence ≤90 characters describing what the photo shows ("Corner pub with hanging baskets and a few tables outside"). No ratings, stars, prices, opinions of quality, or anything you can't see: don't infer tags from words on a sign (a "beer garden" sign isn't visible outdoor seating). null if nothing beyond the sign is visible.`,
 ].join("\n");
@@ -241,6 +242,50 @@ export async function snapCard(v: Venue, now: Date, blurbDeps: BlurbDeps = {}, w
 }
 
 const NO_MATCH = "Couldn't spot that one — where are you?";
+export const NO_NAME_NEARBY = "Can't see a name. Is it one of these nearby?";
+export const NO_NAME_WHERE = "Can't see a name. Where are you?";
+const NO_NAME_M = 250;
+/** Photo vibe tag → OSM tags that back it up (only tags OSM actually has). */
+const VIBE_TAGS: [RegExp, (t: Record<string, string>) => boolean][] = [
+  [/outdoor|terrace|tables outside|pavement/, (t) => t.outdoor_seating === "yes"],
+  [/garden/, (t) => t.beer_garden === "yes" || t.garden === "yes" || t.outdoor_seating === "yes"],
+  [/coffee|espresso|barista|latte/, (t) => t.amenity === "cafe" || /coffee/.test(t.cuisine ?? "")],
+  [/taps?|real ale|beer|pints?|bar stools?/, (t) => t.amenity === "pub" || t.amenity === "bar" || t.real_ale === "yes"],
+  [/dog/, (t) => t.dog === "yes"],
+  [/laptops?|wi-?fi|cowork|desks?/, (t) => !!t.internet_access && t.internet_access !== "no"],
+];
+const words = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length >= 4 && !STOP.has(w));
+const STOP = new Set(["coffee", "open", "welcome", "london", "the", "and", "with", "from", "this", "that", "your", "free", "wifi", "menu", "today"]);
+/** Nothing in Atlas / the snapshot that close: the plan's venue finder (live Overpass → snapshot), by kind. */
+async function liveNear(at: LatLng, kind: SnapKind, budgetMs: number): Promise<Venue[]> {
+  const kinds: OsmKind[] = kind === "cafe" ? ["cafe"] : kind === "pub" || kind === "bar" ? ["pub"] : kind === "restaurant" ? ["restaurant"] : ["cafe", "pub", "restaurant"];
+  try {
+    const res = await withTimeout(Promise.all(kinds.map((k) => findVenues(k, at, NO_NAME_M))), budgetMs, "place-snap nearby");
+    return res.flatMap((r) => r.places).filter((p) => p.tags.name).map((p) => ({ id: `osm-${p.type}-${p.id}`, name: p.tags.name, location: p.location, tags: p.tags, category: p.tags.amenity ?? "place" }));
+  } catch {
+    return [];
+  }
+}
+/** Unnamed photo: venues near `at` ranked by visible text on brand/name/operator, kind, vibe ↔ OSM tags, then distance. */
+export function rankUnnamed(rows: Venue[], x: SnapExtract, at: LatLng): Venue[] {
+  const sign = new Set(words(x.signText ?? ""));
+  const vibe = (x.vibe?.tags ?? []).concat(x.vibe?.line ? [x.vibe.line.toLowerCase()] : []).concat(x.cuisine ? [x.cuisine] : []);
+  const score = (v: Venue) => {
+    const own = new Set(words([v.name, v.tags.brand, v.tags.operator, v.tags["name:en"], v.tags.alt_name].filter(Boolean).join(" ")));
+    const text = [...sign].filter((w) => own.has(w)).length * 5;
+    const kind = KIND_CATS[x.kind].includes(v.category) ? 3 : 0;
+    const fit = VIBE_TAGS.filter(([re, has]) => vibe.some((t) => re.test(t)) && has(v.tags)).length;
+    const cu = x.cuisine && (v.tags.cuisine ?? "").toLowerCase().includes(x.cuisine) ? 2 : 0;
+    return text + kind + fit + cu;
+  };
+  const seen = new Set<string>();
+  return rows
+    .filter((v) => v.name && metresBetween(v.location, at) <= NO_NAME_M)
+    .map((v) => ({ v, s: score(v), d: metresBetween(v.location, at) }))
+    .sort((a, b) => b.s - a.s || a.d - b.d)
+    .map((r) => r.v)
+    .filter((v) => !seen.has(v.id) && !!seen.add(v.id));
+}
 const distinct = (rows: Venue[]) => rows.filter((v, i) => !rows.slice(0, i).some((w) => metresBetween(w.location, v.location) < 150));
 const kindFirst = (kind: SnapKind) => (v: Venue) => (KIND_CATS[kind].includes(v.category) ? 0 : 1);
 
@@ -249,13 +294,22 @@ export async function snapPlace(extracted: SnapExtract, opts: { you?: LatLng | n
   const t0 = Date.now();
   const now = deps.now ?? new Date();
   const base = { extracted, suggestedQuery: null };
+  const areaAt = opts.area ? matchPlace(opts.area) : null;
+  const near = opts.you ?? (areaAt && areaAt.confidence !== "low" && areaAt.best ? areaAt.best.entry.location : null);
   if (!extracted.name || extracted.confidence < 0.3) {
-    return { ...base, message: extracted.kind === "other" && !extracted.name ? "That doesn't look like a shop front or sign. Try again with the name filling the frame." : "Couldn't read a name on that sign. Try a closer photo, or type the name." };
+    // Indoors / no readable name: rank what's right around you (or the area you gave) by the kind of place,
+    // the photo's vibe and any visible text (brands on banners, cups), and ask which one it is.
+    if (!near) return { ...base, message: NO_NAME_WHERE };
+    const db0 = deps.db !== undefined ? deps.db : await getDb(1500);
+    let { rows } = await venuesNear(near, NO_NAME_M, db0);
+    if (!rows.length) rows = await liveNear(near, extracted.kind, Math.max(1500, (opts.budgetMs ?? 14_000) - (Date.now() - t0) - 4000));
+    const ranked = rankUnnamed(rows, extracted, near);
+    if (!ranked.length) return { ...base, message: "Can't see a name, and I don't know any places right there. Try a photo of the sign outside, or type the name." };
+    const top = ranked.slice(0, 3);
+    return { ...base, candidates: top.map((v) => candidateOf(v, ranked.filter((w) => w.name === v.name).length > 1 || snapVenues().filter((w) => w.name === v.name).length > 1)), message: NO_NAME_NEARBY };
   }
   const name = extracted.name;
   const db = deps.db !== undefined ? deps.db : await getDb(1500);
-  const areaAt = opts.area ? matchPlace(opts.area) : null;
-  const near = opts.you ?? (areaAt && areaAt.confidence !== "low" && areaAt.best ? areaAt.best.entry.location : null);
   const blurbDeps: BlurbDeps = { ...deps.blurb, budgetMs: Math.max(800, Math.min(deps.blurb?.budgetMs ?? 3200, (opts.budgetMs ?? 14_000) - (Date.now() - t0) - 500)) };
   const score = (v: Venue) => snapNameScore(name, v.name);
 
