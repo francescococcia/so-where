@@ -6,6 +6,38 @@ Live: **https://so-where.vercel.app** · try it with no setup: [`?demo=meet`](ht
 
 > The base map and chat existed before Encode kickoff; features listed as Encode-built were made during the hackathon.
 
+**Last updated: 25 Oct 2026** (Encode London hackathon, 24–25 Oct 2026)
+
+## At a glance
+
+| | |
+|---|---|
+| ![Plan result: Borough is the fair middle, you 20 min, them 21; Argon verified The Royal Oak](docs/screenshots/result.png) | **1. Say it once, get a checked plan.** "Friday at 7. I'm at Old Street, my friend is in Brixton. A cosy quiet pub halfway." → Borough is the fair middle (you 20 min, them 21), Argon's pick verified, *Vibe match* from Atlas, live line status top right. |
+| ![Italian follow-up "Come posso iscrivermi?" answered in Italian with a Register on Luma button](docs/screenshots/signup-italian.png) | **2. Ask follow-ups in any language.** "Come posso iscrivermi?" on an event → an Italian reply and a **Register on Luma** button that opens the event's real Luma page. Nothing is sent for you. |
+| ![Live voice: "Black Sheep Coffee, 2 min away by TfL, open until 22:30"](docs/screenshots/voice-reply.jpg) | **3. Or just talk.** Live voice (gemini-3.8-live): "Where can I get a coffee with my friends near King's Cross?" → a spoken answer with a checked pick on the map. "Voice isn't saved." |
+
+### Built during Encode: timeline
+
+Commit times from `git log`, in UTC.
+
+| When (UTC) | Milestone |
+|---|---|
+| Sat 24 Oct 18:25 | Pre-kickoff base imported (map + chat, disclosed) |
+| Sat 24 Oct 18:55 | `/api/plan`: live TfL, OSM, Open-Meteo, Luma events, agent steps on screen |
+| Sat 24 Oct 19:34 | MongoDB Atlas Search for venues and events; anonymised `plan_runs` + `/api/stats` |
+| Sat 24 Oct 21:00 | Follow-up chat (refine the plan) |
+| Sat 24 Oct 22:51 | Snap a poster |
+| Sun 25 Oct 01:11 | Snap a place with Argon vision; Gemini Live voice |
+| Sun 25 Oct 01:41 | Argon planner with verify → re-pick loop |
+| Sun 25 Oct 02:26 | 7,225-venue OSM snapshot with live Overpass as a fallback |
+| Sun 25 Oct 03:06 | Speak any language (Live Translate, text translation, spoken voice card) |
+| Sun 25 Oct 04:54 | Visible Argon pick → verify → re-pick row, *Why Argon* |
+| Sun 25 Oct 06:01 | Honest photo certainty (high / medium / low), on-device face blur |
+| Sun 25 Oct 06:53 | Atlas Vector Search (voyage-4 Automated Embedding) + `$rankFusion` vibe search; Atlas Stream Processing line status |
+| Sun 25 Oct 08:00 | Share and off-script follow-ups (thanks, weather, step-free, directions, start over) |
+| Sun 25 Oct 09:08 | First screen: "Right now in London" strip (`/api/now`) |
+| Sun 25 Oct 10:42 | Sign-up follow-up in any language → the event's real Luma link |
+
 ---
 
 ## The problem
@@ -22,6 +54,7 @@ Live: **https://so-where.vercel.app** · try it with no setup: [`?demo=meet`](ht
 | **Live voice, any language.** Talk to it in Italian (or any language). It plans and answers in your language | Encode-built |
 | **Spoken voice card.** A short spoken summary of the plan (it can be muted) | Encode-built |
 | **Follow-ups.** "Cheaper", "quieter", "later", and compound questions like "what time do they close? and what time do you recommend?" | Encode-built |
+| **Sign-up follow-up, any language.** "How do I sign up?", "Come posso iscrivermi?", "¿Cómo me inscribo?" on an event → a reply in your language and a **Register on Luma** button (or *Open event page*) with the event's real link, opened in a new tab. For a pub or a listing with no link, it says no sign-up link is listed and offers the venue's website only if the data has one. Never invented, never sent | Encode-built |
 | **Vibe match.** "A cosy quiet pub" runs MongoDB Atlas hybrid search (vector + text). Cards that matched on meaning get a *Vibe match* chip | Encode-built |
 | **Live line status.** MongoDB Atlas Stream Processing pulls TfL line status every 60 s. Journeys on disrupted lines are padded and marked "rerouted" | Encode-built |
 | **Snap a place or poster.** Photograph a sign, landmark or event poster and it finds the place, with an honest certainty level. Faces are blurred on your device before upload. Then tap "Meet here" | Encode-built |
@@ -146,10 +179,11 @@ All six were checked live on production on 25 Oct (08:04–08:05 London). The st
 
 ## Evals
 
-`npm run eval` (`scripts/run_evals.ts`). Last full run (25 Oct, live TfL and Gemini): **90 / 92 pass.** `next build` and `tsc --noEmit` pass. The 2 known failures are wording checks in the eval cases, not wrong plans:
+`npm run eval` (`scripts/run_evals.ts`). Last full run (25 Oct, 10:39 UTC, live TfL and Gemini): **91 / 94 pass**, including the 2 new sign-up cases (event plan → Luma link; pub plan → "no sign-up link", in English, Italian and Spanish). `next build` and `tsc --noEmit` pass. None of the 3 failures is a wrong plan:
 
 | Case | Why it fails |
 |---|---|
+| `coffee-friend-sunday` | Clock-dependent: it asks for "Sunday morning at 10", and the run was on Sunday after 10:00, so the plan moves to the next slot (11:00). It fails the same way on the previous release at that time |
 | `refine-italian-only-matches` | Headline wording: it says "within 30 min of" where the case expects "near" |
 | `snap-landmark-low-confidence` | The message now reads "Couldn't read the sign clearly", and the case still expects the old text |
 

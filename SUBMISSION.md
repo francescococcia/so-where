@@ -1,7 +1,7 @@
 # So where? · submission text
 
 **Live demo:** https://so-where.vercel.app
-**Repo:** ⟨repo URL⟩
+**Repo:** https://github.com/francescococcia/so-where
 **Video:** ⟨video URL⟩
 
 ## Tagline
@@ -26,6 +26,7 @@ The fair place to meet in London: open, on time, checked, and nothing sent witho
 
 1. **Planner agent** (gemini-4-argon). It gathers with tools (TfL StopPoint and Journey Planner, MongoDB Atlas Search and hybrid vibe search, Atlas `line_status`, Open-Meteo weather), picks from the checked pool, gets verified by deterministic rules, and re-picks once if the pick fails. If Argon is too slow, gemini-3-flash-preview picks and the step says so. Each step streams to the "How we got here" panel.
 2. **Live voice agent** (gemini-3.8-live). Real-time conversation in the user's language. It acts only through six tools: `plan`, `refine`, `focus`, `isOpen`, `leaveBy` and `draftMessage`. `draftMessage` opens a draft; nothing is ever sent for you.
+   Typed follow-ups work in any language too: "Come posso iscrivermi?" on an event gets an Italian reply and a **Register on Luma** button with the event's real Luma link (a pub gets "no sign-up link listed", never an invented one).
 3. **Translate agent** (gemini-3.5-live-translate-preview for speech, gemini-3.5-flash-lite for text). It turns any language into the English ask and translates the answer back; gemini-3.8-flash-tts speaks it.
 
 **How it was built:** Francesco built the Encode features with AI coding agents (Grok Bot and Cursor-style agents), reviewing, testing and merging each change himself.
