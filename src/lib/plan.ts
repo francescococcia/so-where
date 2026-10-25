@@ -91,6 +91,22 @@ async function resolveTyped(typed: string): Promise<Resolved> {
   return { place: t.place, readAs: null, suggestions, confidence: "low" };
 }
 
+/** Clarify answers appended as "; you: X" / "; them: Y": pulled off before the destination parse so they don't
+ *  end up inside the venue name ("Old Royal Naval College; you: Old Street"). */
+function takeSlotTokens(q: string): { base: string; you: string | null; them: string | null } {
+  let you: string | null = null, them: string | null = null;
+  const base = q.replace(/;\s*(you|them):\s*([^;]+)/gi, (_m, k: string, v: string) => {
+    if (k.toLowerCase() === "you") you = v.trim(); else them = v.trim();
+    return "";
+  }).trim();
+  return { base, you, them };
+}
+function withSlotTokens(a: PlanAsk, t: { you: string | null; them: string | null }): PlanAsk {
+  if (t.you) a.youPlace = t.you;
+  if (t.them) { a.themPlace = t.them; a.intent = "meet_halfway"; }
+  return a;
+}
+
 /** "Get me to <venue> …": the rest of the ask (day, time, who / where) parsed as a near-me or halfway plan. */
 function destModeAsk(dest: Destination, today: string): PlanAsk {
   // "… from Old Street tomorrow" → your start.
@@ -119,8 +135,9 @@ async function mergeAnswer(prevQuery: string, answer: string, today: string, req
   const a = answer.replace(/[;]/g, ",").trim().replace(/[.!?]+$/, "");
   // A fixed-destination ask ("Get me to X at Y …") has no intent of its own: its answer is still your start
   // (or theirs), so read it the same way runPlan does.
-  const pd = parseDestination(splitRefine(prevQuery).base);
-  const base = pd ? destModeAsk(pd, today) : parsePlanAsk(prevQuery, today);
+  const pt = takeSlotTokens(splitRefine(prevQuery).base);
+  const pd = parseDestination(pt.base);
+  const base = pd ? withSlotTokens(destModeAsk(pd, today), pt) : parsePlanAsk(prevQuery, today);
   const slot = base.intent ? await pendingSlot(base, reqYou) : null;
   if (!slot) {
     const text = `${prevQuery}. ${a}`;
@@ -445,9 +462,10 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
   let ask = split.refinements.length ? parsePlanAsk(split.base, today) : (merged?.ask ?? parsePlanAsk(text, today));
   let parseSource = "rules";
   // "Get me to <title> at <venue>, <address> on Sat 31 Oct at 19:00": the destination is fixed (no hub search).
-  const dest = parseDestination(split.base);
+  const slotTok = takeSlotTokens(split.base);
+  const dest = parseDestination(slotTok.base);
   if (dest) {
-    ask = destModeAsk(dest, today);
+    ask = withSlotTokens(destModeAsk(dest, today), slotTok);
     // The event's own day(s): past → plan the trip for now and say it's over; multi-day and on → today.
     const ev = eventDates(dest.rest || "", today, londonClock(now.toISOString()), dest.endTime);
     if (ev) {
