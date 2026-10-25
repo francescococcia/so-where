@@ -8,6 +8,7 @@
         "start": "next start",
         "eval": "tsx scripts/run_evals.ts",
         "smoke": "tsx scripts/smoke.ts",
+        "seed:vectors": "tsx scripts/seed_vectors.mjs",
         "seed:mongo": "tsx scripts/seed_mongo.mjs",
         "test:mongo": "tsx scripts/test_mongo.ts"
     },

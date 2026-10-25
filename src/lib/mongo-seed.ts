@@ -143,6 +143,7 @@ export const VENUES_SEARCH_DEFINITION = {
       category: { type: "string" },
       tags: { type: "string" },
       address: { type: "string" },
+      embed_text: { type: "string", analyzer: "lucene.english" }, // server16: text side of the vibe hybrid search
       location: { type: "geo" },
     },
   },
@@ -185,7 +186,8 @@ async function ensureSearchIndex(db: Db, coll: string, name: string, definition:
 async function upsertAll<T extends { _id: string }>(db: Db, coll: string, docs: T[]) {
   const ops: AnyBulkWriteOperation<T>[] = docs.map((d) => {
     const { _id, ...rest } = d;
-    return { replaceOne: { filter: { _id } as never, replacement: rest as never, upsert: true } };
+    // $set, not replace: a re-seed keeps fields other scripts add (seed:vectors' embed_text / embedding).
+    return { updateOne: { filter: { _id } as never, update: { $set: rest } as never, upsert: true } };
   });
   let upserted = 0;
   let modified = 0;

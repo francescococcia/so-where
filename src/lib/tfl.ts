@@ -6,6 +6,7 @@ import { getJson } from "@/lib/http";
 import { londonParts } from "@/lib/london-time";
 import type { LatLng } from "@/lib/plan-types";
 import { STATIONS } from "@/lib/gazetteer";
+import { disruptedLines, disruptionPenalty, streamedLineStatus } from "@/lib/line-status"; // [line-status · ASP]
 
 const BASE = "https://api.tfl.gov.uk";
 const key = () => (process.env.TFL_APP_KEY ? `app_key=${encodeURIComponent(process.env.TFL_APP_KEY)}` : "");
@@ -54,7 +55,9 @@ export async function searchPlace(text: string): Promise<{ place: Place | null; 
  */
 export type LegSegment = { mode: string; line?: string; from?: string; to?: string; minutes: number; path: LatLng[]; est?: boolean };
 /** `leaveAt` / `arriveAt`: TfL's own start / arrival clock ("HH:MM", London) for the chosen journey, when given. */
-export type Journey = { minutes: number; summary: string; lines: { id: string; name: string }[]; path: LatLng[]; segments: LegSegment[]; fetchedAt: string; ms: number; leaveAt?: string; arriveAt?: string };
+export type Journey = { minutes: number; summary: string; lines: { id: string; name: string }[]; path: LatLng[]; segments: LegSegment[]; fetchedAt: string; ms: number; leaveAt?: string; arriveAt?: string;
+  /** [line-status · ASP] Disrupted lines TfL's fastest option used that this pick avoids (stream data only). */
+  avoided?: { id: string; name: string; status: string }[] };
 
 type JpPoint = { commonName?: string; lat?: number; lon?: number };
 type JpLeg = {
@@ -195,6 +198,7 @@ export async function journey(from: End, to: End, arriveBy: Date): Promise<Journ
   const date = p.date.replace(/-/g, "");
   const time = `${String(p.hh).padStart(2, "0")}${String(p.mm).padStart(2, "0")}`;
   const q = `?date=${date}&time=${time}&timeIs=Arriving&journeyPreference=leasttime`;
+  const badP = disruptedLines(); // [line-status · ASP] read in parallel with the TfL call; empty when no fresh stream data
   let r = await getJson<JpResponse>(withKey(`${BASE}/Journey/JourneyResults/${ll(from)}/to/${ll(to)}${q}`), { maxPerHost: 12 });
   if (!r.ok && r.status === 404 && (stopId(from) || stopId(to))) {
     const ms0 = r.ms;
@@ -208,7 +212,13 @@ export async function journey(from: End, to: End, arriveBy: Date): Promise<Journ
   const pen = (j: (typeof js)[number]) => backtrackPenalty(j.legs.map((l) => ({ mode: l.mode.id, path: parsePath(l.path?.lineString) })), from, to);
   // Prefer fewer changes (+3 min per extra ride) and, on near-ties, TfL's own order.
   const rides = (j: (typeof js)[number]) => j.legs.filter((l) => l.mode.id !== "walking").length;
-  const best = [...js].map((j, i) => ({ j, k: j.duration + pen(j) + 3 * Math.max(0, rides(j) - 1) + i * 0.5 })).sort((a, b) => a.k - b.k)[0].j;
+  const ranked = [...js].map((j, i) => ({ j, k: j.duration + pen(j) + 3 * Math.max(0, rides(j) - 1) + i * 0.5 })).sort((a, b) => a.k - b.k);
+  // [line-status · ASP] Lines the Atlas stream says are disrupted cost extra minutes, so another TfL option wins when close.
+  const bad = await badP;
+  const lineIds = (j: (typeof js)[number]) => j.legs.flatMap((l) => (l.routeOptions ?? []).map((o) => o.lineIdentifier?.id).filter(Boolean).slice(0, 1)) as string[];
+  const dpen = (j: (typeof js)[number]) => lineIds(j).reduce((m, id) => m + disruptionPenalty(bad.get(id)?.severity ?? 10), 0);
+  const best = bad.size ? [...ranked].sort((a, b) => a.k + dpen(a.j) - (b.k + dpen(b.j)))[0].j : ranked[0].j;
+  const avoided = best === ranked[0].j ? [] : lineIds(ranked[0].j).filter((id) => bad.has(id) && !lineIds(best).includes(id)).map((id) => ({ id, name: bad.get(id)!.name, status: bad.get(id)!.status }));
   const transit = best.legs.filter((l) => l.mode.id !== "walking");
   const lines = transit.flatMap((l) => (l.routeOptions ?? []).map((o) => o.lineIdentifier).filter(Boolean).slice(0, 1)) as { id: string; name: string }[];
   const raw = best.legs.map((l, i) => segmentOf(l, i === 0));
@@ -217,7 +227,7 @@ export async function journey(from: End, to: End, arriveBy: Date): Promise<Journ
     ? transit.map((l) => segText(raw[best.legs.indexOf(l)], l)).join(", then ") + (transit.length === 1 ? " (direct)" : "")
     : "Walk";
   const hhmm = (t?: string) => (t && /T(\d\d:\d\d)/.exec(t)?.[1]) || undefined;
-  return { minutes: best.duration, summary, lines, path: best.legs.flatMap((l) => parsePath(l.path?.lineString)), segments, fetchedAt: r.fetchedAt, ms: r.ms, ...(hhmm(best.startDateTime) ? { leaveAt: hhmm(best.startDateTime) } : {}), ...(hhmm(best.arrivalDateTime) ? { arriveAt: hhmm(best.arrivalDateTime) } : {}) };
+  return { minutes: best.duration, summary, lines, path: best.legs.flatMap((l) => parsePath(l.path?.lineString)), segments, fetchedAt: r.fetchedAt, ms: r.ms, ...(hhmm(best.startDateTime) ? { leaveAt: hhmm(best.startDateTime) } : {}), ...(hhmm(best.arrivalDateTime) ? { arriveAt: hhmm(best.arrivalDateTime) } : {}), ...(avoided.length ? { avoided } : {}) };
 }
 
 export type HubScore = { hub: Hub; a: Journey; b: Journey; worst: number; gap: number };
@@ -328,9 +338,12 @@ async function scoreHubs(a: End, b: End, arriveBy: Date, hubs: Hub[], realWalks 
 
 export type LineStatus = { id: string; name: string; status: string; reason?: string; severity: number };
 
-export async function lineStatus(ids: string[]): Promise<{ lines: LineStatus[]; fetchedAt: string; ms: number } | { error: string; ms: number }> {
+export async function lineStatus(ids: string[]): Promise<{ lines: LineStatus[]; fetchedAt: string; ms: number; via?: "atlas-stream-processing" } | { error: string; ms: number }> {
   const uniq = [...new Set(ids)].filter(Boolean);
   if (!uniq.length) return { lines: [], fetchedAt: new Date().toISOString(), ms: 0 };
+  // [line-status · ASP] Fresh rows from MongoDB Atlas Stream Processing first; else the direct TfL call below.
+  const streamed = await streamedLineStatus(uniq);
+  if (streamed) return streamed;
   const r = await getJson<{ id: string; name: string; lineStatuses: { statusSeverity: number; statusSeverityDescription: string; reason?: string }[] }[]>(
     withKey(`${BASE}/Line/${uniq.map(encodeURIComponent).join(",")}/Status`),
     { ttlMs: 2 * 60_000 },

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Banknote, Clock } from "lucide-react";
+import { Banknote, Clock, Sparkles } from "lucide-react";
 import type { Fact, PlanCard as Card, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { PhotoThumb } from "./place-photo";
@@ -79,6 +79,7 @@ export function PlanCard({
   const open = openAnswer(card, when);
   const cost = costAnswer(card);
   const cuisine = cuisineChip(card);
+  const vibe = vibeOf(card);
   const answers: { key: string; icon: typeof Clock; text: string; tone: string; sub?: string; dim?: boolean; v?: Verdict; wx?: Fact }[] = [
     ...(card.kind === "event" && open.state === null ? [] : [{ key: "open", icon: Clock, text: open.text, tone: TONE_CLASS[open.tone], sub: open.sub, dim: open.tone === "unknown", v: open.fact?.verdict }]),
     ...(cost.fact && !/not listed/i.test(cost.text) ? [{ key: "cost", icon: Banknote, text: cost.text, tone: "text-sky-ink", v: cost.fact.verdict }] : []),
@@ -123,6 +124,7 @@ export function PlanCard({
                 <p className="flex min-w-0 items-center gap-1.5">
                   <span className="truncate font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-signal-ink">{type}</span>
                   {cuisine ? <CuisineChip {...cuisine} /> : null}
+                  {vibe ? <VibeChip {...vibe} /> : null}
                 </p>
                 <motion.h3 layoutId={`name-${card.id}`} className="text-[18.5px] font-bold leading-[1.15] tracking-[-0.02em] text-ink">{card.name}</motion.h3>
                 {area || address ? <p className="mt-0.5 truncate text-[12.5px] text-ink-3">{area || address}</p> : null}
@@ -179,6 +181,26 @@ export function PlanCard({
         </div>
       </button>
     </motion.article>
+  );
+}
+
+/** server16: set only when the venue came from MongoDB Atlas vector similarity (plan-types.ts unchanged). */
+export function vibeOf(card: Card): { terms: string[]; source: string } | null {
+  const v = (card as Card & { vibe?: { terms?: unknown; source?: unknown } }).vibe;
+  return v && Array.isArray(v.terms) && v.terms.length && typeof v.source === "string" ? { terms: v.terms.map(String), source: v.source } : null;
+}
+
+/** "Vibe match" chip: frosted orange, the matched words + source on hover. */
+export function VibeChip({ terms, source }: { terms: string[]; source: string }) {
+  return (
+    <span
+      title={`Vibe match: ${terms.join(", ")} · ${source}`}
+      aria-label={`Vibe match: ${terms.join(", ")}`}
+      className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full bg-signal/12 px-1.5 text-[11px] font-semibold leading-none text-signal-ink ring-1 ring-signal/30 backdrop-blur-md"
+    >
+      <Sparkles className="size-2.5" aria-hidden />
+      Vibe match
+    </span>
   );
 }
 

@@ -2,8 +2,9 @@
 
 MongoDB Atlas is where the agent reads its places from and where it keeps its memory.
 
-- **Venues**: 2,765 London OSM venues (pubs, bars, cafes, restaurants, free museums, galleries and markets). These come from the 24 Oct snapshot, stored as GeoJSON with 2dsphere and Atlas Search indexes.
+- **Venues**: 7,225 London OSM venues (pubs, bars, cafes, restaurants, free museums, galleries and markets). These come from the 24 Oct snapshot, stored as GeoJSON with 2dsphere and Atlas Search indexes.
 - **Events**: the Luma seed (61 events), stored the same way, plus a start/end index.
+- **Vibe search**: every venue has an `embed_text` built from its own OSM data. Atlas Vector Search with Automated Embedding (Voyage AI `voyage-4`) and `$rankFusion` hybrid search use it to answer mood asks such as "a cosy quiet pub" or "somewhere to watch the football".
 - **Agent memory**: each finished plan writes one anonymised record to `plan_runs`. `/api/stats` aggregates those records, and the hub comparison uses them to break near-ties.
 
 Everything is optional at runtime. If `MONGODB_URI` is unset, unreachable or slow (more than 2.5 s), `getDb()` returns `null` and the plan carries on with the existing Overpass → bundled snapshot path. A Mongo error never reaches the plan stream.
@@ -16,6 +17,8 @@ Everything is optional at runtime. If `MONGODB_URI` is unset, unreachable or slo
 | `src/lib/mongo-seed.ts` | Builds the documents, creates indexes and Atlas Search indexes. Used by the seed script and the tests. |
 | `scripts/seed_mongo.mjs` | `npm run seed:mongo`. Idempotent: upserts by `_id`, and creates or updates the indexes. Sets DNS to 8.8.8.8/1.1.1.1 so `mongodb+srv` lookups work on networks with broken DNS. That setting is script-only and is not in Vercel code. |
 | `src/lib/mongo-venues.ts` | `findVenues()`: MongoDB first, then `findPlaces()` (Overpass → snapshot). `mongoEventsNear()` is the same idea for events. |
+| `src/lib/mongo-vectors.ts` | Vibe search: `vibeTerms()` (mood words in the ask), `embedText()` (venue text), the `venues_vector` index definition, and the `$vectorSearch`, `$search` and `$rankFusion` pipelines. `vibeSearch()` never throws and gives up after 1.5 s. |
+| `scripts/seed_vectors.mjs` | `npm run seed:vectors`. Idempotent and batched: runs the normal seed, writes `embed_text`, embeds changed venues with Gemini (fallback vectors), and creates or updates `venues_vector` and `venues_search`. Prints counts only. |
 | `src/lib/plan-memory.ts` | `plan_runs` record builder (privacy filter), insert, hub tie-break, and the stats `$facet` pipeline. |
 | `src/app/api/stats/route.ts` | `GET /api/stats` returns the aggregation as JSON, or `{available:false}` without Mongo. |
 
@@ -28,7 +31,9 @@ Everything is optional at runtime. If `MONGODB_URI` is unset, unreachable or slo
 - `location`: GeoJSON Point.
 - `source`, `asOf`.
 - Indexes: `location_2dsphere`, `category_1`.
-- Atlas Search index **`venues_search`**: `name` (string + autocomplete), `category`/`tags`/`address` (string), `location` (geo).
+- Vibe fields: `embed_text` (string), `embed_hash`, `lat`/`lng` (numbers, for vector pre-filters), `embedding` (768-dim Gemini `gemini-embedding-001`, fallback only).
+- Atlas Search index **`venues_search`**: `name` (string + autocomplete), `category`/`tags`/`address` (string), `embed_text` (string, `lucene.english`), `location` (geo).
+- Atlas Vector Search index **`venues_vector`**: `embed_text` as an `autoEmbed` field (model `voyage-4`), with filters `category`, `visitable`, `lat`, `lng`.
 
 **`events`** (`_id` = Luma id)
 - Fields: `title`/`name`, `url`, `start`/`end` (Date; end = listed end, or start + 3 h, as in `seedEventsOn`), `place`, `organiser`, `walkIn`, `tags`, `location`, `source`, `asOf`.
@@ -55,6 +60,49 @@ Venue step for meet-halfway (500 m around the fair hub) and for near-me (1.2 km,
 Either way, results are post-filtered with the same `matches()` rule as `osm.ts`, so cards are identical whichever path served them. The tests check this against the snapshot. The answer's sources list gains `MongoDB Atlas (OSM snapshot 24 Oct)`, with its as-of time.
 
 Events (near-me with no venue type) use the same approach: `$search` geoWithin 8 km plus a `start` range, then `$geoNear` plus the same time predicate as `seedEventsOn`, then the bundled seed.
+
+## Vibe search (Vector Search + hybrid search)
+
+When the ask has mood words (cosy, quiet, lively, sports on TV, good for working, romantic, live music, craft beer, cocktails, outdoor, family- or dog-friendly…), the venue step also runs a hybrid query around the middle (or around you). It runs in parallel with the normal search, so it doesn't add a step in series.
+
+```js
+{ $rankFusion: {
+    input: { pipelines: {
+      vector: [{ $vectorSearch: { index: "venues_vector", path: "embed_text", query: "cosy quiet pub or bar",
+                                  numCandidates: 200, limit: 12,
+                                  filter: { category: { $in: [...] }, visitable: true, lat: {...}, lng: {...} } } }],
+      text:   [{ $search: { index: "venues_search", compound: {
+                   filter: [{ geoWithin: { circle: { center, radius: 500 } } }, { text: { path: "category", query: [...] } }],
+                   should: [{ text: { path: ["embed_text","name","tags"], query: "cosy quiet", fuzzy: {...} } }] } } }, { $limit: 12 }] } },
+    combination: { weights: { vector: 1, text: 1 } },
+    scoreDetails: true } }
+```
+
+- Atlas embeds the query with Voyage AI (`voyage-4`) through **Automated Embedding**. The app sends text only and holds no Voyage key.
+- Matches are added to the venue pool and ranked first: those in both pipelines, then those in one. The usual open-now, distance and journey rules still decide the cards, and Argon still picks from them.
+- Step: `MongoDB Atlas hybrid search · vibe match: cosy, quiet`, then the detail (method, matches, how many reached the shortlist, ms).
+- A card gets a **Vibe match** chip only when the venue came from vector similarity. A text-only match gets no chip.
+- **Fallbacks:** if `$rankFusion` or Automated Embedding errors (for example the rate limit below), the app runs an exact cosine similarity in an aggregation over the Gemini `embedding` vectors inside the radius. It merges that with `$search` by reciprocal rank fusion in the app. If that fails too, it uses text only. After 1.5 s, or with Mongo down, the plan uses the normal venue search and the step says `No answer within 1.5 s · normal venue search used`.
+- **Kill switch:** `VIBE=off`.
+- **Honest limits:**
+  - The text comes only from OSM: name, kind, cuisine, description, seating, step-free and area. No reviews, so "quiet" is similarity on that text, not a measurement.
+  - On a free M0 cluster with no payment method, Atlas caps Voyage query embedding at 3 requests/min. The app caches results for 15 min and falls back to Gemini, as described above. Adding a payment method lifts the cap.
+  - M0 allows 3 search indexes, and they are all used: `venues_search`, `events_search` and `venues_vector`.
+  - One index can't mix `autoEmbed` and `vector` fields. `npm run seed:vectors -- --index=gemini` switches `venues_vector` to the Gemini vectors, with `VIBE_EMBED=gemini` in the app.
+- **Privacy:** the ask is sent to Atlas (and Gemini in the fallback) to embed and is never stored. `plan_runs` keeps only the step's `{id, status, ms, source}`.
+
+## Atlas features used
+
+| Feature | Where |
+|---|---|
+| Atlas Search (`$search`: geoWithin + fuzzy text, `lucene.english`) | Venue and event step, and the text half of vibe search |
+| 2dsphere + `$geoNear` | Venue and event fallback when `$search` is unavailable |
+| Atlas Vector Search (`$vectorSearch` with pre-filters) | Vibe search |
+| Automated Embedding (Voyage AI `voyage-4`, `autoEmbed` index field) | Vibe search: query and venue vectors are made by Atlas |
+| Hybrid search (`$rankFusion` with `scoreDetails`) | Vibe search: the vector and text pipelines fused |
+| Aggregation (`$reduce` dot product over stored Gemini vectors) | Vibe fallback |
+| `$facet` aggregation | `/api/stats` over `plan_runs` |
+| Search index management (`createSearchIndex` / `updateSearchIndex` from scripts) | `seed:mongo`, `seed:vectors` |
 
 ## Agent memory (`plan_runs`) and the privacy rule
 
@@ -101,8 +149,13 @@ The script prints document counts and the Atlas Search index status. The search 
 
 Re-running the script is safe: it upserts and updates the index definitions.
 
+**Vibe search:**
+- Run `npm run seed:vectors` (add `-- --wait` to wait until the indexes are READY). It needs `MONGODB_URI` and `GEMINI_API_KEY`.
+- A re-run only re-embeds venues whose text changed: 7,225 the first time (about 90 s), 0 on a re-run.
+
 **Vercel setup:**
 - Set `MONGODB_URI` (and optionally `MONGODB_DB`, default `sowhere`) for Production and Preview.
+- `GEMINI_API_KEY` (already set) is also used for the vibe fallback. Optional: `VIBE=off`, `VIBE_EMBED=gemini`, `VIBE_EMBED_MODEL`.
 - In Atlas Network Access, allow `0.0.0.0/0`, since Vercel has no fixed egress IPs.
 - Then open `/api/stats` and run a plan: the venues step should read "Searched 2,765 venues in MongoDB Atlas (Atlas Search, geo + text)".
 
@@ -118,4 +171,9 @@ Re-running the script is safe: it upserts and updates the index definitions.
 - the stats aggregation and the `/api/stats` handler
 - two end-to-end `runPlan` calls (live TfL) that read from MongoDB and record a run
 
+Evals: `vibe-unit` covers vibe words, the venue text, the `$rankFusion` pipeline shape, and Atlas off or hanging (it gives up at the budget). `vibe-cosy-quiet-pub` and `vibe-football-covent-garden` check the step and chips; with Atlas off they check the fallback. With `EVAL_ATLAS=1` they need the live answer, for example Bat & Ball Covent Garden for football.
+
 `$search` itself can't run on the memory server. The tests confirm it fails cleanly into `$geoNear`. Verify it on Atlas after seeding.
+
+## Atlas Stream Processing
+Live TfL line status streamed into `sowhere.line_status`: see [mongodb-stream.md](mongodb-stream.md).

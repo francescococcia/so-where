@@ -1,0 +1,167 @@
+{
+  "name": "tfl_line_status",
+  "pipeline": [
+    {
+      "$source": {
+        "schedule": "0 * * * * *",
+        "tsFieldName": "polledAt"
+      }
+    },
+    {
+      "$https": {
+        "connectionName": "tfl_api",
+        "path": "Line/Mode/tube,elizabeth-line,dlr,overground/Status",
+        "method": "GET",
+        "as": "lines",
+        "onError": "dlq",
+        "config": {
+          "connectionTimeoutSec": 10,
+          "requestTimeoutSec": 20
+        }
+      }
+    },
+    {
+      "$unwind": "$lines"
+    },
+    {
+      "$match": {
+        "lines.id": {
+          "$type": "string"
+        }
+      }
+    },
+    {
+      "$replaceRoot": {
+        "newRoot": {
+          "$let": {
+            "vars": {
+              "w": {
+                "$reduce": {
+                  "input": {
+                    "$ifNull": [
+                      "$lines.lineStatuses",
+                      []
+                    ]
+                  },
+                  "initialValue": null,
+                  "in": {
+                    "$cond": [
+                      {
+                        "$or": [
+                          {
+                            "$eq": [
+                              "$$value",
+                              null
+                            ]
+                          },
+                          {
+                            "$lt": [
+                              "$$this.statusSeverity",
+                              "$$value.statusSeverity"
+                            ]
+                          }
+                        ]
+                      },
+                      "$$this",
+                      "$$value"
+                    ]
+                  }
+                }
+              }
+            },
+            "in": {
+              "_id": "$lines.id",
+              "line": "$lines.name",
+              "mode": "$lines.modeName",
+              "severity": {
+                "$ifNull": [
+                  "$$w.statusSeverity",
+                  -1
+                ]
+              },
+              "status": {
+                "$ifNull": [
+                  "$$w.statusSeverityDescription",
+                  "Unknown"
+                ]
+              },
+              "reason": {
+                "$ifNull": [
+                  "$$w.reason",
+                  null
+                ]
+              },
+              "validUntil": {
+                "$let": {
+                  "vars": {
+                    "p": {
+                      "$ifNull": [
+                        "$$w.validityPeriods",
+                        []
+                      ]
+                    }
+                  },
+                  "in": {
+                    "$convert": {
+                      "input": {
+                        "$ifNull": [
+                          {
+                            "$first": {
+                              "$map": {
+                                "input": {
+                                  "$filter": {
+                                    "input": "$$p",
+                                    "cond": {
+                                      "$eq": [
+                                        "$$this.isNow",
+                                        true
+                                      ]
+                                    }
+                                  }
+                                },
+                                "in": "$$this.toDate"
+                              }
+                            }
+                          },
+                          {
+                            "$max": "$$p.toDate"
+                          }
+                        ]
+                      },
+                      "to": "date",
+                      "onError": null,
+                      "onNull": null
+                    }
+                  }
+                }
+              },
+              "updatedAt": "$polledAt",
+              "via": {
+                "$literal": "atlas-stream-processing"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$merge": {
+        "into": {
+          "connectionName": "sowhere_cluster",
+          "db": "sowhere",
+          "coll": "line_status"
+        },
+        "on": "_id",
+        "whenMatched": "replace",
+        "whenNotMatched": "insert"
+      }
+    }
+  ],
+  "options": {
+    "dlq": {
+      "connectionName": "sowhere_cluster",
+      "db": "sowhere",
+      "coll": "line_status_dlq"
+    }
+  }
+}

@@ -17,6 +17,7 @@ import { findVenues, mongoEventsNear } from "@/lib/mongo-venues";
 import { recordPlanRun, tieBreakByHistory } from "@/lib/plan-memory";
 import type { AgentStep, Clarify, Fact, LatLng, Leg, PlanCard, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import { fairPoint, HUBS, journey, lineStatus, searchPlace, tidySegments, trimPathStart, trimSegmentsStart, type Journey, type LegSegment, type LineStatus, type Place } from "@/lib/tfl";
+import { isDisrupted, lineSourceName, shortLine, statusText, streamStep, STREAM_SOURCE } from "@/lib/line-status"; // [line-status · ASP]
 import { forecastAt, type Forecast } from "@/lib/weather";
 import { weatherDecision, weatherFitFact, weatherMode, weatherRank, type WeatherMode } from "@/lib/venue-weather";
 import { applyRefinements, clock12, cuisineLabel, cuisineMatch, cuisineOf, joinRefine, pickHub, prefRank, refineReply, seatingWish, splitRefine, type Pref, type RefinedAsk, type Refinement } from "@/lib/refine";
@@ -26,6 +27,7 @@ import { resolveLandmark } from "@/lib/landmark";
 import type { Blurb } from "@/lib/blurb";
 import { mentionsArea, sameArea, scrubArea, venueArea } from "@/lib/venue-area";
 import { STEP_FREE_ASK, verifyPicks, type PlanResultVerified } from "@/lib/verify";
+import { vibeSearch, vibeTerms, type VibeOutcome } from "@/lib/mongo-vectors";
 
 export type PlanRequest = { query: string; you?: LatLng; when?: string; previous?: { query: string; answer: string; /** Refine only: the result on screen, so "is it open?" answers without replanning. Echoed, never stored. */ result?: PlanResultWithAgent }; refine?: string;
   /** Refine only: the place the user has selected (a card), so "other Italian places in the area" searches around it and excludes it. Never stored. */
@@ -60,11 +62,12 @@ function stepper(emit?: StepSink) {
     steps.push(s);
     emit?.({ ...s });
     const t0 = Date.now();
-    return (status: AgentStep["status"], detail?: string, source?: string) => {
+    /** ms: the step's own time when it ran alongside another (vibe search runs in parallel with the venue search). */
+    return (status: AgentStep["status"], detail?: string, source?: string, ms?: number) => {
       s.status = status;
       if (detail) s.detail = detail;
       if (source) s.source = source;
-      s.ms = Date.now() - t0;
+      s.ms = ms ?? Date.now() - t0;
       emit?.({ ...s });
     };
   };
@@ -215,13 +218,21 @@ const addSource = (s: Sources, name: string, asOf?: string) => {
   if (!prev || prev < asOf) s.set(name, asOf);
 };
 
-function lineFacts(ids: string[], ls: Awaited<ReturnType<typeof lineStatus>> | null): Fact[] {
-  if (!ids.length) return [];
-  if (!ls || "error" in ls) return [fact("Lines", "Line status unavailable right now", "unknown", "TfL")];
+function lineFacts(ids: string[], ls: Awaited<ReturnType<typeof lineStatus>> | null, avoided: Journey["avoided"] = []): Fact[] {
+  if (!ids.length && !avoided?.length) return [];
+  if (!ls || "error" in ls) return ids.length ? [fact("Lines", "Line status unavailable right now", "unknown", "TfL")] : [];
   const used = ls.lines.filter((l) => ids.includes(l.id));
-  if (!used.length) return [];
-  const text = used.map((l: LineStatus) => `${l.name}: ${l.status}${l.reason && l.severity < 10 ? ` (${l.reason.slice(0, 80)})` : ""}`).join(" · ");
-  return [fact("Lines", `${text} · now, as of ${londonClock(ls.fetchedAt)}`, "confirmed", "TfL", ls.fetchedAt)];
+  // [line-status · ASP] Streamed rows: disrupted lines read short ("Jubilee: part closure"); a line the route
+  // dodged reads "Jubilee: part closure · rerouted". Direct TfL rows keep the old wording.
+  const asp = ls.via === "atlas-stream-processing";
+  const seen = new Set(used.map((l) => l.id));
+  const dodged = (avoided ?? []).filter((x, i, all) => !seen.has(x.id) && all.findIndex((y) => y.id === x.id) === i);
+  if (!used.length && !dodged.length) return [];
+  const text = [
+    ...used.map((l: LineStatus) => (asp && isDisrupted(l.severity) ? `${shortLine(l.name)}: ${statusText(l.status)}` : `${l.name}: ${l.status}${l.reason && l.severity < 10 ? ` (${l.reason.slice(0, 80)})` : ""}`)),
+    ...dodged.map((x) => `${shortLine(x.name)}: ${statusText(x.status)} · rerouted`),
+  ].join(" · ");
+  return [fact("Lines", `${text} · now, as of ${londonClock(ls.fetchedAt)}`, "confirmed", asp ? STREAM_SOURCE : "TfL", ls.fetchedAt)];
 }
 
 function weatherFact(w: Forecast | { error: string } | null, at: Date): Fact {
@@ -240,7 +251,9 @@ const soon = (h: Hrs) => (h.soon ? 1 : 0);
 export type CardHours = { openAtPlan: boolean | null; closesAt: string | null; closingSoon: boolean; hoursKnown: boolean };
 /** `area`: the venue's own neighbourhood / nearest station ("South Bank · near Waterloo").
  *  `blurb`: a short description from Wikipedia / Wikidata / OSM / the venue's site (see blurb.ts), when ready. */
-export type PlanCardWithHours = PlanCard & CardHours & { area?: string; blurb?: Blurb };
+/** `vibe`: set only when this venue came back from the vector side of the Atlas hybrid search for the ask's vibe words. */
+export type CardVibe = { terms: string[]; source: string };
+export type PlanCardWithHours = PlanCard & CardHours & { area?: string; blurb?: Blurb; vibe?: CardVibe };
 const cardHours = (h: Hrs): CardHours => ({ openAtPlan: h.state === "unknown" ? null : h.state === "open", closesAt: h.closesAt ?? null, closingSoon: !!h.soon, hoursKnown: h.state !== "unknown" });
 /** Open places, minus the ones shutting within the hour (kept only when nothing else is open). */
 function openEnough<T extends { h: Hrs }>(rows: T[]): { keep: T[]; soonDropped: number } {
@@ -265,7 +278,33 @@ const untilWhy = (h: Hrs) => (h.closesAt ? `, open until ${h.closesAt}` : h.stat
 
 /** Coffee late at night: few cafés are open, so when none is known to be open for the next hour,
  *  bars / pubs that are open late join the pool (and the caller says so). */
-async function findOpenVenues(kind: OsmKind, centerIn: LatLng, radiusM: number, at: Date, ra?: RefinedAsk): Promise<OsmResult & { lateBars?: boolean }> {
+type VibeKeys = Map<string, { vec: boolean; text: boolean }>;
+type Venues = OsmResult & { lateBars?: boolean; vibe?: VibeOutcome; vibeKeys?: VibeKeys };
+const placeKey = (p: { type: string; id: number }) => `${p.type}/${p.id}`;
+
+/** Normal venue search, plus (when the ask has vibe words) the MongoDB Atlas hybrid vibe search in parallel. Vibe
+ *  hits inside the radius join the pool and are flagged; if Atlas / embeddings fail or take > 1.5 s the normal
+ *  result is used unchanged (the vibe search never delays the plan beyond its budget). */
+async function findOpenVenues(kind: OsmKind, centerIn: LatLng, radiusM: number, at: Date, ra?: RefinedAsk, vibe?: string[]): Promise<Venues> {
+  if (!vibe?.length) return findOpenVenuesBase(kind, centerIn, radiusM, at, ra);
+  const center = ra?.focus ? { lat: ra.focus.lat, lng: ra.focus.lng } : centerIn;
+  const [r, v] = await Promise.all([findOpenVenuesBase(kind, centerIn, radiusM, at, ra), vibeSearch(vibe, kind, center, radiusM)]);
+  if ("error" in v) return { ...r, vibe: v };
+  const focus = ra?.focus;
+  const keys: VibeKeys = new Map();
+  const have = new Set(r.places.map(placeKey));
+  const add: OsmPlace[] = [];
+  for (const h of v.hits) {
+    const p: OsmPlace = { type: h.osmType, id: h.osmId, location: h.location, tags: h.tags, distanceM: metresBetween(center, h.location) };
+    if (p.distanceM > radiusM * 1.05 || !p.tags.name) continue;
+    if (focus && ((focus.id && (focus.id === `osm-${p.type}-${p.id}` || focus.id === placeKey(p))) || (focus.name && same(p.tags.name, focus.name)))) continue;
+    keys.set(placeKey(p), { vec: h.fromVector, text: h.fromText });
+    if (!have.has(placeKey(p))) add.push(p);
+  }
+  return { ...r, places: [...r.places, ...add], vibe: v, vibeKeys: keys };
+}
+
+async function findOpenVenuesBase(kind: OsmKind, centerIn: LatLng, radiusM: number, at: Date, ra?: RefinedAsk): Promise<Venues> {
   const cuisine = ra?.cuisine;
   const focus = ra?.focus;
   const center = focus ? { lat: focus.lat, lng: focus.lng } : centerIn;
@@ -287,6 +326,23 @@ async function findOpenVenues(kind: OsmKind, centerIn: LatLng, radiusM: number, 
   return extra.length ? { ...r, places: [...r.places, ...extra], lateBars: true } : r;
 }
 
+/** VIBE=off: kill switch (no Atlas vector/hybrid query, no vibe step). */
+const VIBE_OFF = () => process.env.VIBE === "off";
+/** Step text for the vibe search ("MongoDB Atlas hybrid search · vibe match: cosy, quiet"). */
+function endVibeStep(end: ((s: AgentStep["status"], d?: string, src?: string, ms?: number) => void) | null, r: Venues, pool: { p: OsmPlace }[], radiusM: number) {
+  if (!end) return;
+  const v = r.vibe;
+  if (!v) return end("skipped", "Not run");
+  if ("error" in v) return end("skipped", `${/timed out/.test(v.error) ? "No answer within 1.5 s" : v.error} · normal venue search used`, undefined, v.ms);
+  const inPool = pool.filter((x) => r.vibeKeys?.has(placeKey(x.p))).length;
+  const vec = pool.filter((x) => r.vibeKeys?.get(placeKey(x.p))?.vec).length;
+  end(v.hits.length ? "done" : "failed", `${v.method} · ${v.hits.length} matches within ${radiusM >= 1000 ? `${(radiusM / 1000).toFixed(1)} km` : `${radiusM} m`} · ${inPool} in the shortlist (${vec} by vector similarity) · ${v.ms} ms`, undefined, v.ms); // pill stays "MongoDB Atlas Vector Search"; full source in sources + chip
+}
+const cardVibe = (r: Venues, p: OsmPlace): { vibe?: CardVibe } => {
+  const v = r.vibe;
+  return v && !("error" in v) && r.vibeKeys?.get(placeKey(p))?.vec ? { vibe: { terms: v.terms, source: v.source } } : {};
+};
+
 function venuePick(res: OsmResult, at: Date, wm?: WeatherMode, prefs?: Pref[], cuisine?: string) {
   const rank = { confirmed: 0, likely: 1, forecast: 2, unknown: 3 } as const;
   const rows = res.places.map((p) => ({ p, h: closingSoon(hoursAt(p.tags, at, p.location)) }));
@@ -298,7 +354,10 @@ function venuePick(res: OsmResult, at: Date, wm?: WeatherMode, prefs?: Pref[], c
   const pr = (p: OsmPlace) => prefRank(p.tags, prefs);
   // A cuisine wish ("any Italian?") puts tagged matches first, then name matches.
   const cu = (p: OsmPlace) => (cuisine ? { tag: 0, name: 1, none: 2 }[cuisineMatch(p.tags, cuisine) ?? "none"] : 0);
-  const keep = open.sort((a, b) => cu(a.p) - cu(b.p) || pr(a.p) - pr(b.p) || wr(a.p) - wr(b.p) || soon(a.h) - soon(b.h) || rank[a.h.verdict] - rank[b.h.verdict] || a.p.distanceM - b.p.distanceM);
+  // A vibe ask ("cosy quiet pub"): venues both Atlas pipelines returned (vector + text) first, then either one.
+  const vk = (res as Venues).vibeKeys;
+  const vb = (p: OsmPlace) => { const k = vk?.get(placeKey(p)); return !k ? 2 : k.vec && k.text ? 0 : 1; };
+  const keep = open.sort((a, b) => cu(a.p) - cu(b.p) || pr(a.p) - pr(b.p) || vb(a.p) - vb(b.p) || wr(a.p) - wr(b.p) || soon(a.h) - soon(b.h) || rank[a.h.verdict] - rank[b.h.verdict] || a.p.distanceM - b.p.distanceM);
   // With ≥1 cuisine match, cards are only the matches; non-matches fill in only when there are none (the reply says so).
   const hits = cuisine ? keep.filter((x) => cuisineMatch(x.p.tags, cuisine)) : [];
   return { picks: (hits.length ? hits : keep).slice(0, MAX_CARDS), pool: (hits.length ? hits : keep).slice(0, POOL), total: rows.length, closed, soonDropped };
@@ -756,12 +815,15 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   const lineIds = [...new Set([...best.a.lines, ...best.b.lines].map((l) => l.id))];
 
   const endVenues = begin("venues", `Finding ${kind === "pub" ? "pubs and bars" : kind + "s"} near ${best.hub.name}`, "OSM Overpass");
+  const vibe = VIBE_OFF() ? [] : vibeTerms(ctx.text);
+  const endVibe = vibe.length ? begin("vibe", `MongoDB Atlas hybrid search · vibe match: ${vibe.join(", ")}`, "MongoDB Atlas Vector Search") : null;
   const endLines = begin("lines", "Checking line status", "TfL");
   const endWeather = begin("weather", "Checking the forecast", "Open-Meteo");
   const [osmR, ls, wx] = await Promise.all([
-    findOpenVenues(kind, result.middle.location, 500, when, ask as RefinedAsk),
+    findOpenVenues(kind, result.middle.location, 500, when, ask as RefinedAsk, vibe),
     lineStatus(lineIds).then((r) => {
       endLines("error" in r ? "failed" : "done", "error" in r ? `TfL line status ${r.error}` : `${r.lines.length} line${r.lines.length === 1 ? "" : "s"}: ${r.lines.map((l) => `${l.name} ${l.status}`).join(", ") || "none used"}`);
+      streamStep(begin, r); // [line-status · ASP]
       return r;
     }),
     forecastAt(result.middle.location, when).then((r) => {
@@ -774,15 +836,18 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   const osm = { r: osmR, pk: venuePick(osmR, when, wm, prefs, (ask as RefinedAsk).cuisine) };
   // An in-between station (not a central hub) can be quiet: look a little wider before giving up.
   if (!osm.pk.picks.length && !HUBS.some((h) => h.id === best.hub.id)) {
-    const wide = await findOpenVenues(kind, result.middle.location, 900, when, ask as RefinedAsk);
+    const wide = await findOpenVenues(kind, result.middle.location, 900, when, ask as RefinedAsk, vibe);
     Object.assign(osm, { r: wide, pk: venuePick(wide, when, wm, prefs, (ask as RefinedAsk).cuisine) });
   }
   endVenues(osm.pk.picks.length ? "done" : "failed", `${osmR.via ? `${osmR.via} · ${osmR.places.length} within 500 m` : `${osmR.places.length} found within 500 m (${osmR.source}${osmR.live ? "" : ", live call " + (osmR.note?.match(/Overpass (\w+)/)?.[1] ?? "failed")})`} · ${osm.pk.closed} closed at ${londonClock(when.toISOString())}${osm.pk.soonDropped ? ` · ${osm.pk.soonDropped} closing within the hour dropped` : ""} · ${osm.pk.picks.length} kept · ${weatherDecision(wm, osm.pk.picks.map((x) => x.p))}`, osmR.stepSource);
+  endVibeStep(endVibe, osm.r, osm.pk.pool, osm.r === osmR ? 500 : 900);
+  const vr = (osm.r as Venues).vibe;
+  if (vr && !("error" in vr) && osm.pk.pool.some((x) => (osm.r as Venues).vibeKeys?.has(placeKey(x.p)))) addSource(sources, vr.source, new Date().toISOString());
   addSource(sources, osm.r.source, osm.r.asOf);
   for (const x of osm.r.more ?? []) addSource(sources, x.source, x.asOf);
   if ((osmR as { lateBars?: boolean }).lateBars) unknowns.push(`Few cafés near ${best.hub.name} are open at ${londonClock(when.toISOString())}, so bars open late are included.`);
   if (!osm.r.live && osm.r.note) unknowns.push(osm.r.note + ".");
-  if (!("error" in ls)) addSource(sources, "TfL Line Status", ls.fetchedAt);
+  if (!("error" in ls)) addSource(sources, lineSourceName(ls), ls.fetchedAt); // [line-status · ASP]
   else unknowns.push("Live line status didn't load.");
   if (!("error" in wx)) addSource(sources, "Open-Meteo", wx.fetchedAt);
   else unknowns.push(`Weather: ${wx.error}.`);
@@ -792,7 +857,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
 
   const day = londonDayShort(when);
   const tflFact = fact("Travel", `TfL planner: you ${best.a.minutes} min, ${who} ${best.b.minutes} min to ${best.hub.name}, arriving by ${londonClock(when.toISOString())}`, "confirmed", "TfL", best.a.fetchedAt);
-  const lf = lineFacts(lineIds, ls);
+  const lf = lineFacts(lineIds, ls, [...(best.a.avoided ?? []), ...(best.b.avoided ?? [])]); // [line-status · ASP]
   const wf = weatherFact(wx, when);
   // Their leg starts at the puck (the typed station/area); only a shared GPS start would be trimmed.
   const themPath = themArea.precision === "shared" ? trimPathStart(best.b.path, 500, metresBetween) : best.b.path;
@@ -829,6 +894,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
       why: `${Math.round(p.distanceM)} m from ${best.hub.name}, the fairest hub (${best.a.minutes} vs ${best.b.minutes} min)${untilWhy(h)}${h.verdict === "confirmed" ? "; hours recently checked in OSM" : ""}.`,
       url: p.tags.website ?? p.tags["contact:website"] ?? osmUrl(p),
       ...cardHours(h),
+      ...cardVibe(osm.r, p),
     };
   });
   result.cards.forEach((c, i) => CARD_TAGS.set(c, osm.pk.pool[i].p.tags));
@@ -868,9 +934,15 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   let wm: WeatherMode = { mode: "neutral", label: "" }; // weather only re-ranks pubs / cafés / restaurants
   const endFind = begin("venues", venueKind ? `Finding ${venueKind}s near you` : "Finding events and free-entry places near you", venueKind ? "OSM Overpass" : "Luma seed + OSM Overpass");
   if (venueKind) {
-    osm = await findOpenVenues(venueKind, ctx.you, (ask as RefinedAsk).focus ? 800 : 1200, when, ask as RefinedAsk);
+    const vibe = VIBE_OFF() ? [] : vibeTerms(ctx.text);
+    const endVibe = vibe.length ? begin("vibe", `MongoDB Atlas hybrid search · vibe match: ${vibe.join(", ")}`, "MongoDB Atlas Vector Search") : null;
+    const rad = (ask as RefinedAsk).focus ? 800 : 1200;
+    osm = await findOpenVenues(venueKind, ctx.you, rad, when, ask as RefinedAsk, vibe);
     wm = weatherMode(await wxP, t);
     const pk = venuePick(osm, when, wm, (ask as RefinedAsk).prefs, (ask as RefinedAsk).cuisine);
+    endVibeStep(endVibe, osm, pk.picks, rad);
+    const vr = (osm as Venues).vibe;
+    if (vr && !("error" in vr) && pk.picks.some((x) => (osm as Venues).vibeKeys?.has(placeKey(x.p)))) addSource(sources, vr.source, new Date().toISOString());
     for (const x of pk.picks.concat()) cands.push({ kind: "place", p: x.p, h: x.h, osm });
     endFind(cands.length ? "done" : "failed", `${osm.via ? `${osm.via} · ` : ""}${osm.places.length} ${venueKind}s within 1.2 km (${osm.source}) · ${pk.closed} closed at ${t}${pk.soonDropped ? ` · ${pk.soonDropped} closing within the hour dropped` : ""} · ${weatherDecision(wm, pk.picks.map((x) => x.p))}`, osm.stepSource);
   } else {
@@ -922,7 +994,8 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   const endLines = begin("lines", "Checking line status", "TfL");
   const ls = lineIds.length ? await lineStatus(lineIds) : null;
   endLines(!lineIds.length ? "skipped" : ls && !("error" in ls) ? "done" : "failed", !lineIds.length ? "No TfL lines on these routes (walking or bus only)" : ls && !("error" in ls) ? ls.lines.map((l) => `${l.name} ${l.status}`).join(", ") : "Line status didn't load");
-  if (ls && !("error" in ls)) addSource(sources, "TfL Line Status", ls.fetchedAt);
+  streamStep(begin, ls); // [line-status · ASP]
+  if (ls && !("error" in ls)) addSource(sources, lineSourceName(ls), ls.fetchedAt);
   const wx = await wxP;
   if (!("error" in wx)) addSource(sources, "Open-Meteo", wx.fetchedAt);
   const wf = weatherFact(wx, when);
@@ -931,7 +1004,7 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   result.cards = chosen.map(({ c, j }): PlanCardWithHours => {
     const leg: LegWithSegments = { who: "you", minutes: j.minutes, summary: j.summary, path: j.path, segments: tidySegments(j.segments, ctx.youName) };
     const travel = fact("Travel", `TfL planner: ${j.minutes} min (${j.summary})`, "confirmed", "TfL", j.fetchedAt);
-    const lf = lineFacts(j.lines.map((l) => l.id), ls);
+    const lf = lineFacts(j.lines.map((l) => l.id), ls, j.avoided); // [line-status · ASP]
     if (c.kind === "event") {
       const e = c.e;
       const s = londonClock(e.start);
@@ -983,6 +1056,7 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
       why: `${j.minutes} min away by TfL${free ? ", free entry" : ""}${untilWhy(c.h)}.`,
       url: p.tags.website ?? p.tags["contact:website"] ?? osmUrl(p),
       ...cardHours(c.h),
+      ...cardVibe(c.osm as Venues, p),
     };
   });
   result.cards.forEach((card, i) => {
@@ -1058,7 +1132,8 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
   const endLines = begin("lines", "Checking line status", "TfL");
   const ls = await lineStatus(lineIds);
   endLines("error" in ls ? "failed" : "done", "error" in ls ? `TfL line status ${ls.error}` : `${ls.lines.length} line${ls.lines.length === 1 ? "" : "s"}: ${ls.lines.map((l) => `${l.name} ${l.status}`).join(", ") || "none used"}`);
-  if (!("error" in ls)) addSource(sources, "TfL Line Status", ls.fetchedAt);
+  streamStep(begin, ls); // [line-status · ASP]
+  if (!("error" in ls)) addSource(sources, lineSourceName(ls), ls.fetchedAt);
   if (!("error" in wx)) addSource(sources, "Open-Meteo", wx.fetchedAt);
   else unknowns.push(`Weather: ${wx.error}.`);
   if (lineIds.length) unknowns.push("Line status is as of now, not for the time of the plan.");
@@ -1078,7 +1153,7 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
       ? fact("Travel", `TfL planner: you ${a ? `${a.minutes} min` : "no time"}${ctx.them ? `, ${who} ${b ? `${b.minutes} min` : "no time"}` : ""} to ${found.name}, arriving by ${t}`, "confirmed", "TfL", (a ?? b)!.fetchedAt)
       : fact("Travel", "TfL journey time didn't come back", "unknown", "TfL"),
   );
-  facts.push(...lineFacts(lineIds, ls), weatherFact(wx, when));
+  facts.push(...lineFacts(lineIds, ls, [...(a?.avoided ?? []), ...(b?.avoided ?? [])]), weatherFact(wx, when)); // [line-status · ASP]
   if (dest.free) facts.push(fact("Entry", "Free (as given)", "likely", "Your ask"));
   else if (dest.priceText) facts.push(fact("Price", `${dest.priceText} (as given)`, "likely", "Your ask"));
   else facts.push(fact("Price", "Not listed", "unknown", isEvent ? "Your ask (no price)" : "OSM (no price tag)"));

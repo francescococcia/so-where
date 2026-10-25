@@ -29,6 +29,8 @@ import { resolveLandmark, setLandmarkResolverForTests, type Landmark } from "@/l
 import { resetVisionModelForTests, visionGenerate, VISION_FALLBACK } from "@/lib/vision";
 import { PLAN_FALLBACK, planGenerate, resetPlanModelForTests } from "@/lib/plan-model";
 import { checkCard, setPlanPickerForTests, verifyPicks, type Picker, type VCard } from "@/lib/verify";
+import { embedText, vibeHybridPipeline, vibeSearch, vibeTerms } from "@/lib/mongo-vectors";
+import type { Db } from "mongodb";
 
 // Blurbs (Wikipedia / website / Gemini) are checked by the "server4" unit with mocks; the plan cases skip them.
 process.env.BLURBS ??= "off";
@@ -44,14 +46,14 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; /** server13: a compound follow-up, answered in several sentences. */ multiPart?: boolean; /** server13: both journeys at most this many minutes. */ maxLegMin?: number; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number; /** server8: card within maxM of this point, no such facts, never swapped by verify. */ near?: { lat: number; lng: number; maxM: number }; noFacts?: string[]; landmark?: boolean }; daysAhead?: number; /** server9: venues step detail/source matches; every card within maxM of a point. */ venuesFrom?: string; cardsNear?: { lat: number; lng: number; maxM: number } };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; /** server13: a compound follow-up, answered in several sentences. */ multiPart?: boolean; /** server13: both journeys at most this many minutes. */ maxLegMin?: number; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number; /** server8: card within maxM of this point, no such facts, never swapped by verify. */ near?: { lat: number; lng: number; maxM: number }; noFacts?: string[]; landmark?: boolean }; daysAhead?: number; /** server9: venues step detail/source matches; every card within maxM of a point. */ venuesFrom?: string; cardsNear?: { lat: number; lng: number; maxM: number }; /** server16: vibe step + chips; live Atlas (EVAL_ATLAS=1) also needs a vector match whose name matches. */ vibe?: { terms: string[]; nameMatch?: string } };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
 // `unit`: in-process checks of a helper (no HTTP): "hours" parses OSM opening_hours, "segments" tidies stretches.
 type HoursUnit = { oh: string; date: string; at: string; state: "open" | "closed" | "unknown"; closesAt?: string };
-type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7" | "server8" | "server9";
+type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7" | "server8" | "server9" | "server16";
   // server6 "snap a place": a fixture extract stands in for Gemini (test hook); the route runs for real (fixture image bytes).
   snap?: { extract: SnapExtract; landmark?: boolean; nearbyQuery?: string; kind?: string; at?: { lat: number; lng: number; maxM: number }; you?: { lat: number; lng: number }; area?: string; place?: string; suggestedQuery?: string; minCandidates?: number; message?: string; firstCandidate?: string; noCandidates?: boolean }; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
 // `clock`: pin "now" to HH:MM London (today if still ahead, else tomorrow, so live TfL/forecast calls stay in the
@@ -415,6 +417,32 @@ async function unitChecks(c: Case): Promise<Chk[]> {
       setLandmarkResolverForTests(null);
     }
   }
+  if (c.unit === "server16") {
+    // Vibe asks → MongoDB Atlas hybrid search ($rankFusion of $vectorSearch + $search); fast fallback when it's off.
+    add("vibeTerms: cosy+quiet / lively+football / working / none for a plain ask",
+      JSON.stringify(vibeTerms("a cosy quiet pub near Old Street")) === JSON.stringify(["cosy", "quiet"]) && JSON.stringify(vibeTerms("somewhere lively to watch the football")) === JSON.stringify(["lively", "sports on TV"]) && JSON.stringify(vibeTerms("a cafe good for working")) === JSON.stringify(["good for working"]) && vibeTerms("Coffee near Old Street tomorrow at 3").length === 0 && vibeTerms("somewhere quieter").length === 0,
+      [vibeTerms("a cosy quiet pub near Old Street"), vibeTerms("somewhere lively to watch the football"), vibeTerms("a cafe good for working")]);
+    const et = embedText({ name: "The Test Arms", category: "pub", osm_tags: { amenity: "pub", cuisine: "regional;burger", outdoor_seating: "yes", wheelchair: "yes", opening_hours: "Mo-Su 12:00-23:00" }, location: { type: "Point", coordinates: [-0.0877, 51.5257] } } as never);
+    add("embed text: only the venue's own OSM data (name, kind, cuisine, seating, step-free, area)", /^The Test Arms\. pub\. cuisine: regional, burger\. outdoor seating\. step-free\. .*Old Street/.test(et) && !/cosy|quiet|lively|football/i.test(et), et);
+    const pl = vibeHybridPipeline("cosy pub or bar", ["cosy"], "pub", { lat: 51.5257, lng: -0.0877 }, 500) as Record<string, any>[];
+    const vec = pl[0]?.$rankFusion?.input?.pipelines?.vector?.[0]?.$vectorSearch;
+    const txt = pl[0]?.$rankFusion?.input?.pipelines?.text?.[0]?.$search;
+    add("hybrid pipeline: $rankFusion of $vectorSearch (category + lat/lng box pre-filter) and $search (geoWithin 500 m)", !!vec && vec.index === "venues_vector" && JSON.stringify(vec.filter).includes('"lat"') && JSON.stringify(vec.filter).includes('"category"') && txt?.compound?.filter?.[0]?.geoWithin?.circle?.radius === 500, pl[0]);
+    let t0 = Date.now();
+    const off = await vibeSearch(["cosy"], "pub", { lat: 51.5257, lng: -0.0877 }, 500, { db: null, embed: async () => [0.1, 0.2] });
+    add("Atlas off → error result (plan keeps its normal path) in < 300 ms", "error" in off && Date.now() - t0 < 300, off);
+    const hang = { collection: () => ({ aggregate: () => ({ toArray: () => new Promise(() => {}) }) }) } as unknown as Db;
+    t0 = Date.now();
+    const slow = await vibeSearch(["quiet"], "cafe", { lat: 51.5257, lng: -0.0877 }, 500, { db: hang, budgetMs: 400, embed: async () => [0.1, 0.2] });
+    const took = Date.now() - t0;
+    add("Atlas hangs → gives up at the budget (400 ms here, 1.5 s in the plan)", "error" in slow && /timed out/.test(slow.error) && took >= 380 && took < 700, { slow, took });
+    const noKey = await vibeSearch(["quiet"], "cafe", { lat: 51.5257, lng: -0.0877 }, 500, { db: hang, mode: "gemini", budgetMs: 400, embed: async () => { throw new Error("GEMINI_API_KEY not set"); } });
+    add("no embeddings (gemini mode, no key) → error, no throw", "error" in noKey, noKey);
+    if (process.env.EVAL_ATLAS) {
+      const live = await vibeSearch(["lively", "sports on TV"], "pub", { lat: 51.5129, lng: -0.1243 }, 900);
+      add("LIVE Atlas: 'lively, sports on TV' near Covent Garden → a vector match named for sport (Bat & Ball / Sports Bar)", !("error" in live) && live.hits.slice(0, 5).some((h) => h.fromVector && /sport|bat & ball/i.test(h.name ?? "")), "error" in live ? live : { method: live.method, ms: live.ms, top: live.hits.slice(0, 5).map((h) => `${h.name} v=${h.fromVector} t=${h.fromText}`) });
+    }
+  }
   if (c.unit === "server9") {
     // Thin Atlas result (Atlas only holds the central hubs): the bundled snapshot, then live Overpass, top it up.
     const thin = (n = 0) => ({ places: [], source: "MongoDB Atlas (OSM snapshot 24 Oct)", asOf: "2026-10-24T19:44:45.780Z", live: false, ms: 1, note: "Venues come from the OSM snapshot of 24 Oct stored in MongoDB Atlas, not a live Overpass call", via: `Searched ${n} venues in MongoDB Atlas (2dsphere $geoNear)`, stepSource: "MongoDB Atlas $geoNear" });
@@ -566,6 +594,20 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
   if (e.venuesFrom) {
     const st = r.steps.find((x) => x.id === "venues");
     add(`venues step says where from (/${e.venuesFrom}/)`, !!st && new RegExp(e.venuesFrom).test(`${st.detail} [${st.source}]`), st && `${st.detail} [${st.source}]`);
+  }
+  if (e.vibe) {
+    const st = r.steps.find((s) => s.id === "vibe");
+    const want = `vibe match: ${e.vibe.terms.join(", ")}`;
+    const chips = r.cards.filter((k) => (k as { vibe?: { terms: string[] } }).vibe);
+    add(`vibe step: "MongoDB Atlas hybrid search · ${want}"`, !!st && st.label.endsWith(want) && /^MongoDB Atlas hybrid search/.test(st.label), st);
+    add("vibe step answers within the 1.5 s budget (+ connect slack)", !!st && (st.ms ?? 0) <= 1800, st?.ms);
+    if (process.env.EVAL_ATLAS) {
+      add("LIVE Atlas: vibe step done, ≥1 card with a Vibe match chip", st?.status === "done" && chips.length > 0, { step: st, chips: chips.map((k) => k.name) });
+      if (e.vibe.nameMatch) add(`LIVE Atlas: a card matches /${e.vibe.nameMatch}/i`, r.cards.some((k) => new RegExp(e.vibe!.nameMatch!, "i").test(k.name)), r.cards.map((k) => k.name));
+    } else if (st?.status !== "done") {
+      add("Atlas off: vibe step skipped, normal venues still found, no Vibe match chips", st?.status === "skipped" && chips.length === 0 && r.cards.length > 0, { step: st, cards: r.cards.length });
+    }
+    add("chips only with the ask's terms and an Atlas Vector Search source", chips.every((k) => { const v = (k as { vibe?: { terms: string[]; source: string } }).vibe!; return JSON.stringify(v.terms) === JSON.stringify(e.vibe!.terms) && /MongoDB Atlas/.test(v.source); }), chips.map((k) => (k as { vibe?: unknown }).vibe));
   }
   if (e.cardsNear) add(`every card within ${e.cardsNear.maxM} m of ${e.cardsNear.lat}, ${e.cardsNear.lng}`, r.cards.length > 0 && r.cards.every((k) => metresBetween(k.location, e.cardsNear!) <= e.cardsNear!.maxM), r.cards.map((k) => [k.name, Math.round(metresBetween(k.location, e.cardsNear!))]));
   const facts = r.cards.flatMap((x) => x.facts);
@@ -757,4 +799,6 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
   const rate = passed / cases.length;
   console.log(`\n${passed}/${cases.length} passed (${(rate * 100).toFixed(0)}%)`);
   if (!only) writeFileSync("evals/last-run.json", JSON.stringify({ startedAt, finishedAt: new Date().toISOString(), passed, total: cases.length, rate, results }, null, 2) + "\n");
+  if (process.env.EVAL_VERBOSE) for (const r of results) for (const x of r.checks) if (/^LIVE/.test(x.name)) console.log(`  ${r.id}: ${x.name} → ${JSON.stringify(x.got)}`);
+  process.exit(0); // a live Atlas client (EVAL_ATLAS=1) would otherwise keep the process open
 })();
