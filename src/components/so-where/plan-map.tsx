@@ -374,8 +374,12 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
       );
     }
 
-    add(new maplibregl.Marker({ element: el("<i></i><b></b>", "sw-you"), anchor: "center" }).setLngLat(ll(result.you)));
-    add(new maplibregl.Marker({ element: tag("You"), anchor: "left", offset: [16, 0] }).setLngLat(ll(result.you)));
+    // A snapped place without a known location has no "You" (result.you is just the place).
+    const snapNoYou = (result as { snapOnly?: boolean; youKnown?: boolean }).snapOnly && !(result as { youKnown?: boolean }).youKnown;
+    if (!snapNoYou) {
+      add(new maplibregl.Marker({ element: el("<i></i><b></b>", "sw-you"), anchor: "center" }).setLngLat(ll(result.you)));
+      add(new maplibregl.Marker({ element: tag("You"), anchor: "left", offset: [16, 0] }).setLngLat(ll(result.you)));
+    }
 
     fitRef.current = () => {
       const pts: LatLng[] = [result.you, ...result.cards.slice(0, 3).map((c) => c.location)];

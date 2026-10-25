@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, Copy, Lock, Share2, X } from "lucide-react";
 
 /** Draft only. Nothing in here sends anything; the user copies and sends it themselves. */
-export function SendPlanDialog({ open, onOpenChange, draft }: { open: boolean; onOpenChange: (o: boolean) => void; draft: string }) {
+export function SendPlanDialog({ open, onOpenChange, draft, title = "Send plan" }: { open: boolean; onOpenChange: (o: boolean) => void; draft: string; title?: string }) {
   const [text, setText] = useState(draft);
   const [copied, setCopied] = useState(false);
   const [canShare, setCanShare] = useState(false);
@@ -56,7 +56,7 @@ export function SendPlanDialog({ open, onOpenChange, draft }: { open: boolean; o
                 className="w-full max-w-[460px] rounded-[22px] bg-surface p-5 shadow-e4 ring-1 ring-line/60"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <Dialog.Title className="text-[20px] font-semibold tracking-[-0.01em]">Send plan</Dialog.Title>
+                  <Dialog.Title className="text-[20px] font-semibold tracking-[-0.01em]">{title}</Dialog.Title>
                   <Dialog.Close className="sw-btn sw-btn-ghost -m-2 size-11 rounded-full" aria-label="Close">
                     <X className="size-5" aria-hidden />
                   </Dialog.Close>

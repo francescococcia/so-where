@@ -8,7 +8,7 @@ import type { PlanResultWithAgent } from "@/lib/plan-types";
 import type { FixtureId } from "@/lib/plan-fixture";
 import { cn } from "@/lib/utils";
 import { AgentSteps } from "./agent-steps";
-import { PosterSnap } from "./poster-snap";
+import { SnapSheet, type SnapMode, type SnapView } from "./place-snap";
 import { ClarifyBox } from "./clarify-box";
 import { LeaveByChip, leaveByOf, type LeaveBy } from "./blurb";
 import { PlanCard } from "./plan-card";
@@ -255,15 +255,15 @@ function MicButton({ listening, onClick, className, size = "md" }: { listening: 
   );
 }
 
-/** Opens "Snap a poster" (camera on phones, file / drop / paste on desktop). Same footprint as the mic. */
+/** Opens the snap sheet ("Snap a place" | "Snap a poster"). Same footprint as the mic. */
 function CameraButton({ open, onClick, size = "md" }: { open: boolean; onClick: () => void; size?: "md" | "sm" }) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
       aria-expanded={open}
-      aria-label="Snap a poster"
-      title="Snap a poster"
+      aria-label="Snap a place or poster"
+      title="Snap a place or poster"
       whileTap={{ scale: 0.9 }}
       className={cn("sw-btn relative shrink-0 rounded-full transition-colors", size === "md" ? "size-11" : "size-10", open ? "bg-signal-soft text-signal-ink" : "text-ink-2 hover:bg-white/80 hover:text-ink")}
     >
@@ -350,6 +350,11 @@ export function SoWhereApp() {
   // Poster snap: which composer it opened from, and the ask it produced (for the "From your photo" chip).
   const [snap, setSnap] = useState<null | "ask" | "chat">(null);
   const [photoAsk, setPhotoAsk] = useState<string | null>(null);
+  // Snap a place: which tab the sheet shows, the matched place (map + detail), the friend draft, demo id.
+  const [snapMode, setSnapMode] = useState<SnapMode>("place");
+  const [placeSnap, setPlaceSnap] = useState<SnapView | null>(null);
+  const [friendOpen, setFriendOpen] = useState(false);
+  const [snapDemo, setSnapDemo] = useState<string | null>(null);
   const snapRef = useRef<HTMLDivElement>(null);
   // Bring the poster panel into view when it opens (it sits below the fold on phones).
   useEffect(() => {
@@ -438,6 +443,10 @@ export function SoWhereApp() {
       showFixture(demo as FixtureId);
       setQuery(demo === "meet" ? CHIPS[0].ask : CHIPS[3].ask);
       setActiveChip(demo === "meet" ? "meet" : "walkin");
+    } else if (demo === "place" || demo === "place-candidates" || demo === "place-nomatch") {
+      setSnapDemo(demo);
+      setSnapMode("place");
+      setSnap("ask");
     } else if (demo === "clarify") {
       setQuery(CHIPS[1].ask);
       setActiveChip("coffee");
@@ -497,6 +506,7 @@ export function SoWhereApp() {
       setShown(null);
       setTurns([]);
       setPhotoAsk(null);
+      setPlaceSnap(null);
       baseAsk.current = text;
       awaitingReply.current = false;
       submit(text, undefined, you ?? undefined);
@@ -537,6 +547,24 @@ export function SoWhereApp() {
     },
     [ask]
   );
+  // A matched place: fly there, light the building, open the detail (any plan detail closes).
+  const onPlaceMatch = useCallback((v: SnapView) => {
+    setDetailId(null);
+    setPlaceSnap(v);
+    if (window.innerWidth < 768) window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+  }, [reduced]);
+  // "Meet here": the suggested ask goes through the normal plan flow; if there's no friend info, the planner asks.
+  const meetHere = useCallback(() => {
+    if (!placeSnap) return;
+    const q = placeSnap.query;
+    setSnap(null);
+    setSnapDemo(null);
+    setQuery(q);
+    setActiveChip(null);
+    ask(q);
+    setPhotoAsk(q);
+    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [placeSnap, ask]);
   const snapEdit = useCallback((q: string) => {
     setSnap(null);
     setQuery(q);
@@ -647,17 +675,19 @@ export function SoWhereApp() {
   const selected = result?.cards.find((c) => c.id === selectedId) ?? result?.cards[0];
   const detail = result?.cards.find((c) => c.id === detailId) ?? null;
   const finished = status === "result" || status === "clarify";
+  const mapResult = placeSnap?.result ?? result ?? (refining ? shown : null);
+  const panelOpen = !!(placeSnap || detail);
 
   return (
     <MotionConfig reducedMotion="user">
-      <main className={cn("relative min-h-dvh bg-ground lg:h-dvh lg:overflow-hidden", detail && !mobile && "sw-detail-open")}>
-        <Header example={state.example} reason={state.exampleReason} className="sticky top-0 z-20 bg-ground/75 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 lg:hidden" />
+      <main className={cn("relative min-h-dvh bg-ground lg:h-dvh lg:overflow-hidden", panelOpen && !mobile && "sw-detail-open")}>
+        <Header example={state.example || !!placeSnap?.example} reason={state.exampleReason} className="sticky top-0 z-20 bg-ground/75 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 lg:hidden" />
 
         {/* Map: on top on phones, full-bleed behind the panel on desktop */}
         <div className="relative h-[46svh] min-h-[300px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto">
-          <PlanMap result={result ?? (refining ? shown : null)} selectedId={selectedId} hoverId={hoverId} focusId={detailId} scanning={status === "running"} onSelect={select} onHover={setHoverId} padding={detail && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} />
-          <div className={cn("pointer-events-none absolute right-3 top-3 z-10 transition-[right] duration-500 max-sm:right-2 max-sm:top-2 max-sm:origin-top-right max-sm:scale-[.92] lg:right-4 lg:top-4", detail && !mobile && "md:right-[412px] lg:right-[412px]")}>
-            <MapChips result={result ?? (refining ? shown : null)} cardId={detailId ?? selectedId} />
+          <PlanMap result={mapResult} selectedId={placeSnap ? placeSnap.card.id : selectedId} hoverId={hoverId} focusId={placeSnap ? placeSnap.card.id : detailId} scanning={status === "running" && !placeSnap} onSelect={placeSnap ? () => {} : select} onHover={setHoverId} padding={panelOpen && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} />
+          <div className={cn("pointer-events-none absolute right-3 top-3 z-10 transition-[right] duration-500 max-sm:right-2 max-sm:top-2 max-sm:origin-top-right max-sm:scale-[.92] lg:right-4 lg:top-4", panelOpen && !mobile && "md:right-[412px] lg:right-[412px]")}>
+            <MapChips result={mapResult} cardId={placeSnap ? placeSnap.card.id : detailId ?? selectedId} />
           </div>
           {state.example ? (
             <div className="pointer-events-none absolute bottom-4 left-[476px] z-10 hidden lg:block">
@@ -676,7 +706,7 @@ export function SoWhereApp() {
           className="sw-glass relative z-10 -mt-5 flex flex-col rounded-t-[22px] lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:mt-0 lg:w-[444px] lg:rounded-[22px]"
         >
           <div ref={scrollRef} className="flex-1 px-4 pb-6 pt-4 lg:overflow-y-auto lg:px-5 lg:pt-5">
-            <Header example={state.example} reason={state.exampleReason} className="mb-5 hidden lg:flex" />
+            <Header example={state.example || !!placeSnap?.example} reason={placeSnap?.example ? "demo link" : state.exampleReason} className="mb-5 hidden lg:flex" />
 
             {status === "idle" ? <Hero /> : null}
 
@@ -717,12 +747,15 @@ export function SoWhereApp() {
                   transition={{ delay: 0.35 + CHIPS.length * 0.06, type: "spring", stiffness: 420, damping: 26 }}
                   type="button"
                   disabled={status === "running"}
-                  onClick={() => setSnap((v) => (v === "ask" ? null : "ask"))}
+                  onClick={() => {
+                    setSnapMode("place");
+                    setSnap((v) => (v === "ask" && snapMode === "place" ? null : "ask"));
+                  }}
                   aria-expanded={snap === "ask"}
                   className={cn("sw-chip min-h-9 px-3 text-[13px] font-medium max-lg:min-h-11", snap === "ask" && "bg-signal-soft")}
                 >
                   <Camera className={cn("size-4 transition-colors", snap === "ask" ? "text-signal-ink" : "text-ink-3")} aria-hidden />
-                  <span>Snap a poster</span>
+                  <span>Snap a place</span>
                 </motion.button>
               </div>
               <motion.div layout="size" className={cn("sw-field flex items-end gap-2 p-1.5 pl-3.5", typing && "is-typing")}>
@@ -782,7 +815,7 @@ export function SoWhereApp() {
             <AnimatePresence initial={false}>
               {snap === "ask" ? (
                 <motion.div key="snap-ask" ref={snapRef} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: reduced ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
-                  <PosterSnap className="mt-3" onPlan={snapPlan} onEdit={snapEdit} context={snapContext} />
+                  <SnapSheet className="mt-3" mode={snapMode} onMode={setSnapMode} poster={{ onPlan: snapPlan, onEdit: snapEdit, context: snapContext }} place={{ you, demo: snapDemo, onMatch: onPlaceMatch }} />
                 </motion.div>
               ) : null}
             </AnimatePresence>
@@ -857,7 +890,7 @@ export function SoWhereApp() {
 
           {/* Composer + action bar */}
           <AnimatePresence>
-            {view && !(detail && mobile) ? (
+            {view && !(panelOpen && mobile) ? (
               <motion.div
                 key="dock"
                 initial={{ y: 24, opacity: 0 }}
@@ -869,7 +902,7 @@ export function SoWhereApp() {
                 <AnimatePresence initial={false}>
                   {snap === "chat" ? (
                     <motion.div key="snap-chat" ref={snapRef} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: reduced ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
-                      <PosterSnap onPlan={snapPlan} onEdit={snapEdit} context={snapContext} />
+                      <SnapSheet mode={snapMode} onMode={setSnapMode} poster={{ onPlan: snapPlan, onEdit: snapEdit, context: snapContext }} place={{ you, demo: snapDemo, onMatch: onPlaceMatch }} />
                     </motion.div>
                   ) : null}
                 </AnimatePresence>
@@ -945,7 +978,18 @@ export function SoWhereApp() {
           </div>
         </motion.aside>
 
-        {result ? <DetailPanel card={detail} mobile={mobile} result={result} example={state.example} onClose={closeDetail} onSend={() => { setSendOpen(true); say("Draft ready · nothing is sent"); }} /> : null}
+        {placeSnap ? (
+          <DetailPanel
+            card={placeSnap.card}
+            mobile={mobile}
+            result={placeSnap.result}
+            example={placeSnap.example}
+            onClose={() => setPlaceSnap(null)}
+            onSend={() => setFriendOpen(true)}
+            snap={{ open: placeSnap.open, onMeet: meetHere, onFriend: () => { setFriendOpen(true); say("Draft ready · nothing is sent"); } }}
+          />
+        ) : result ? <DetailPanel card={detail} mobile={mobile} result={result} example={state.example} onClose={closeDetail} onSend={() => { setSendOpen(true); say("Draft ready · nothing is sent"); }} /> : null}
+        {placeSnap ? <SendPlanDialog title="Send to a friend" open={friendOpen} onOpenChange={setFriendOpen} draft={placeSnap.draft} /> : null}
         {result ? <SendPlanDialog open={sendOpen} onOpenChange={setSendOpen} draft={friendlyDraft(result, detail ?? selected)} /> : null}
       </main>
     </MotionConfig>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { animate, AnimatePresence, motion, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from "motion/react";
-import { Accessibility, ArrowUpRight, Banknote, ChevronDown, Clock, CloudSun, Globe, HelpCircle, Map as MapIcon, Navigation, Send, Sparkles, TrainFront, X } from "lucide-react";
+import { Accessibility, ArrowUpRight, Banknote, Camera, ChevronDown, ShieldCheck, Users, Clock, CloudSun, Globe, HelpCircle, Map as MapIcon, Navigation, Send, Sparkles, TrainFront, X } from "lucide-react";
 import type { Fact, PlanCard as Card, Leg, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { VerdictChip } from "./verdict-chip";
@@ -84,7 +84,10 @@ function JourneyRow({ cardId, leg, area }: { cardId: string; leg: Leg; area?: st
 }
 
 /** Lumap-style place detail: header, two actions, stat tiles, journeys, then the checks (closed). */
-export function PlaceDetail({ card, result, example, onClose, onSend }: { card: Card; result: PlanResultWithAgent; example: boolean; onClose: () => void; onSend: () => void }) {
+/** Snap-a-place mode: "Open now" line, "Meet here" / "Send to a friend" instead of the plan actions. */
+export type SnapActions = { open: { text: string; tone: "ok" | "soon" | "closed" | "unknown" }; onMeet: () => void; onFriend: () => void };
+
+export function PlaceDetail({ card, result, example, onClose, onSend, snap }: { card: Card; result: PlanResultWithAgent; example: boolean; onClose: () => void; onSend: () => void; snap?: SnapActions }) {
   const { type, address } = splitSubtitle(card.subtitle);
   const label = kindLabel(type, card.kind === "event" ? "Event" : "");
   const hoursRaw = findFact(card, /^open/i);
@@ -92,7 +95,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
   const open = openAnswer(card, result.when);
   const blurb = blurbOf(card);
   const leaveBy = leaveByOf(result);
-  const fit = blurb ? fitLine(result, card, open.text, open.state) : "";
+  const fit = blurb && !snap ? fitLine(result, card, open.text, open.state) : "";
   const cost = costAnswer(card);
   const cuisine = cuisineChip(card);
   const lines = findFact(card, /train|lines?$|status/i);
@@ -143,6 +146,17 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
             {example ? <span className="inline-flex h-5 items-center rounded-full bg-likely-bg px-2 text-[11.5px] font-semibold text-likely">Example</span> : null}
           </p>
           {address ? <p className="mt-0.5 text-[12.5px] text-ink-3">{address}</p> : null}
+          {snap ? (
+            <motion.div {...item(0)} className="mt-2.5 flex flex-wrap items-center gap-2">
+              <span className={cn("inline-flex h-8 items-center gap-2 rounded-full bg-white/80 px-3 text-[14px] font-semibold shadow-e1 ring-1 ring-white/80", TONE_CLASS[snap.open.tone])}>
+                <span aria-hidden className={cn("relative inline-flex size-2.5 rounded-full", snap.open.tone === "ok" ? "bg-ok" : snap.open.tone === "unknown" ? "bg-unknown" : "bg-amber-ink")}>
+                  {snap.open.tone === "ok" ? <span className="absolute inset-0 animate-ping rounded-full bg-ok/60 motion-reduce:hidden" /> : null}
+                </span>
+                {snap.open.text}
+              </span>
+              <span className="inline-flex h-6 items-center gap-1 rounded-full bg-signal-soft px-2 text-[11.5px] font-semibold text-signal-ink ring-1 ring-signal/20"><Camera className="size-3" aria-hidden /> From your photo</span>
+            </motion.div>
+          ) : null}
           {leaveBy ? <LeaveByChip lb={leaveBy} className="mt-2.5" /> : null}
           {blurb ? (
             <motion.div {...item(0)} className="mt-2.5 flex gap-2 rounded-[12px] bg-signal-soft px-3 py-2.5 text-[13.5px] leading-5 text-ink">
@@ -155,7 +169,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
                 {fit ? <p className="num mt-1 text-[12px] leading-[17px] text-ink-3">{fit}</p> : null}
               </div>
             </motion.div>
-          ) : (
+          ) : snap ? null : (
             <motion.p {...item(0)} className="mt-2.5 flex gap-2 rounded-[12px] bg-signal-soft px-3 py-2 text-[13.5px] leading-5 text-ink">
               <Sparkles className="mt-[3px] size-3.5 shrink-0 text-signal-ink" aria-hidden />
               <span><span className="font-semibold text-signal-ink">Why here: </span>{whyHere(result, card)}</span>
@@ -165,6 +179,22 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
       </div>
 
       {/* Two actions */}
+      {snap ? (
+        <motion.div {...item(0)} className="flex flex-col gap-1.5">
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+            <motion.button type="button" whileTap={{ scale: 0.96 }} onClick={snap.onMeet} className="sw-btn sw-btn-primary min-h-11 gap-1.5 rounded-[12px] px-3 text-[14px] font-semibold">
+              <Users className="size-4" aria-hidden /> Meet here
+            </motion.button>
+            <motion.button type="button" whileTap={{ scale: 0.96 }} onClick={snap.onFriend} className="sw-btn sw-btn-quiet min-h-11 gap-1.5 whitespace-nowrap rounded-[12px] px-3 text-[14px] font-semibold">
+              <Send className="size-4" aria-hidden /> Send to a friend
+            </motion.button>
+            <a href={gmapsDirections(lat, lng)} target="_blank" rel="noopener noreferrer" aria-label="Directions" title="Directions" className="sw-btn sw-btn-quiet size-11 rounded-[12px]">
+              <Navigation className="size-4" aria-hidden />
+            </a>
+          </div>
+          <p className="flex items-center gap-1.5 text-[11.5px] leading-4 text-ink-3"><ShieldCheck className="size-3.5" aria-hidden /> Photo isn&apos;t saved. Nothing is sent until you do.</p>
+        </motion.div>
+      ) : (
       <motion.div {...item(0)} className="grid grid-cols-2 gap-2">
         <a href={gmapsDirections(lat, lng)} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-quiet min-h-11 gap-1.5 rounded-[12px] px-3 text-[14px] font-semibold">
           <Navigation className="size-4" aria-hidden /> Directions
@@ -173,9 +203,10 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
           <Send className="size-4" aria-hidden /> Send plan
         </button>
       </motion.div>
+      )}
 
       {/* Stat tiles */}
-      {tiles.length ? (
+      {tiles.length && !snap ? (
         <div className={cn("grid gap-2", tiles.length >= 4 ? "grid-cols-2 sm:grid-cols-4" : tiles.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
           {tiles.map((t, k) => <Tile key={t.label + k} {...t} i={k + 1} />)}
         </div>
@@ -237,7 +268,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
  * The detail lives outside the list: a floating glass panel on the right (≥768px),
  * or a bottom sheet with ~50% / ~90% snap points on phones. Content crossfades when the place changes.
  */
-export function DetailPanel({ card, mobile, onClose, ...rest }: { card: Card | null; mobile: boolean; result: PlanResultWithAgent; example: boolean; onClose: () => void; onSend: () => void }) {
+export function DetailPanel({ card, mobile, onClose, ...rest }: { card: Card | null; mobile: boolean; result: PlanResultWithAgent; example: boolean; onClose: () => void; onSend: () => void; snap?: SnapActions }) {
   const drag = useDragControls();
   const [snap, setSnap] = useState<"half" | "full">("half");
   const sheetY = useMotionValue(2000);
@@ -253,9 +284,10 @@ export function DetailPanel({ card, mobile, onClose, ...rest }: { card: Card | n
   }, [mobile, !!card, snap]);
   useEffect(() => {
     if (!card) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Escape closes the panel, unless it is closing the send dialog on top of it.
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector("[role=dialog][data-state=open]") && onClose();
+    window.addEventListener("keydown", onKey, true); // capture: runs before the dialog closes itself
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [card, onClose]);
   useEffect(() => {
     if (!card) setSnap("half");
