@@ -52,9 +52,11 @@ const INTENT_LABEL = { meet_halfway: "Meet halfway", near_me: "Near you" } as co
 
 function Header({ example, reason, className }: { example: boolean; reason?: string | null; className?: string }) {
   return (
-    <header className={cn("flex items-center gap-2.5", className)}>
-      <span className="shrink-0"><Mark /></span>
-      <span className="shrink-0 whitespace-nowrap text-[19px] font-bold tracking-[-0.02em] text-ink">So where?</span>
+    <header className={cn("flex items-center gap-2.5 lg:gap-3", className)}>
+      <span className="shrink-0"><Mark className="size-8 lg:size-10" /></span>
+      <span className="shrink-0 whitespace-nowrap text-[24px] font-extrabold leading-none tracking-[-0.035em] text-ink lg:text-[30px]">
+        So <span className="text-signal-ink">where?</span>
+      </span>
       <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
         <AnimatePresence>
           {example ? (
@@ -528,21 +530,24 @@ export function SoWhereApp() {
   const dockRef = useRef<HTMLDivElement>(null);
   const [dockGap, setDockGap] = useState(150);
   const [hydrated, setHydrated] = useState(false);
+  const liveStates = useRef<Record<string, string>>({});
+  const [liveOn, setLiveOn] = useState(false);
+  // Mobile: is the sticky composer dock on screen? (set below once the view is known)
+  const [composerOn, setComposerOn] = useState(false);
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
-    if (wide || !voice) return;
+    if (wide || !composerOn) return;
     const el = dockRef.current;
     if (!el) return;
     const measure = () => setDockGap(Math.max(80, Math.round(window.innerHeight - el.getBoundingClientRect().top + 10)));
     measure();
+    const settle = window.setTimeout(measure, 800); // after the dock's slide-in
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     window.addEventListener("scroll", measure, { passive: true });
     window.addEventListener("resize", measure);
-    return () => { ro.disconnect(); window.removeEventListener("scroll", measure); window.removeEventListener("resize", measure); };
-  }, [wide, voice]);
-  const liveStates = useRef<Record<string, string>>({});
-  const [liveOn, setLiveOn] = useState(false);
+    return () => { window.clearTimeout(settle); ro.disconnect(); window.removeEventListener("scroll", measure); window.removeEventListener("resize", measure); };
+  }, [wide, voice, liveOn, composerOn]);
   const liveState = useMemo(() => {
     const mk = (k: string) => (s: string) => {
       liveStates.current[k] = s;
@@ -998,6 +1003,8 @@ export function SoWhereApp() {
   const finished = status === "result" || status === "clarify";
   const mapResult = placeSnap?.result ?? result ?? (refining ? shown : null);
   const panelOpen = !!(placeSnap || detail);
+  const composerShown = !!view && !(panelOpen && mobile);
+  useEffect(() => setComposerOn(composerShown), [composerShown]);
   // ui24: the loading radar flies to the places named in a fresh ask (bundled station list, in the browser only); the
   // server's English replaces the first guess when it arrives. Follow-ups keep the map where it is.
   const [scanFocus, setScanFocus] = useState<ScanFocus | null>(null);
@@ -1045,7 +1052,7 @@ export function SoWhereApp() {
           className={cn("sw-glass relative z-10 -mt-5 flex flex-col rounded-t-[22px] lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:mt-0 lg:w-[444px] lg:rounded-[22px]", status === "idle" && !placeSnap && "sw-glass-idle")}
         >
           <div ref={scrollRef} className="sw-scroll-fade flex-1 overscroll-contain px-4 pb-6 pt-4 lg:overflow-y-auto lg:px-5 lg:pt-5">
-            <Header example={state.example || !!placeSnap?.example} reason={placeSnap?.example ? "demo link" : state.exampleReason} className="mb-5 hidden lg:flex" />
+            <Header example={state.example || !!placeSnap?.example} reason={placeSnap?.example ? "demo link" : state.exampleReason} className="mb-4 hidden lg:flex" />
 
             {status === "idle" ? <Hero /> : null}
 
@@ -1262,7 +1269,7 @@ export function SoWhereApp() {
 
           {/* Composer + action bar */}
           <AnimatePresence>
-            {view && !(panelOpen && mobile) ? (
+            {composerShown ? (
               <motion.div
                 key="dock"
                 ref={dockRef}
@@ -1272,14 +1279,6 @@ export function SoWhereApp() {
                 transition={{ delay: 0.3, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 className="sticky bottom-0 z-20 flex flex-col gap-2 border-t border-white/70 bg-white/85 px-4 py-3 shadow-[0_-10px_24px_-18px_rgba(74,52,30,0.35)] backdrop-blur-xl backdrop-saturate-150 lg:rounded-b-[22px] lg:px-5"
               >
-                {!wide && hydrated
-                  ? createPortal(
-                      <div className="pointer-events-none fixed inset-x-3 z-[60] flex justify-center" style={{ bottom: dockGap }}>
-                        <VoiceCardSlot reply={voice} live={liveOn} onClose={() => setVoice(null)} />
-                      </div>,
-                      document.body,
-                    )
-                  : null}
                 <AnimatePresence initial={false}>
                   {snap === "chat" ? (
                     <motion.div key="snap-chat" ref={snapRef} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: reduced ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
@@ -1359,11 +1358,27 @@ export function SoWhereApp() {
           </div>
         </motion.aside>
 
-        {wide ? (
-          <div className={cn("pointer-events-none absolute bottom-6 left-[476px] right-4 z-30 flex justify-center transition-[right] duration-500", panelOpen && "right-[424px]", state.example && "bottom-14")}>
-            <VoiceCardSlot reply={voice} live={liveOn} onClose={() => setVoice(null)} />
-          </div>
-        ) : null}
+        {/* One voice dock: the reply card stacked above the live bar (#sw-live-slot), so they never overlap.
+            Wide: the map area right of the panel. Narrow: above the bottom composer. */}
+        {hydrated
+          ? createPortal(
+              <div
+                className={cn(
+                  "pointer-events-none fixed z-[60] flex flex-col items-center justify-end gap-2",
+                  wide
+                    ? cn("bottom-6 left-[476px] right-4 max-h-[calc(100dvh-40px)] transition-[right] duration-500", panelOpen && "right-[424px]", state.example && "bottom-14")
+                    : "inset-x-3 max-h-[calc(100dvh-24px)]",
+                )}
+                style={wide ? undefined : { bottom: composerOn ? dockGap : "max(12px, env(safe-area-inset-bottom))" }}
+              >
+                <div className="flex min-h-0 w-full shrink justify-center overflow-y-auto overscroll-contain rounded-[24px] [scrollbar-width:none]">
+                  <VoiceCardSlot reply={voice} live={liveOn} onClose={() => setVoice(null)} />
+                </div>
+                <div id="sw-live-slot" className="flex w-full shrink-0 justify-center empty:hidden" />
+              </div>,
+              document.body,
+            )
+          : null}
 
         {placeSnap ? (
           <DetailPanel

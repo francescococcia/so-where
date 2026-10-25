@@ -100,6 +100,8 @@ export function LiveVoicePanel({ state, captions, getLevel, onEnd }: { state: Li
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
+  // The app renders one voice dock (reply card above, this bar below) so the two never overlap; fall back to a fixed bar.
+  const slot = document.getElementById("sw-live-slot");
   return createPortal(
     <AnimatePresence>
       {state !== "idle" ? (
@@ -111,7 +113,10 @@ export function LiveVoicePanel({ state, captions, getLevel, onEnd }: { state: Li
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12, scale: 0.98 }}
           transition={{ type: "spring", stiffness: 420, damping: 34 }}
-          className="fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-[60] mx-auto w-auto max-w-[440px] rounded-[22px] bg-white/72 p-3 pr-3.5 shadow-[0_18px_48px_-12px_rgba(20,20,30,.35)] ring-1 ring-black/[.06] backdrop-blur-2xl backdrop-saturate-150"
+          className={cn(
+            slot ? "pointer-events-auto relative w-full max-w-[440px]" : "fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-[60] mx-auto w-auto max-w-[440px]",
+            "rounded-[22px] bg-white/72 p-3 pr-3.5 shadow-[0_18px_48px_-12px_rgba(20,20,30,.35)] ring-1 ring-black/[.06] backdrop-blur-2xl backdrop-saturate-150",
+          )}
         >
           <div className="flex items-center gap-3">
             <VoiceOrb state={state} getLevel={getLevel} size={52} />
@@ -134,7 +139,7 @@ export function LiveVoicePanel({ state, captions, getLevel, onEnd }: { state: Li
         </motion.div>
       ) : null}
     </AnimatePresence>,
-    document.body,
+    slot ?? document.body,
   );
 }
 
