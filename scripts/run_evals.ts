@@ -44,7 +44,7 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number; /** server8: card within maxM of this point, no such facts, never swapped by verify. */ near?: { lat: number; lng: number; maxM: number }; noFacts?: string[]; landmark?: boolean }; daysAhead?: number; /** server9: venues step detail/source matches; every card within maxM of a point. */ venuesFrom?: string; cardsNear?: { lat: number; lng: number; maxM: number } };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; /** server13: a compound follow-up, answered in several sentences. */ multiPart?: boolean; /** server13: both journeys at most this many minutes. */ maxLegMin?: number; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number; /** server8: card within maxM of this point, no such facts, never swapped by verify. */ near?: { lat: number; lng: number; maxM: number }; noFacts?: string[]; landmark?: boolean }; daysAhead?: number; /** server9: venues step detail/source matches; every card within maxM of a point. */ venuesFrom?: string; cardsNear?: { lat: number; lng: number; maxM: number } };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
@@ -573,8 +573,11 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
     add("≥1 card", r.cards.length >= 1, r.cards.length);
     const area = (e.themArea ?? r.them?.area ?? "").toLowerCase();
     add("draftMessage has no 'them' area", !!r.draftMessage && !!area && !r.draftMessage.toLowerCase().includes(area), r.draftMessage);
-    add("them is rounded to an area (radius ≥ 500 m)", !!r.them && r.them.radiusM >= 500);
+    // server13: a typed station/area is a public place, so it is shown as itself (~150 m ring, precision "typed"); only a
+    // shared GPS fix (precision "shared") is rounded to a ≥500 m area.
+    add("them is an area: typed place ≥150 m ring, shared GPS ≥500 m", !!r.them && (r.them.precision === "typed" ? r.them.radiusM >= 150 : r.them.radiusM >= 500), r.them && { radiusM: r.them.radiusM, precision: r.them.precision });
   }
+  if (e.maxLegMin) add(`every card: both journeys ≤ ${e.maxLegMin} min`, r.cards.length > 0 && r.cards.every((k) => k.legs.length >= 2 && k.legs.every((l) => l.minutes <= e.maxLegMin!)), r.cards.map((k) => k.legs.map((l) => `${l.who} ${l.minutes}`).join("/")));
   if (e.fairBoth) {
     // A "middle" on one person's doorstep isn't fair: it must sit between them, nobody at ~0 min.
     add("middle is neither person's own station", !!r.middle && !["Waterloo", "Elephant & Castle"].includes(r.middle.name), r.middle?.name ?? null);
@@ -624,7 +627,7 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
   }
   if (c.refines) {
     const last = c.refines[c.refines.length - 1];
-    add("reply is one sentence", !!r.reply && r.reply.length < 240 && !/[.!?]\s+\S/.test(r.reply.replace(/\b(?:St|Mr|Dr)\./g, "")), r.reply ?? null);
+    if (!e.multiPart) add("reply is one sentence", !!r.reply && r.reply.length < 240 && !/[.!?]\s+\S/.test(r.reply.replace(/\b(?:St|Mr|Dr)\./g, "")), r.reply ?? null);
     for (const m of e.replyMatch ?? []) add(`reply matches /${m}/i`, new RegExp(m, "i").test(r.reply ?? ""), r.reply ?? null);
     for (const m of e.replyNot ?? []) add(`reply avoids /${m}/i`, !new RegExp(m, "i").test(r.reply ?? ""), r.reply ?? null);
     add("query accumulates every refinement", !!base && r.query.startsWith(base.query.replace(/\.$/, "")) && c.refines.map((q) => q.replace(/[?.!]+$/, "")).every((q) => r.query.includes(`refine: ${q}`)) && r.query.endsWith(last.replace(/[?.!]+$/, "")), r.query);

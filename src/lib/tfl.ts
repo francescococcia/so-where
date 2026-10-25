@@ -255,27 +255,56 @@ const doorstep = (x: { worst: number; gap: number }) => x.worst - x.gap <= 2 && 
 /** Fairness score: the longer trip, plus a flat penalty when one person barely travels at all (12 vs 0 is worse than 12 vs 9). */
 export const fairScore = (x: { worst: number; gap: number }) => x.worst + (doorstep(x) ? 10 : 0);
 
-/** Fairest hub: minimise the longer of the two journey times (doorstep middles penalised), then the gap.
- *  When the best central hub is one person's doorstep, a few stations near the midpoint of the two starts join in. */
-export async function fairPoint(a: End, b: End, arriveBy: Date, hubsIn: Hub[] = HUBS) {
-  const t0 = Date.now();
-  const first = await scoreHubs(a, b, arriveBy, hubsIn);
-  const quickest = [...first.ok].sort((x, y) => x.worst - y.worst || x.gap - y.gap)[0];
-  const extra = quickest && doorstep(quickest) ? midpointStations(a, b, hubsIn) : [];
-  const more = extra.length ? await scoreHubs(a, b, arriveBy, extra) : { ok: [], failed: 0, failedHubs: [] };
-  const ok = [...first.ok, ...more.ok];
-  ok.sort((x, y) => fairScore(x) - fairScore(y) || x.gap - y.gap || x.worst - y.worst);
-  const compared = hubsIn.length + extra.length;
-  return { ranked: ok, compared, failed: first.failed + more.failed, failedHubs: [...first.failedHubs, ...more.failedHubs], ms: Date.now() - t0, calls: compared * 2 };
+/** Two starts this close (straight line) count as "close origins": the middle may be one of their own areas or a walk. */
+export const CLOSE_M = 2000;
+/** Close-origins ranking: the longer trip, a small doorstep penalty (a 0-min side is fine when it's this short), then the total. */
+const closeScore = (x: { worst: number; gap: number }) => x.worst + (doorstep(x) ? 3 : 0);
+
+/** Close origins: each person's own area plus the point halfway between them (a rail station within ~350 m of it, else
+ *  the point itself, named "Between A and B"). Journeys come from TfL (walks included), so the paths are real. */
+export function closeCandidates(a: End & { name?: string }, b: End & { name?: string }): Hub[] {
+  const at = (x: End & { name?: string }, fallback: string): Hub => ({ name: x.name ?? fallback, id: x.id ?? "", tflName: x.name ?? fallback, lat: x.lat, lng: x.lng });
+  const mid = { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 };
+  const span = metresBetween(a, b);
+  const st = STATIONS.filter((s) => s.id && s.modes.some((m) => RAIL.has(m)))
+    .map((s) => ({ s, d: metresBetween(mid, s) }))
+    .filter(({ s, d }) => d <= 350 && metresBetween(a, s) >= Math.min(250, span / 3) && metresBetween(b, s) >= Math.min(250, span / 3))
+    .sort((x, y) => x.d - y.d)[0]?.s;
+  const midHub: Hub = st ? { name: st.name, id: st.id, tflName: st.name, lat: st.lat, lng: st.lng } : { name: `Between ${a.name ?? "you"} and ${b.name ?? "them"}`, id: "", tflName: "", lat: mid.lat, lng: mid.lng };
+  return [at(a, "Your area"), at(b, "Their area"), ...(span >= 300 ? [midHub] : [])];
 }
 
-async function scoreHubs(a: End, b: End, arriveBy: Date, hubs: Hub[]) {
+/** Fairest hub: minimise the longer of the two journey times (doorstep middles penalised), then the gap.
+ *  When the best central hub is one person's doorstep, a few stations near the midpoint of the two starts join in.
+ *  Close origins (under ~2 km apart, or one side reaches the other's area in under ~12 min): both people's own areas and
+ *  the walking midpoint join too, scored in parallel, and the ranking is max(you, them) then the sum. */
+export async function fairPoint(a: End & { name?: string }, b: End & { name?: string }, arriveBy: Date, hubsIn: Hub[] = HUBS) {
+  const t0 = Date.now();
+  const span = metresBetween(a, b);
+  const near = span < 3500 ? closeCandidates(a, b) : [];
+  const nearHubs = near.filter((c) => !hubsIn.some((h) => (c.id && h.id === c.id) || metresBetween(h, c) < 150));
+  const [first, closeR] = await Promise.all([scoreHubs(a, b, arriveBy, hubsIn), nearHubs.length ? scoreHubs(a, b, arriveBy, nearHubs, true) : Promise.resolve({ ok: [] as HubScore[], failed: 0, failedHubs: [] as string[] })]);
+  // Close: straight line under 2 km, or someone gets to the other's own area in under 12 min.
+  const atOrigin = [...first.ok, ...closeR.ok].filter((x) => metresBetween(x.hub, a) < 150 || metresBetween(x.hub, b) < 150);
+  const close = !!near.length && (span < CLOSE_M || atOrigin.some((x) => x.worst < 12));
+  const quickest = [...first.ok].sort((x, y) => x.worst - y.worst || x.gap - y.gap)[0];
+  const extra = !close && quickest && doorstep(quickest) ? midpointStations(a, b, hubsIn) : [];
+  const more = extra.length ? await scoreHubs(a, b, arriveBy, extra) : { ok: [], failed: 0, failedHubs: [] };
+  const ok = [...first.ok, ...more.ok, ...(close ? closeR.ok : [])];
+  if (close) ok.sort((x, y) => closeScore(x) - closeScore(y) || x.a.minutes + x.b.minutes - (y.a.minutes + y.b.minutes) || x.gap - y.gap);
+  else ok.sort((x, y) => fairScore(x) - fairScore(y) || x.gap - y.gap || x.worst - y.worst);
+  const compared = hubsIn.length + extra.length + (close ? nearHubs.length : 0);
+  return { ranked: ok, compared, close, failed: first.failed + more.failed + (close ? closeR.failed : 0), failedHubs: [...first.failedHubs, ...more.failedHubs, ...(close ? closeR.failedHubs : [])], ms: Date.now() - t0, calls: compared * 2 };
+}
+
+async function scoreHubs(a: End, b: End, arriveBy: Date, hubs: Hub[], realWalks = false) {
   const rows = await Promise.all(
     hubs.map(async (hub) => {
       // One retry per leg: TfL times out on a few of the 24 calls, and a missing hub can change the answer.
       const leg = async (from: End) => {
+        // realWalks (close origins): only the same spot is a 0-min estimate; short walks come from TfL with their path.
         const here = atHubJourney(from, hub);
-        if (here) return here;
+        if (here && (!realWalks || here.minutes === 0)) return here;
         const j = await journey(from, hub, arriveBy);
         return "error" in j ? journey(from, hub, arriveBy) : j;
       };

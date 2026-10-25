@@ -15,6 +15,8 @@ const LONDON: [number, number] = [-0.1135, 51.5065];
 const HUBS = (hubsDoc as { hubs: { name: string; lat: number; lng: number }[] }).hubs;
 
 export type MapPadding = { top: number; right: number; bottom: number; left: number };
+/** ui24: places named in the ask (bundled station list, resolved in the browser) and their middle, for the loading radar. */
+export type ScanFocus = { places: { name: string; at: LatLng }[]; middle: LatLng | null };
 
 type Props = {
   result: PlanResultWithAgent | null;
@@ -22,6 +24,8 @@ type Props = {
   hoverId: string | null;
   focusId: string | null;
   scanning: boolean;
+  /** Where the radar looks while planning; null/empty = stay on the current view. */
+  scanFocus?: ScanFocus | null;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
   padding: MapPadding;
@@ -134,6 +138,13 @@ function addLayers(map: MLMap) {
   map.addLayer({ id: "hubs-lit", type: "circle", source: "hubs", layout: { visibility: "none" }, filter: ["==", ["get", "i"], -1], paint: { "circle-radius": 8, "circle-color": ACCENT, "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } });
   map.addLayer({ id: "hubs-label", type: "symbol", source: "hubs", layout: { visibility: "none", "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 11, "text-offset": [0, 1.2], "text-anchor": "top" }, paint: { "text-color": "#15171c", "text-halo-color": "#fff", "text-halo-width": 1.6 } });
 
+  // ui24: the places named in the ask while planning: a pulse, a pin and a name each, plus a soft ring at their middle.
+  map.addSource("scan-focus", { type: "geojson", data: FC() });
+  map.addLayer({ id: "scan-pulse", type: "circle", source: "scan-focus", layout: { visibility: "none" }, paint: { "circle-radius": 14, "circle-color": ACCENT, "circle-opacity": 0.2, "circle-stroke-color": ACCENT, "circle-stroke-width": 1.5, "circle-stroke-opacity": 0.5, "circle-pitch-alignment": "map" } });
+  map.addLayer({ id: "scan-dot", type: "circle", source: "scan-focus", layout: { visibility: "none" }, filter: ["==", ["get", "kind"], "place"], paint: { "circle-radius": 7, "circle-color": ACCENT, "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
+  map.addLayer({ id: "scan-mid", type: "circle", source: "scan-focus", layout: { visibility: "none" }, filter: ["==", ["get", "kind"], "mid"], paint: { "circle-radius": 5, "circle-color": "#ffffff", "circle-stroke-color": ACCENT, "circle-stroke-width": 2.5 } });
+  map.addLayer({ id: "scan-label", type: "symbol", source: "scan-focus", layout: { visibility: "none", "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 12.5, "text-offset": [0, 1.25], "text-anchor": "top", "text-allow-overlap": true }, paint: { "text-color": "#15171c", "text-halo-color": "#fff", "text-halo-width": 2 } });
+
   // Per-person halo underneath (so you can still tell whose route is whose)…
   for (const who of ["them", "you"] as const) {
     map.addSource(`route-${who}`, { type: "geojson", data: EMPTY_LINE });
@@ -209,7 +220,7 @@ function metres(a: LatLng, b: LatLng) {
   return Math.hypot(x, y);
 }
 
-export default function PlanMap({ result, selectedId, hoverId, focusId, scanning, onSelect, onHover, padding, reduced, deviceYou }: Props) {
+export default function PlanMap({ result, selectedId, hoverId, focusId, scanning, scanFocus, onSelect, onHover, padding, reduced, deviceYou }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const markers = useRef<Marker[]>([]);
@@ -235,6 +246,14 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
   reducedRef.current = reduced;
   const scanRef = useRef(scanning);
   scanRef.current = scanning;
+  const scanBox = useRef<HTMLDivElement>(null);
+  /** Hub indices the radar lights up (near the named places, or in view). */
+  const scanHubs = useRef<number[]>(HUBS.map((_, i) => i));
+  /** Map point the sweep is centred on (the named places' middle), null = default position. */
+  const scanAt = useRef<LatLng | null>(null);
+  const focusKey = scanFocus?.places.map((p) => `${p.name}@${p.at.lat.toFixed(4)},${p.at.lng.toFixed(4)}`).join("|") ?? "";
+  const focusRef = useRef(scanFocus);
+  focusRef.current = scanFocus;
   const drawn = useRef(false);
   type Veh = { m: Marker; el: HTMLElement; b: HTMLElement; part: number; rest: boolean };
   const tracks = useRef<{ card: string | null; you: Track | null; them: Track | null }>({ card: null, you: null, them: null });
@@ -285,6 +304,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     let dashI = 0;
     let scanT = 0;
     let scanI = 0;
+    let sweepT = 0;
     let dotT = 0;
     const loop = (now: number) => {
       const dt = Math.min(64, now - last);
@@ -336,9 +356,24 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
           scanT += dt;
           if (scanT > 170) {
             scanT = 0;
-            scanI = (scanI + 1) % HUBS.length;
-            map.setFilter("hubs-lit", ["==", ["get", "i"], scanI]);
+            const set = scanHubs.current;
+            scanI = (scanI + 1) % Math.max(1, set.length);
+            map.setFilter("hubs-lit", ["==", ["get", "i"], set.length ? set[scanI] : -1]);
             map.setPaintProperty("hubs-glow", "circle-opacity", 0.18 + 0.12 * Math.sin(now / 300));
+          }
+          // pulse around the named places; keep the sweep centred on their middle as the camera moves
+          if (scanAt.current) {
+            const ph = (now % 1600) / 1600;
+            map.setPaintProperty("scan-pulse", "circle-radius", 10 + 34 * ph);
+            map.setPaintProperty("scan-pulse", "circle-opacity", 0.22 * (1 - ph));
+            map.setPaintProperty("scan-pulse", "circle-stroke-opacity", 0.55 * (1 - ph));
+            sweepT += dt;
+            if (sweepT > 50 && scanBox.current) {
+              sweepT = 0;
+              const pt = map.project(ll(scanAt.current));
+              scanBox.current.style.setProperty("--scan-x", `${Math.round(pt.x)}px`);
+              scanBox.current.style.setProperty("--scan-y", `${Math.round(pt.y)}px`);
+            }
           }
         }
       }
@@ -351,29 +386,55 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     };
   }, [ready]);
 
-  // Scanning mode: hubs visible, camera pulls back over central London.
+  // Scanning mode (ui24): with places named in the ask, fly to them, pin and pulse them, and only light up hubs near
+  // them; with none, stay on the current view and scan the hubs in it (never a jump to somewhere unrelated).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
+    const focus = scanning ? focusRef.current : null;
+    const places = focus?.places ?? [];
     const vis = scanning ? "visible" : "none";
     for (const id of ["hubs-glow", "hubs-dot", "hubs-lit", "hubs-label"]) map.setLayoutProperty(id, "visibility", vis);
-    if (scanning) {
-      map.setFilter("hubs-lit", ["==", ["get", "i"], 0]);
+    for (const id of ["scan-pulse", "scan-dot", "scan-mid", "scan-label"]) map.setLayoutProperty(id, "visibility", scanning && places.length ? "visible" : "none");
+    const feats: GeoJSON.Feature[] = places.map((p) => ({ type: "Feature", properties: { kind: "place", name: p.name }, geometry: { type: "Point", coordinates: ll(p.at) } }));
+    if (focus?.middle && places.length > 1) feats.push({ type: "Feature", properties: { kind: "mid", name: "" }, geometry: { type: "Point", coordinates: ll(focus.middle) } });
+    (map.getSource("scan-focus") as GeoJSONSource | undefined)?.setData(FC(feats));
+    scanAt.current = places.length ? focus?.middle ?? places[0].at : null;
+    if (!scanning) return;
+    let near: number[];
+    if (places.length) {
+      const c = scanAt.current!;
+      const span = Math.max(...places.map((p) => metres(p.at, c)));
+      const reach = Math.max(1800, span * 1.6 + 600);
+      near = HUBS.map((h, i) => ({ i, d: metres({ lat: h.lat, lng: h.lng }, c) })).filter((x) => x.d <= reach).sort((x, y) => x.d - y.d).slice(0, 14).map((x) => x.i);
       const b = new maplibregl.LngLatBounds();
-      HUBS.forEach((h) => b.extend([h.lng, h.lat]));
-      const cam = map.cameraForBounds(b, { padding: pad(), maxZoom: 14 });
+      // Room around the places (~700 m) so the hubs and the pulse aren't on the edge.
+      const pad0 = 700 / 111_000;
+      places.forEach((p) => {
+        b.extend([p.at.lng - pad0 * 1.6, p.at.lat - pad0]);
+        b.extend([p.at.lng + pad0 * 1.6, p.at.lat + pad0]);
+      });
+      const cam = map.cameraForBounds(b, { padding: pad(), maxZoom: 15 });
       if (cam) {
-        const o = { center: cam.center, zoom: (cam.zoom ?? 13) - 0.4, pitch: 45, bearing: map.getBearing(), padding: { top: 0, right: 0, bottom: 0, left: 0 } };
+        const o = { center: cam.center, zoom: Math.min(15, (cam.zoom ?? 14) - 0.2), pitch: 45, bearing: map.getBearing(), padding: { top: 0, right: 0, bottom: 0, left: 0 } };
         if (reduced) map.jumpTo(o);
         else {
           flying.current = true;
           map.once("moveend", () => (flying.current = false));
-          map.easeTo({ ...o, duration: 1400, easing: easeInOut });
+          map.easeTo({ ...o, duration: 1300, easing: easeInOut });
         }
       }
+    } else {
+      const vb = map.getBounds();
+      near = HUBS.map((h, i) => ({ h, i })).filter(({ h }) => vb.contains([h.lng, h.lat])).map(({ i }) => i);
+      if (!near.length) near = HUBS.map((_, i) => i);
     }
+    scanHubs.current = near;
+    const inSet: maplibregl.FilterSpecification = ["in", ["get", "i"], ["literal", near]];
+    for (const id of ["hubs-glow", "hubs-dot", "hubs-label"]) map.setFilter(id, inSet);
+    map.setFilter("hubs-lit", ["==", ["get", "i"], near[0] ?? -1]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scanning, ready]);
+  }, [scanning, ready, focusKey]);
 
   // Markers + cinematic camera: once per result.
   useEffect(() => {
@@ -409,9 +470,12 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
       // Only the rounded area: its name and radius, never anything more precise.
       const area = result.them.area.replace(/\s*\(approx\.?\)\s*$/i, "").trim();
       const r = Math.round((result.them.radiusM || 500) / 50) * 50;
+      // ui24: a station/area you typed is a public place: shown as itself on a small ring ("Them · Westminster").
+      // Only a shared GPS fix (or a broad, approximate area) keeps the "~500 m" rounding label.
+      const typed = result.them.precision === "typed" && r < 300;
       add(
         new maplibregl.Marker({
-          element: puck({ who: "them", title: `Them · ${esc(/\barea$/i.test(area) ? area : `${area} area`)}`, sub: `~${r} m · not stored`, eta: etaFor("them"), aria: `Them, somewhere around ${area} (about ${r} metres)`, delay: reduced ? 0 : 0.85 }),
+          element: puck({ who: "them", title: `Them · ${esc(typed || /\barea$/i.test(area) ? area : `${area} area`)}`, sub: typed ? "not stored" : `~${r} m · not stored`, eta: etaFor("them"), aria: typed ? `Them, at ${area} (the place you typed, not stored)` : `Them, somewhere around ${area} (about ${r} metres)`, delay: reduced ? 0 : 0.85 }),
           anchor: "bottom",
           offset: [0, 4],
         }).setLngLat(ll(result.them.center))
@@ -679,7 +743,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
   return (
     <div className="absolute inset-0" role="region" aria-label="Map of the plan">
       <div ref={box} className="sw-map h-full w-full" />
-      {scanning ? <div className="sw-scan pointer-events-none absolute inset-0" aria-hidden /> : null}
+      {scanning ? <div ref={scanBox} className={`sw-scan pointer-events-none absolute inset-0${scanFocus?.places.length ? " is-focus" : ""}`} aria-hidden /> : null}
     </div>
   );
 }

@@ -38,7 +38,9 @@ export interface PlanResult {
   headline: string;       // e.g. "Borough is the fair middle: you 24 min, her 23."
   when: string;           // ISO datetime the plan is for
   you: LatLng;            // exact only on device; never stored server-side
-  them?: { area: string; center: LatLng; radiusM: number }; // rounded ~500 m, never stored
+  /** The other person: the station/area typed for them (precision "typed", ~150 m ring centred on it; ~500 m for a broad area),
+   *  or a shared GPS fix rounded to ~500 m ("shared"). Never their exact position; never stored. */
+  them?: { area: string; center: LatLng; radiusM: number; precision?: "typed" | "shared" };
   middle?: { name: string; location: LatLng };
   filters: { walkIn?: boolean; free?: boolean; maxMinutes?: number; budgetGBP?: number; category?: string };
   cards: PlanCard[];      // up to 3

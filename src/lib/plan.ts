@@ -1,9 +1,11 @@
 // "So where?" plan pipeline: parse → resolve places → compare hubs → venues/events → line status → weather → verify.
 // Every Fact carries a source; anything we couldn't check goes into `unknowns`. The other person's location
-// is only ever kept as a ~500 m area, is never logged, and never appears in draftMessage.
+// is only ever the station/area they were typed as (a public place, ~150 m ring; a shared GPS fix would be rounded to
+// ~500 m, see themAreaOf), is never logged, and never appears in draftMessage.
 import { parsePlanAsk, SOLO_RE, type PlanAsk } from "@/lib/ask-local";
 import { LONDON_CENTER } from "@/lib/areas";
-import { isLeaveQuestion, leaveTimes, type LeaveBy } from "@/lib/leave-time";
+import { arrivalClock, isLeaveQuestion, leaveTimes, type LeaveBy } from "@/lib/leave-time";
+import { classifyQuestion, openWindow, recommendTime, splitQuestions } from "@/lib/follow-up";
 import { londonToday } from "@/lib/dates";
 import { seedEventsOn, type SeedEvent } from "@/lib/events";
 import { GAZETTEER_AS_OF, GAZETTEER_SOURCE, matchPlace, normPlace } from "@/lib/gazetteer";
@@ -370,8 +372,60 @@ function cardOpen(c: PlanCard): { known: boolean; open: boolean | null; until: s
   return { known: false, open: null, until: null };
 }
 
+/** Compound follow-up ("what time do they close? and what time do you recommend?"): every part answered from the plan on
+ *  screen (hours, a meeting time from the real opening window, leave times). Only called when every part is recognised. */
+async function answerFollowUps(req: PlanRequest, parts: string[], kinds: ("open" | "leave" | "recommend")[], emit: StepSink | undefined, now: Date): Promise<PlanResultRefined> {
+  const prevQ = req.previous!.query;
+  const base: PlanResultRefined = req.previous!.result?.cards?.length ? req.previous!.result : await runPlanCore({ query: prevQ, you: req.you, when: req.when }, emit, now);
+  const card = base.cards.length ? (req.focus && base.cards.find((c) => c.id === req.focus!.id || c.name === req.focus!.name)) || base.cards[0] : null;
+  const t0 = Date.now();
+  if (!card) {
+    const reply = base.clarify?.question ?? "There's no place on the plan yet, so ask for one first.";
+    return { ...base, query: joinRefine(prevQ, req.refine!), reply };
+  }
+  const p = londonParts(new Date(base.when));
+  const planClock = `${String(p.hh).padStart(2, "0")}:${String(p.mm).padStart(2, "0")}`;
+  const n = londonParts(now);
+  const who = parsePlanAsk(splitRefine(prevQ).base, londonToday(now)).themWho || "them";
+  const leg = (w: "you" | "them") => card.legs.find((l) => l.who === w)?.minutes;
+  const hoursFact = card.facts.find((x) => /^open\b/i.test(x.label))?.value ?? "";
+  // A recommended time first, so "when should I leave" can aim for it.
+  const reco = kinds.includes("recommend")
+    ? recommendTime({ name: card.name, window: openWindow(hoursFact), planMin: p.hh * 60 + p.mm, planClock, nowMin: p.date === n.date ? n.hh * 60 + n.mm : null, youMin: leg("you"), themMin: leg("them"), who, day: new Date(base.when).toLocaleDateString("en-GB", { timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short" }).replace(",", "") })
+    : null;
+  const out: string[] = [];
+  let leaveBy: LeaveBy | undefined;
+  const did: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const k = kinds[i];
+    if (k === "open") {
+      const o = cardOpen(card);
+      out.push(!o.known ? `No hours listed for ${card.name}.` : o.open === false ? `${card.name} looks closed at ${clock12(p.hh, p.mm)}.` : o.until ? `${card.name} is open until ${o.until}.` : `${card.name} is open at ${clock12(p.hh, p.mm)}.`);
+      did.push("hours");
+    } else if (k === "recommend" && reco) {
+      out.push(reco.reply);
+      did.push("time from opening window");
+    } else if (k === "leave") {
+      const text = reco?.clock && !arrivalClock(parts[i], planClock) ? `${parts[i]} to arrive at ${reco.clock}` : parts[i];
+      const a = await leaveTimes(base, card, text, now, {}, req.you);
+      out.push(a.reply);
+      if ("leaveBy" in a && a.leaveBy) leaveBy = a.leaveBy;
+      did.push("leave times");
+    }
+  }
+  const step: AgentStep = { id: "refine", label: "Answering your follow-up", status: "done", detail: `${[...new Set(did)].join(" · ")} for ${card.name} · plan unchanged`, source: kinds.includes("leave") ? "OSM · TfL" : "OSM", ms: Date.now() - t0 };
+  emit?.(step);
+  return { ...base, query: joinRefine(prevQ, req.refine!), steps: [...(base.steps ?? []), step], reply: [...new Set(out)].join(" "), ...(leaveBy ? { leaveBy } : {}) };
+}
+
 export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? CLOCK() : new Date()): Promise<PlanResultRefined> {
-  if (req.refine && req.previous && isLeaveQuestion(req.refine)) {
+  // Follow-ups with several questions: answer them all from the plan on screen, or (if any part needs a new plan) replan.
+  const parts = req.refine && req.previous ? splitQuestions(req.refine) : [];
+  const kinds = parts.map(classifyQuestion);
+  const allKnown = parts.length > 0 && kinds.every((k) => k !== null);
+  if (allKnown && (parts.length > 1 || kinds.includes("recommend"))) return answerFollowUps(req, parts, kinds as ("open" | "leave" | "recommend")[], emit, now);
+  const mixed = parts.length > 1 && !allKnown; // e.g. "is it open? and somewhere cheaper": no shortcut, full replan
+  if (!mixed && req.refine && req.previous && isLeaveQuestion(req.refine)) {
     // "What time do I need to leave?": same plan (replanned from the base ask if the UI didn't echo it), plus leave times.
     const base: PlanResultRefined = req.previous.result?.cards?.length ? req.previous.result : await runPlanCore({ query: req.previous.query, you: req.you, when: req.when }, emit, now);
     const card = base.cards.length ? (req.focus && base.cards.find((c) => c.id === req.focus!.id || c.name === req.focus!.name)) || base.cards[0] : null;
@@ -382,7 +436,7 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? C
     return { ...base, query: joinRefine(req.previous.query, req.refine), steps: [...(base.steps ?? []), step], reply: a.reply, ...("leaveBy" in a && a.leaveBy ? { leaveBy: a.leaveBy } : {}) };
   }
   const prev = req.previous?.result;
-  const askOpen = !!prev?.cards?.length && openQuestionOnly(req, londonToday(now));
+  const askOpen = !mixed && !!prev?.cards?.length && openQuestionOnly(req, londonToday(now));
   if (askOpen && prev) {
     const card = (req.focus && prev.cards.find((c) => c.id === req.focus!.id || c.name === req.focus!.name)) || prev.cards[0];
     const o = cardOpen(card);
@@ -483,7 +537,9 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
       ask.signals.push(`event ${ev.status}${ev.end ? ` (${ev.start}→${ev.end})` : ` (${ev.start})`}`);
     }
   }
-  if (!dest && process.env.GEMINI_API_KEY && (!ask.intent || (ask.intent === "meet_halfway" && (!ask.themPlace || !ask.youPlace)) || !ask.category)) {
+  // The rules already have a meet-halfway ask with both places: skip the model (~2–3 s); no category → pubs, said in unknowns.
+  const rulesEnough = ask.intent === "meet_halfway" && !!ask.themPlace && !!ask.youPlace;
+  if (!dest && process.env.GEMINI_API_KEY && !rulesEnough && (!ask.intent || (ask.intent === "meet_halfway" && (!ask.themPlace || !ask.youPlace)) || !ask.category)) {
     const g = await geminiFill(split.base, ask, today);
     if (g.used && g.filled.length) {
       ask = g.ask;
@@ -545,7 +601,7 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
   for (const p of [youPlace, themPlace]) if (p) addSource(sources, p.source, p.asOf);
   const resolvedCount = [youPlace, themPlace].filter(Boolean).length;
   const namedCount = named.filter(Boolean).length;
-  endResolve(namedCount ? "done" : "skipped", namedCount ? `${resolvedCount} of ${namedCount} place${namedCount > 1 ? "s" : ""} found${readAs.length ? ` · ${readAs.join(" · ")}` : ""}${youPlace ? ` · you: ${youPlace.name}` : ""}${themPlace ? " · their area rounded to ~500 m" : ""}` : "No places named; using your location");
+  endResolve(namedCount ? "done" : "skipped", namedCount ? `${resolvedCount} of ${namedCount} place${namedCount > 1 ? "s" : ""} found${readAs.length ? ` · ${readAs.join(" · ")}` : ""}${youPlace ? ` · you: ${youPlace.name}` : ""}${themPlace ? ` · them: ${ask.themApprox ? "a broad area (~500 m ring)" : "the station/area you typed (not stored)"}` : ""}` : "No places named; using your location");
 
   const who = ask.themWho;
   if (ask.intent === "meet_halfway") {
@@ -648,16 +704,34 @@ const PLAN_RUN_WRITES = new WeakMap<PlanResultWithAgent, Promise<boolean>>();
 /** The pending plan_runs insert for a finished plan (false when there was none / it failed). Never rejects. */
 export const planRunWrite = (r: PlanResultWithAgent): Promise<boolean> => (PLAN_RUN_WRITES.get(r) ?? Promise.resolve(false)).catch(() => false);
 
+/** "Waterloo Underground Station" → "Waterloo"; "your location" → "you" (names the walk-between middle). */
+const placeLabel = (n: string | null | undefined) => (!n || /^your location$/i.test(n) ? "you" : n.replace(/\s+\(approx\.\)$/i, "").replace(/\s+(?:Underground|Rail|DLR|Overground)?\s*Station$/i, "").trim());
+
+/** The other person on the map: the station/area that was typed for them (a public place, not their position), drawn as a
+ *  ~150 m ring with the puck at its centre; a broad typed area ("north London") keeps a ~500 m ring. A shared/live GPS
+ *  fix (no such flow yet) would be rounded to ~500 m via roundToArea. */
+export function themAreaOf(typed: string, loc: LatLng, approx: boolean, shared = false, resolved?: string | null): NonNullable<PlanResultWithAgent["them"]> {
+  // "westminister" typed, Westminster found: label it with the station's own spelling (a different name, e.g. an area
+  // that resolved to a nearby station, keeps what was typed).
+  const st = resolved ? placeLabel(resolved) : "";
+  const key = (x: string) => x.toLowerCase().replace(/[^a-z]/g, "").slice(0, 5);
+  const area = !approx && st && key(st) === key(typed) ? st : typed.replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\(Approx\.\)/, "(approx.)");
+  if (shared) {
+    const r = roundToArea(loc);
+    return { area, center: r.center, radiusM: r.radiusM, precision: "shared" };
+  }
+  return { area, center: { lat: loc.lat, lng: loc.lng }, radiusM: approx ? 500 : 150, precision: "typed" };
+}
+
 async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: string; them: Place; themTyped: string }): Promise<PlanResultWithAgent> {
   const { ask, when, begin, unknowns, sources } = ctx;
-  const area = roundToArea(ctx.them.location);
-  const themArea = { area: ctx.themTyped.replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\(Approx\.\)/, "(approx.)"), center: area.center, radiusM: area.radiusM };
+  const themArea = themAreaOf(ctx.themTyped, ctx.them.location, !!ctx.ask.themApprox, false, ctx.them.name);
   if (ctx.ask.themApprox) ctx.unknowns.push("Their side is a broad area, not a station, so their journey time is approximate.");
   if (ctx.ask.youApprox) ctx.unknowns.push("Your side is a broad area, not a station, so your journey time is approximate.");
   const who = ask.themWho;
 
   const endCompare = begin("compare", "Comparing central hubs by TfL journey time", "TfL Journey Planner");
-  const fp = await fairPoint(ctx.you, { ...ctx.them.location, id: ctx.them.id ?? undefined }, when);
+  const fp = await fairPoint({ ...ctx.you, name: placeLabel(ctx.youName) }, { ...ctx.them.location, id: ctx.them.id ?? undefined, name: placeLabel(ctx.them.name) }, when);
   const history = await tieBreakByHistory(fp.ranked);
   const prefs = (ask as RefinedAsk).prefs;
   const hp = pickHub(fp.ranked, prefs);
@@ -666,7 +740,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   if (rr && best) Object.assign(rr, { hubWhy: hp.why, hubName: best.hub.name });
   if (best) addSource(sources, "TfL Journey Planner", best.a.fetchedAt);
   endCompare(best ? "done" : "failed", best
-    ? `${fp.compared} hubs compared (${fp.calls} journeys${fp.failed ? `; no TfL time for ${fp.failedHubs.join(", ")}` : ""}) · ${best.hub.name} fairest: you ${best.a.minutes} min, ${who} ${best.b.minutes} min${fp.ranked[1] ? ` · next ${fp.ranked[1].hub.name} (${fp.ranked[1].a.minutes}/${fp.ranked[1].b.minutes})` : ""}${history ? ` · ${history}` : ""}`
+    ? `${fp.compared} ${fp.close ? "middles (you're close: both areas and the walk between them included)" : "hubs"} compared (${fp.calls} journeys${fp.failed ? `; no TfL time for ${fp.failedHubs.join(", ")}` : ""}) · ${best.hub.name} fairest: you ${best.a.minutes} min, ${who} ${best.b.minutes} min${fp.ranked[1] ? ` · next ${fp.ranked[1].hub.name} (${fp.ranked[1].a.minutes}/${fp.ranked[1].b.minutes})` : ""}${history ? ` · ${history}` : ""}`
     : `${fp.compared} hubs tried, no TfL journey times came back`);
   const result: PlanResultWithAgent = { ...ctx.base, intent: "meet_halfway", you: { lat: ctx.you.lat, lng: ctx.you.lng }, them: themArea };
   if (best && fp.failed) unknowns.push(`TfL didn't return times for ${fp.failedHubs.join(", ")}, so ${fp.failed > 1 ? "those hubs weren't" : "that hub wasn't"} compared.`);
@@ -720,8 +794,9 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   const tflFact = fact("Travel", `TfL planner: you ${best.a.minutes} min, ${who} ${best.b.minutes} min to ${best.hub.name}, arriving by ${londonClock(when.toISOString())}`, "confirmed", "TfL", best.a.fetchedAt);
   const lf = lineFacts(lineIds, ls);
   const wf = weatherFact(wx, when);
-  const themPath = trimPathStart(best.b.path, 500, metresBetween);
-  const themSegs = trimSegmentsStart(best.b.segments, 500, metresBetween);
+  // Their leg starts at the puck (the typed station/area); only a shared GPS start would be trimmed.
+  const themPath = themArea.precision === "shared" ? trimPathStart(best.b.path, 500, metresBetween) : best.b.path;
+  const themSegs = themArea.precision === "shared" ? trimSegmentsStart(best.b.segments, 500, metresBetween) : best.b.segments;
   const hubEnd = { name: best.hub.name, location: result.middle.location };
   result.cards = osm.pk.pool.map(({ p, h }): PlanCardWithHours => {
     const walk = walkMinutes(metresBetween(result.middle!.location, p.location));
@@ -759,7 +834,9 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   result.cards.forEach((c, i) => CARD_TAGS.set(c, osm.pk.pool[i].p.tags));
   if (!result.cards.length) unknowns.push(`No open ${kind}s found within 500 m of ${best.hub.name} in OSM.`);
   const hubWhy = hp.why === "closer_you" ? "is closer to you" : hp.why === "closer_them" ? `is closer to ${who}` : hp.why === "different" ? "is the next fairest middle" : "is the fair middle";
-  result.headline = `${best.hub.name} ${hubWhy}: you ${best.a.minutes} min, ${who} ${best.b.minutes}.`;
+  result.headline = best.hub.name.startsWith("Between ") && hubWhy === "is the fair middle"
+    ? `Halfway ${best.hub.name.slice(0, 1).toLowerCase()}${best.hub.name.slice(1)} is the fair middle: you ${best.a.minutes} min, ${who} ${best.b.minutes}.`
+    : `${best.hub.name} ${hubWhy}: you ${best.a.minutes} min, ${who} ${best.b.minutes}.`;
   // Short, friendly, paste-ready: no line status or forecast; their journey time only, never their area.
   // The hub's name only when it isn't their own area (the message goes to them; their area is never in it).
   // Drafted from the top card; redrafted after the verification loop picks the final top.
@@ -936,8 +1013,7 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
   const result: PlanResultWithAgent = { ...ctx.base, intent: ctx.them ? "meet_halfway" : "near_me", you: { lat: ctx.you.lat, lng: ctx.you.lng } };
   FIXED.add(result);
   if (ctx.them && ctx.themTyped) {
-    const area = roundToArea(ctx.them.location);
-    result.them = { area: ctx.themTyped.replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\(Approx\.\)/, "(approx.)"), center: area.center, radiusM: area.radiusM };
+    result.them = themAreaOf(ctx.themTyped, ctx.them.location, !!ask.themApprox, false, ctx.them.name);
     if (ask.themApprox) unknowns.push("Their side is a broad area, not a station, so their journey time is approximate.");
   }
   if (ask.youApprox) unknowns.push("Your side is a broad area, not a station, so your journey time is approximate.");
@@ -1012,7 +1088,7 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
 
   const legs: LegWithSegments[] = [];
   if (a) legs.push({ who: "you", minutes: a.minutes, summary: a.summary, path: a.path, segments: tidySegments(a.segments, ctx.youName) });
-  if (b) legs.push({ who: "them", minutes: b.minutes, summary: b.summary, path: trimPathStart(b.path, 500, metresBetween), segments: tidySegments(trimSegmentsStart(b.segments, 500, metresBetween)) });
+  if (b) legs.push({ who: "them", minutes: b.minutes, summary: b.summary, path: result.them?.precision === "shared" ? trimPathStart(b.path, 500, metresBetween) : b.path, segments: tidySegments(result.them?.precision === "shared" ? trimSegmentsStart(b.segments, 500, metresBetween) : b.segments) });
   const addr = found.address ?? dest.address ?? addressOf(tags);
   const slug = (isEvent ? `${dest.title}-${found.name}` : found.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
   const url = tags.website ?? tags["contact:website"] ?? (found.id?.startsWith("osm-") ? `https://www.openstreetmap.org/${found.id.split("-")[1]}/${found.id.split("-")[2]}` : undefined);

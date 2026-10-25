@@ -165,8 +165,11 @@ export async function livePlaces(kind: OsmKind, center: LatLng, radiusM: number,
 
 /** No MongoDB: live Overpass (mirrors) first, topped up / replaced by the bundled snapshot. */
 export async function findPlaces(kind: OsmKind, center: LatLng, radiusM: number, deps?: OverpassDeps): Promise<OsmResult> {
-  const r = await livePlaces(kind, center, radiusM, deps);
   const snap = snapshotPlaces(kind, center, radiusM);
+  // server13 (speed): when the bundled snapshot already covers this spot well, live Overpass only gets a short budget
+  // (it is often overloaded and its full 12 s budget was most of a cold plan); thin spots keep the full budget.
+  const budgetMs = deps?.budgetMs ?? (snap.places.length >= SNAPSHOT_RICH ? SNAPSHOT_RICH_BUDGET_MS : undefined);
+  const r = await livePlaces(kind, center, radiusM, { ...deps, budgetMs });
   if (r.ok) {
     const seen = new Set(r.places.map((p) => `${p.type}/${p.id}`));
     const extra = r.places.length < MIN_CANDIDATES ? snap.places.filter((p) => !seen.has(`${p.type}/${p.id}`)) : [];
@@ -191,6 +194,10 @@ export async function findPlaces(kind: OsmKind, center: LatLng, radiusM: number,
     note: `Live Overpass failed (${r.error}); used the OSM snapshot from ${snap.asOf.slice(0, 10)}`,
   };
 }
+
+/** A snapshot with at least this many places near the spot is "rich": live Overpass then gets SNAPSHOT_RICH_BUDGET_MS. */
+export const SNAPSHOT_RICH = 8;
+export const SNAPSHOT_RICH_BUDGET_MS = 4_000;
 
 /** Fewer than this many candidates for a category and the finder looks further (snapshot, then live Overpass). */
 export const MIN_CANDIDATES = 3;

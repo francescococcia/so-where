@@ -147,6 +147,9 @@ export async function POST(req: Request) {
           send({ type: "step", step: { id: "translate", label: "Translating your ask", status: "running" } });
           tr = await translateAsk(raw, plan);
           send({ type: "step", step: tr?.step ?? { id: "translate", label: "Reading your language", status: "skipped", detail: "Read as English" } });
+          // ui24: the English words of a fresh ask, so the loading radar can find the places named in it. Only on this
+          // stream to the asker's own browser; never in steps, the result or plan_runs.
+          if (tr && plan.refine === undefined && !plan.previous?.answer) send({ type: "translated", english: plan.query });
         } else tr = await translateAsk(raw, plan); // pre-translated voice ask only; no model call
         const r: PlanResultRefined = withTranslation(await runPlan(plan, (step: AgentStep) => send({ type: "step", step })), tr);
         // `query` is the accumulated ask (earlier answers appended as "; them: X"): resend it as

@@ -504,3 +504,7 @@ button.sw-map-chip:focus-visible { outline: 2px solid var(--sw-signal-strong); o
   .sw-puck-halo { display: none; }
   .sw-puck-body, .sw-puck-tag { animation: none; }
 }
+
+/* ui24: the loading radar centred on the places named in the ask (plan-map sets --scan-x/--scan-y in px) */
+.sw-scan.is-focus { background: radial-gradient(circle at var(--scan-x, 62%) var(--scan-y, 50%), transparent 0 14%, rgba(244,241,234,0) 14%, rgba(74,52,30,.08) 70%); }
+.sw-scan.is-focus::before { left: var(--scan-x, 62%); top: var(--scan-y, 50%); }

@@ -32,7 +32,7 @@ const LIVE_VOICE = process.env.NEXT_PUBLIC_LIVE_VOICE !== "0";
 import { MapChips } from "./map-chips";
 import { friendlyDraft } from "./draft";
 import { CountUp } from "./motion-bits";
-import type { MapPadding } from "./plan-map";
+import type { MapPadding, ScanFocus } from "./plan-map";
 
 const PlanMap = dynamic(() => import("./plan-map"), {
   ssr: false,
@@ -887,6 +887,23 @@ export function SoWhereApp() {
   const finished = status === "result" || status === "clarify";
   const mapResult = placeSnap?.result ?? result ?? (refining ? shown : null);
   const panelOpen = !!(placeSnap || detail);
+  // ui24: the loading radar flies to the places named in a fresh ask (bundled station list, in the browser only); the
+  // server's English replaces the first guess when it arrives. Follow-ups keep the map where it is.
+  const [scanFocus, setScanFocus] = useState<ScanFocus | null>(null);
+  const scanSrc = status === "running" && !refining && !placeSnap ? state.scanText ?? state.ask ?? state.query : "";
+  useEffect(() => {
+    if (!scanSrc) return setScanFocus(null);
+    let live = true;
+    import("@/lib/scan-places").then(({ scanPlaces, scanMiddle }) => {
+      if (!live) return;
+      const places = scanPlaces(scanSrc);
+      // Keep the first guess if the English names fewer places (never fly away to nothing).
+      setScanFocus((prev) => (places.length || !prev ? { places, middle: scanMiddle(places) } : prev));
+    }).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [scanSrc]);
   const liveTools = useLiveTools({ state, view: view ?? result ?? null, selectedId: detailId ?? selectedId, ask: askOrAnswer, refine, openDetail, openSend: () => { setSendOpen(true); say("Draft ready · nothing is sent"); } });
 
   return (
@@ -896,7 +913,7 @@ export function SoWhereApp() {
 
         {/* Map: on top on phones, full-bleed behind the panel on desktop */}
         <div className="relative h-[46svh] min-h-[300px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto">
-          <PlanMap result={mapResult} selectedId={placeSnap ? placeSnap.card.id : selectedId} hoverId={hoverId} focusId={placeSnap ? placeSnap.card.id : detailId} scanning={status === "running" && !placeSnap} onSelect={placeSnap ? () => {} : select} onHover={setHoverId} padding={panelOpen && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} deviceYou={you} />
+          <PlanMap result={mapResult} selectedId={placeSnap ? placeSnap.card.id : selectedId} hoverId={hoverId} focusId={placeSnap ? placeSnap.card.id : detailId} scanning={status === "running" && !placeSnap} scanFocus={scanFocus} onSelect={placeSnap ? () => {} : select} onHover={setHoverId} padding={panelOpen && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} deviceYou={you} />
           <div className={cn("pointer-events-none absolute right-3 top-3 z-10 transition-[right] duration-500 max-sm:right-2 max-sm:top-2 max-sm:origin-top-right max-sm:scale-[.92] lg:right-4 lg:top-4", panelOpen && !mobile && "md:right-[412px] lg:right-[412px]")}>
             <MapChips result={mapResult} cardId={placeSnap ? placeSnap.card.id : detailId ?? selectedId} />
           </div>
@@ -1036,6 +1053,8 @@ export function SoWhereApp() {
             <div className="mt-4 flex flex-col gap-4">
               {/* Live timeline while working; once results are in, the strip moves below the cards (quiet). */}
               {state.steps.length && status !== "error" && !(finished && view) ? <AgentSteps steps={state.steps} finished={finished} elapsedMs={state.elapsedMs} /> : null}
+              {/* ui24: never a silent wait: a "Starting" row until the first step arrives (stall → error box below). */}
+              {status === "running" && !state.steps.length && !refining ? <AgentSteps steps={[{ id: "start", label: "Starting", status: "running", detail: scanFocus?.places.length ? `Looking around ${scanFocus.places.map((p) => p.name).join(" and ")}` : undefined }]} finished={false} elapsedMs={0} /> : null}
 
               {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={answerClarify} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} heard={clarifyHeard} listening={speech.listening && voiceTarget.current === "clarify"} mic={speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "clarify"} onClick={mic("clarify")} className="rounded-[12px] bg-white/70 ring-1 ring-black/5" /> : null} /> : null}
 

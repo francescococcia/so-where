@@ -30,6 +30,8 @@ export type PlanState = {
   error: string | null;
   /** Set when the server translated the user's words to English first (any-language asks). */
   translated: Translated | null;
+  /** ui24: the server's English for a translated fresh ask (stream-only, kept in memory for the loading radar; never stored). */
+  scanText: string | null;
 };
 /** Server `translated` on a result/clarify: the user's language and the model that really did the translation. */
 export type Translated = { lang: string; langName: string; model: string };
@@ -45,8 +47,10 @@ export const blurbOf = (c: unknown): Blurb | null => {
   return b && typeof b.text === "string" && b.text.trim() && b.source && typeof b.source.url === "string" ? b : null;
 };
 const BLURB_WAIT_MS = 3000;
+/** ui24: no stream data for this long (nothing at all, or between steps) = stalled; say so instead of hanging silently. */
+const STALL_MS = 30_000;
 
-const EMPTY: PlanState = { status: "idle", query: "", ask: "", reply: null, steps: [], result: null, clarify: null, example: false, exampleReason: null, elapsedMs: 0, blurbsPending: false, resultSeq: 0, error: null, translated: null };
+const EMPTY: PlanState = { status: "idle", query: "", ask: "", reply: null, steps: [], result: null, clarify: null, example: false, exampleReason: null, elapsedMs: 0, blurbsPending: false, resultSeq: 0, error: null, translated: null, scanText: null };
 
 type Previous = { query: string; answer: string };
 
@@ -110,6 +114,18 @@ export function usePlan() {
     setState((s) => ({ ...EMPTY, resultSeq: s.resultSeq, status: "running", query: opts?.display ?? previous?.query ?? query, ask: refine ?? previous?.query ?? query }));
 
     let gotTerminal = false;
+    // ui24: watchdog, re-armed on every chunk; a silent stream before any plan ends in a plain error, not a spinner.
+    let stalled = false;
+    let stallTimer = 0;
+    const arm = () => {
+      window.clearTimeout(stallTimer);
+      stallTimer = window.setTimeout(() => {
+        if (gotTerminal) return;
+        stalled = true;
+        ac.abort();
+      }, STALL_MS);
+    };
+    arm();
     try {
       const res = await fetch("/api/plan", {
         method: "POST",
@@ -131,7 +147,10 @@ export function usePlan() {
         const trimmed = line.trim();
         if (!trimmed) return;
         const msg = JSON.parse(trimmed);
-        if (msg.type === "step" && msg.step) {
+        if (gotTerminal) window.clearTimeout(stallTimer);
+        if (msg.type === "translated" && typeof msg.english === "string") {
+          setState((s) => ({ ...s, scanText: msg.english.slice(0, 500) }));
+        } else if (msg.type === "step" && msg.step) {
           setState((s) => ({ ...s, steps: upsert(s.steps, msg.step as AgentStep) }));
         } else if (msg.type === "result" && msg.result) {
           gotTerminal = true;
@@ -184,6 +203,7 @@ export function usePlan() {
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
+        arm();
         buf += decoder.decode(value, { stream: true });
         let nl: number;
         while ((nl = buf.indexOf("\n")) !== -1) {
@@ -192,8 +212,14 @@ export function usePlan() {
         }
       }
       handle(buf + decoder.decode());
+      window.clearTimeout(stallTimer);
       if (!gotTerminal) throw new Error("stream ended without a plan");
     } catch (err) {
+      window.clearTimeout(stallTimer);
+      if (stalled && !gotTerminal && ctrl.current === ac) {
+        setState((s) => ({ ...s, status: "error", blurbsPending: false, error: "This is taking too long, so I stopped waiting. Try again in a moment.", elapsedMs: performance.now() - t0 }));
+        return;
+      }
       if ((err as Error)?.name === "AbortError" || ac.signal.aborted) return;
       if (gotTerminal) return;
       // Live ask, no result at all: say so plainly. Demo data only ever comes from ?demo= links (showFixture).
