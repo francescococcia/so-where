@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { animate, AnimatePresence, motion, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from "motion/react";
-import { Accessibility, ArrowUpRight, Banknote, Camera, ChevronDown, ShieldCheck, Users, Clock, CloudSun, Globe, HelpCircle, Map as MapIcon, Navigation, Send, Sparkles, TrainFront, X } from "lucide-react";
+import { Accessibility, ArrowUpRight, Banknote, Camera, ChevronDown, Coffee, Landmark, ShieldCheck, Users, Clock, CloudSun, Globe, HelpCircle, Map as MapIcon, Navigation, Send, Sparkles, TrainFront, X } from "lucide-react";
 import type { Fact, PlanCard as Card, Leg, PlanResultWithAgent, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { VerdictChip } from "./verdict-chip";
@@ -85,7 +85,8 @@ function JourneyRow({ cardId, leg, area }: { cardId: string; leg: Leg; area?: st
 
 /** Lumap-style place detail: header, two actions, stat tiles, journeys, then the checks (closed). */
 /** Snap-a-place mode: "Open now" line, "Meet here" / "Send to a friend" instead of the plan actions. */
-export type SnapActions = { open: { text: string; tone: "ok" | "soon" | "closed" | "unknown" }; onMeet: () => void; onFriend: () => void };
+/** Landmarks: no open/closed line; "Meet here" + "Somewhere nearby" (+ Send to a friend). */
+export type SnapActions = { open: { text: string; tone: "ok" | "soon" | "closed" | "unknown" }; onMeet: () => void; onFriend: () => void; landmark?: boolean; onNearby?: () => void };
 
 export function PlaceDetail({ card, result, example, onClose, onSend, snap }: { card: Card; result: PlanResultWithAgent; example: boolean; onClose: () => void; onSend: () => void; snap?: SnapActions }) {
   const { type, address } = splitSubtitle(card.subtitle);
@@ -148,12 +149,16 @@ export function PlaceDetail({ card, result, example, onClose, onSend, snap }: { 
           {address ? <p className="mt-0.5 text-[12.5px] text-ink-3">{address}</p> : null}
           {snap ? (
             <motion.div {...item(0)} className="mt-2.5 flex flex-wrap items-center gap-2">
+              {snap.landmark ? (
+                <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/80 px-3 text-[14px] font-semibold text-ink-2 shadow-e1 ring-1 ring-white/80"><Landmark className="size-4 text-signal-ink" aria-hidden /> Landmark</span>
+              ) : (
               <span className={cn("inline-flex h-8 items-center gap-2 rounded-full bg-white/80 px-3 text-[14px] font-semibold shadow-e1 ring-1 ring-white/80", TONE_CLASS[snap.open.tone])}>
                 <span aria-hidden className={cn("relative inline-flex size-2.5 rounded-full", snap.open.tone === "ok" ? "bg-ok" : snap.open.tone === "unknown" ? "bg-unknown" : "bg-amber-ink")}>
                   {snap.open.tone === "ok" ? <span className="absolute inset-0 animate-ping rounded-full bg-ok/60 motion-reduce:hidden" /> : null}
                 </span>
                 {snap.open.text}
               </span>
+              )}
               <span className="inline-flex h-6 items-center gap-1 rounded-full bg-signal-soft px-2 text-[11.5px] font-semibold text-signal-ink ring-1 ring-signal/20"><Camera className="size-3" aria-hidden /> From your photo</span>
             </motion.div>
           ) : null}
@@ -181,10 +186,22 @@ export function PlaceDetail({ card, result, example, onClose, onSend, snap }: { 
       {/* Two actions */}
       {snap ? (
         <motion.div {...item(0)} className="flex flex-col gap-1.5">
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+          {snap.landmark && snap.onNearby ? (
+            <div className="grid grid-cols-2 gap-2">
+              <motion.button type="button" whileTap={{ scale: 0.96 }} onClick={snap.onMeet} className="sw-btn sw-btn-primary min-h-11 gap-1.5 rounded-[12px] px-3 text-[14px] font-semibold">
+                <Users className="size-4" aria-hidden /> Meet here
+              </motion.button>
+              <motion.button type="button" whileTap={{ scale: 0.96 }} onClick={snap.onNearby} className="sw-btn sw-btn-quiet min-h-11 gap-1.5 whitespace-nowrap rounded-[12px] px-3 text-[14px] font-semibold">
+                <Coffee className="size-4" aria-hidden /> Somewhere nearby
+              </motion.button>
+            </div>
+          ) : null}
+          <div className={cn("grid gap-2", snap.landmark && snap.onNearby ? "grid-cols-[1fr_auto]" : "grid-cols-[1fr_1fr_auto]")}>
+            {snap.landmark && snap.onNearby ? null : (
             <motion.button type="button" whileTap={{ scale: 0.96 }} onClick={snap.onMeet} className="sw-btn sw-btn-primary min-h-11 gap-1.5 rounded-[12px] px-3 text-[14px] font-semibold">
               <Users className="size-4" aria-hidden /> Meet here
             </motion.button>
+            )}
             <motion.button type="button" whileTap={{ scale: 0.96 }} onClick={snap.onFriend} className="sw-btn sw-btn-quiet min-h-11 gap-1.5 whitespace-nowrap rounded-[12px] px-3 text-[14px] font-semibold">
               <Send className="size-4" aria-hidden /> Send to a friend
             </motion.button>

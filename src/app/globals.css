@@ -337,6 +337,7 @@ textarea:focus-visible, .sw-field input:focus-visible { outline: none; } /* the 
 /* frosted glass: panel, floating map chips, callouts */
 .sw-glass { background: var(--sw-glass); -webkit-backdrop-filter: var(--sw-glass-blur); backdrop-filter: var(--sw-glass-blur); box-shadow: var(--sw-glass-edge), var(--sw-shadow-4); }
 .sw-glass-chip { background: var(--sw-glass-strong) !important; -webkit-backdrop-filter: var(--sw-glass-blur); backdrop-filter: var(--sw-glass-blur); }
+.sw-glass-chip.sw-voice-card { background: rgba(255,252,247,.93) !important; }
 .sw-glass-card { background: var(--sw-glass-card); }
 .sw-tag, .sw-mid-tag { background: var(--sw-glass-strong); -webkit-backdrop-filter: var(--sw-glass-blur); backdrop-filter: var(--sw-glass-blur); box-shadow: inset 0 0 0 1px rgba(255,255,255,.7), var(--sw-shadow-float); }
 .sw-mid-tag { box-shadow: inset 3px 0 0 var(--sw-amber), inset 0 0 0 1px rgba(255,255,255,.7), var(--sw-shadow-3); }

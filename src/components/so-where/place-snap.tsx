@@ -35,10 +35,10 @@ export type SnapPlace = {
   facts?: Fact[];
   [k: string]: unknown;
 };
-export type PlaceSnapResponse = { extracted: SnapExtracted; place?: SnapPlace | null; candidates?: SnapPlace[] | null; message?: string | null; suggestedQuery?: string | null };
+export type PlaceSnapResponse = { extracted: SnapExtracted; place?: SnapPlace | null; candidates?: SnapPlace[] | null; message?: string | null; suggestedQuery?: string | null; nearbyQuery?: string | null };
 
 /** What the app needs to show a matched place: a one-card result for the map + detail panel. */
-export type SnapView = { result: PlanResultWithAgent & { snapOnly: true; youKnown: boolean }; card: PlanCard; place: SnapPlace; query: string; draft: string; open: { text: string; tone: OpenTone }; example: boolean };
+export type SnapView = { result: PlanResultWithAgent & { snapOnly: true; youKnown: boolean }; card: PlanCard; place: SnapPlace; query: string; draft: string; open: { text: string; tone: OpenTone }; example: boolean; landmark: boolean; nearbyQuery: string };
 
 const cap = (s: string) => s.replace(/^\w/, (c) => c.toUpperCase());
 const clock = (t: string) => (/^(00|24):00$/.test(t) ? "midnight" : t);
@@ -49,6 +49,9 @@ const coords = (p: SnapPlace): LatLng | null => {
   const lng = p.location?.lng ?? p.lng;
   return typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
 };
+
+/** Landmarks (a university, a monument) have no opening hours worth showing. */
+export const isLandmark = (p: SnapPlace) => p.kind === "landmark";
 
 /** "Open now until 23:00" / "Closes soon · 23:00" / "Closed now · opens 12:00" / "Hours not listed". */
 export function openNow(p: SnapPlace): { text: string; tone: OpenTone } {
@@ -71,10 +74,11 @@ export function snapView(r: PlaceSnapResponse, p: SnapPlace, you: LatLng | null,
   if (!loc || !p.name) return null;
   const kind = placeKind(p, r.extracted);
   const subtitle = typeof p.subtitle === "string" && p.subtitle ? p.subtitle : [kind, p.address].filter(Boolean).join(" · ");
-  const open = openNow(p);
+  const landmark = isLandmark(p);
+  const open = landmark ? { text: "", tone: "unknown" as OpenTone } : openNow(p);
   const facts: Fact[] = Array.isArray(p.facts) && p.facts.length
     ? p.facts
-    : p.hoursKnown === false || p.openAtPlan == null
+    : landmark || p.hoursKnown === false || p.openAtPlan == null
       ? []
       : [{ label: "Open now", value: p.openAtPlan ? (hhmm(p.closesAt) ? `Open until ${hhmm(p.closesAt)}` : "Open now") : "Closed now", verdict: "likely", source: "OSM" }];
   const card: PlanCard = { ...(p as object), id: p.id || `snap-${p.name.toLowerCase().replace(/\W+/g, "-")}`, kind: "venue", name: p.name, subtitle, location: loc, legs: [], facts, why: p.blurb?.text ?? "", url: typeof p.url === "string" ? p.url : undefined } as PlanCard;
@@ -86,10 +90,11 @@ export function snapView(r: PlaceSnapResponse, p: SnapPlace, you: LatLng | null,
     intent: "near_me", query, headline: `${p.name}`, when: now, you: you ?? loc, filters: {}, cards: [card], unknowns: [],
     sources: [{ name: "Your photo", asOf: now }], draftMessage: draft, steps: [], snapOnly: true as const, youKnown: !!you,
   } as SnapView["result"];
-  return { result, card, place: p, query, draft, open, example };
+  const nearbyQuery = (r.nearbyQuery || `Coffee near ${p.name}`).trim();
+  return { result, card, place: p, query, draft, open, example, landmark, nearbyQuery };
 }
 
-// ---------- Demo fixtures (?demo=place | place-candidates | place-nomatch) ----------
+// ---------- Demo fixtures (?demo=place | place-candidates | place-nomatch | place-landmark) ----------
 const KINGS: SnapPlace = {
   id: "demo-kings-arms", name: "The Kings Arms", kind: "pub", lat: 51.50352, lng: -0.10876, address: "25 Roupell Street, SE1", area: "Waterloo",
   openAtPlan: true, closesAt: "23:00", closingSoon: false, hoursKnown: true,
@@ -107,12 +112,27 @@ const DEMO: Record<string, PlaceSnapResponse> = {
     message: "A few places match that sign.",
     suggestedQuery: "Meet at The Kings Arms",
   },
+  "place-landmark": {
+    extracted: { name: "University of Greenwich", kind: "landmark", signText: "UNIVERSITY OF GREENWICH · OLD ROYAL NAVAL COLLEGE", confidence: 0.88 },
+    place: {
+      id: "demo-uni-greenwich", name: "University of Greenwich", kind: "landmark", lat: 51.4827, lng: -0.0077, address: "Old Royal Naval College, Park Row, SE10", area: "Greenwich", hoursKnown: false,
+      blurb: { text: "Wren's baroque riverside college, now the university's Greenwich campus, with the Painted Hall next door.", bestFor: "A walk by the river", source: { name: "Wikipedia", url: "https://en.wikipedia.org/wiki/University_of_Greenwich" } },
+    },
+    suggestedQuery: "Meet at the University of Greenwich",
+    nearbyQuery: "Coffee near the University of Greenwich",
+  },
   "place-nomatch": { extracted: { name: null, kind: "café", signText: "…ESPRESSO BAR", confidence: 0.3 }, message: "Couldn't match that sign to a place nearby.", suggestedQuery: null },
 };
 const DEMO_PHOTO =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe3ee"/><stop offset="1" stop-color="#f3e7d6"/></linearGradient></defs><rect width="240" height="320" fill="url(#s)"/><rect x="18" y="40" width="204" height="280" fill="#8a4b2d"/><g fill="#a65f3a">${Array.from({ length: 14 }, (_, i) => `<rect x="18" y="${44 + i * 20}" width="204" height="2"/>`).join("")}</g><rect x="26" y="118" width="188" height="202" fill="#173b2c"/><rect x="34" y="128" width="172" height="34" rx="3" fill="#0f2a1f" stroke="#c9a54a" stroke-width="2"/><text x="120" y="151" font-family="Georgia,serif" font-size="17" font-weight="700" fill="#e9c766" text-anchor="middle" letter-spacing="1.5">THE KINGS ARMS</text><rect x="40" y="176" width="70" height="96" fill="#f6d79a" opacity=".85"/><rect x="130" y="176" width="70" height="144" fill="#0b2018"/><rect x="134" y="182" width="62" height="70" fill="#f6d79a" opacity=".7"/><rect x="40" y="58" width="56" height="44" fill="#e8eef2" opacity=".8"/><rect x="144" y="58" width="56" height="44" fill="#e8eef2" opacity=".8"/></svg>`,
+  );
+
+const DEMO_PHOTO_LANDMARK =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe3ee"/><stop offset="1" stop-color="#f1ece2"/></linearGradient></defs><rect width="240" height="320" fill="url(#s)"/><rect x="88" y="40" width="64" height="40" fill="#e7dfcf"/><ellipse cx="120" cy="40" rx="26" ry="20" fill="#d9cfbb"/><rect x="117" y="6" width="6" height="16" fill="#cbbfa8"/><rect x="20" y="80" width="200" height="240" fill="#ece4d3"/><polygon points="20,80 120,52 220,80" fill="#ddd3bf"/><g fill="#d6ccb6">${Array.from({ length: 8 }, (_, i) => `<rect x="${30 + i * 25}" y="96" width="9" height="150"/>`).join("")}</g><rect x="20" y="246" width="200" height="74" fill="#e2d9c6"/><rect x="40" y="258" width="160" height="30" rx="2" fill="#1f3550"/><text x="120" y="278" font-family="Georgia,serif" font-size="12.5" font-weight="700" fill="#f4ead2" text-anchor="middle" letter-spacing="1">UNIVERSITY OF GREENWICH</text></svg>`,
   );
 
 // ---------- Image prep (same limits as the poster: longest side ≤ 1600 px, JPEG ≤ 4 MB) ----------
@@ -294,8 +314,9 @@ export function PlaceSnap({ you, demo, onMatch, className }: PlaceSnapProps) {
   useEffect(() => {
     if (!isExample || demoRan.current) return;
     demoRan.current = true;
-    setSt({ s: "scanning", preview: DEMO_PHOTO });
-    const t = window.setTimeout(() => show(DEMO[demo!], DEMO_PHOTO, true), 1700);
+    const photo = demo === "place-landmark" ? DEMO_PHOTO_LANDMARK : DEMO_PHOTO;
+    setSt({ s: "scanning", preview: photo });
+    const t = window.setTimeout(() => show(DEMO[demo!], photo, true), 1700);
     return () => window.clearTimeout(t);
   }, [isExample, demo, show]);
 
@@ -441,7 +462,11 @@ function Matched({ r, p, hasOthers, more, onMore }: { r: PlaceSnapResponse; p: S
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}>
       <Kicker><Check className="size-3.5" strokeWidth={2.6} aria-hidden /> Found{r.extracted.confidence < 0.5 ? <span className="font-medium normal-case tracking-normal text-ink-3">· not sure, check it</span> : null}</Kicker>
       <p className="mt-0.5 text-[15px] font-semibold leading-5 text-ink">{p.name}</p>
-      <p className={cn("mt-0.5 flex items-center gap-1.5 text-[13px] font-medium", TONE_CLASS[o.tone])}><OpenDot tone={o.tone} />{o.text}</p>
+      {isLandmark(p) ? (
+        <p className="mt-0.5 text-[13px] font-medium text-ink-2">Landmark{p.area ? ` · ${p.area}` : ""}</p>
+      ) : (
+        <p className={cn("mt-0.5 flex items-center gap-1.5 text-[13px] font-medium", TONE_CLASS[o.tone])}><OpenDot tone={o.tone} />{o.text}</p>
+      )}
       <p className="mt-1 text-[12.5px] text-ink-3">Details are open on the map.</p>
       {hasOthers ? (
         <button type="button" onClick={onMore} aria-expanded={more} className="mt-1.5 min-h-8 text-[13px] font-semibold text-signal-ink underline-offset-2 hover:underline">{more ? "Hide others" : "Not it?"}</button>
@@ -463,7 +488,7 @@ function Picker({ items, r, onPick }: { items: SnapPlace[]; r: PlaceSnapResponse
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14px] font-semibold leading-5 text-ink">{c.name}</span>
                 <span className="block truncate text-[12.5px] leading-4 text-ink-3">{[c.area, placeKind(c, r.extracted)].filter(Boolean).join(" · ")}</span>
-                <span className={cn("mt-0.5 flex items-center gap-1.5 truncate text-[12.5px] font-medium leading-4", TONE_CLASS[o.tone])}><OpenDot tone={o.tone} />{o.text}</span>
+                {isLandmark(c) ? null : <span className={cn("mt-0.5 flex items-center gap-1.5 truncate text-[12.5px] font-medium leading-4", TONE_CLASS[o.tone])}><OpenDot tone={o.tone} />{o.text}</span>}
               </span>
               <ChevronRight className="size-4 shrink-0 text-ink-3 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </button>

@@ -2,12 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, ChevronDown, Minus, X } from "lucide-react";
+import { Check, ChevronDown, Minus, ShieldCheck, X } from "lucide-react";
 import type { AgentStep } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { fmtSeconds } from "./format";
 
 const ease = [0.22, 1, 0.36, 1] as const;
+
+/** The final re-check reads as one plain line; a swap keeps the server's wording as the detail. */
+function stepLabel(s: AgentStep): { label: string; detail?: string; recheck: boolean } {
+  if (s.id !== "recheck") return { label: s.label, detail: s.detail, recheck: false };
+  if (s.status === "running") return { label: "Argon checking hours, TfL and weather", detail: s.detail, recheck: true };
+  const swap = /swapped/i.test(s.label) ? s.label.replace(/^Argon re-checked:\s*|^Re-checked:\s*/i, "") : null;
+  return { label: "Argon checked hours, TfL and weather", detail: [swap && swap.charAt(0).toUpperCase() + swap.slice(1), s.detail].filter(Boolean).join(" · ") || undefined, recheck: true };
+}
 
 function Node({ status }: { status: AgentStep["status"] }) {
   return (
@@ -50,16 +58,23 @@ function Timeline({ steps }: { steps: AgentStep[] }) {
             <Node status={s.status} />
             <div className="min-w-0 flex-1 pt-0.5">
               <div className="flex items-baseline justify-between gap-3">
-                <span className={cn("text-[13.5px] font-semibold leading-5", s.status === "running" ? "sw-shimmer text-ink" : s.status === "failed" ? "text-err" : "text-ink")}>{s.label}</span>
+                <span className={cn("text-[13.5px] font-semibold leading-5", s.status === "running" ? "sw-shimmer text-ink" : s.status === "failed" ? "text-err" : "text-ink")}>
+                  {stepLabel(s).label}
+                  {stepLabel(s).recheck && s.status === "done" ? (
+                    <span className="ml-1.5 inline-flex translate-y-[-1px] items-center gap-0.5 rounded-full bg-ok-bg px-1.5 py-px align-middle text-[10.5px] font-semibold text-ok ring-1 ring-ok/25">
+                      <ShieldCheck className="size-3" aria-hidden /> ✓
+                    </span>
+                  ) : null}
+                </span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   {s.source && s.source !== "—" ? <span className="rounded-md bg-sky-wash px-1.5 ring-1 ring-sky/15 py-px font-mono text-[10px] font-medium text-sky-ink">{s.source}</span> : null}
                   {s.ms != null && s.status !== "running" ? <span className="num font-mono text-[10px] text-ink-3">{s.ms} ms</span> : null}
                 </span>
               </div>
               <AnimatePresence initial={false}>
-                {s.detail ? (
-                  <motion.p key={s.detail} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} transition={{ duration: 0.3, ease }} className="overflow-hidden text-[12.5px] leading-[18px] text-ink-3">
-                    {s.detail}
+                {stepLabel(s).detail ? (
+                  <motion.p key={stepLabel(s).detail} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} transition={{ duration: 0.3, ease }} className="overflow-hidden text-[12.5px] leading-[18px] text-ink-3">
+                    {stepLabel(s).detail}
                   </motion.p>
                 ) : null}
               </AnimatePresence>

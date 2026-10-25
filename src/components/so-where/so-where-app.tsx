@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { createPortal } from "react-dom";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, ArrowUp, CalendarDays, Camera, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, LocateFixed, Loader2, Mic, Navigation, PencilLine, Send, Sparkles, X } from "lucide-react";
+import { ArrowRight, ArrowUp, CalendarDays, Camera, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, LocateFixed, Loader2, Mic, Navigation, PencilLine, Repeat2, Send, Sparkles, X } from "lucide-react";
 import type { PlanResultWithAgent } from "@/lib/plan-types";
 import type { FixtureId } from "@/lib/plan-fixture";
+import type { VerifyInfo } from "@/lib/verify";
 import { cn } from "@/lib/utils";
 import { AgentSteps } from "./agent-steps";
 import { SnapSheet, type SnapMode, type SnapView } from "./place-snap";
@@ -21,6 +23,7 @@ import { fmtAsOf, fmtWhen, gmapsDirections } from "./format";
 import { usePlan } from "./use-plan";
 import { useSpeech } from "./use-speech";
 import { LiveVoiceButton } from "./live-voice";
+import { VoiceCardSlot, primeVoice, type VoiceReply } from "./voice-card";
 import { useLiveTools } from "./live-tools";
 
 /** Live voice (Gemini Live). Off unless NEXT_PUBLIC_LIVE_VOICE=1; the Web Speech mic stays the fallback. */
@@ -171,7 +174,25 @@ function Blind({ result, photo = false }: { result: PlanResultWithAgent; photo?:
           );
         })}
       </h2>
+      <SwapLine verify={(result as PlanResultWithAgent & { verify?: VerifyInfo }).verify} />
     </div>
+  );
+}
+
+/** Argon's re-check changed a pick: one short line under the headline ("Argon swapped X → Y: closes 19:30"). */
+function SwapLine({ verify }: { verify?: VerifyInfo }) {
+  const sw = verify?.swapped?.[0];
+  if (!sw) return null;
+  const more = (verify?.swapped.length ?? 1) - 1;
+  return (
+    <motion.p initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.35 }} className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-[18px] text-ink-2" data-testid="argon-swap">
+      <Repeat2 className="mt-px size-3.5 shrink-0 text-signal-ink" aria-hidden />
+      <span>
+        <span className="font-semibold text-ink">Argon swapped</span> {sw.from} <span aria-label="for">→</span> <span className="font-semibold text-ink">{sw.to}</span>
+        {sw.reason ? <span className="text-ink-3">: {sw.reason}</span> : null}
+        {more > 0 ? <span className="text-ink-3"> · +{more} more</span> : null}
+      </span>
+    </motion.p>
   );
 }
 
@@ -351,6 +372,37 @@ export function SoWhereApp() {
   const [shown, setShown] = useState<PlanResultWithAgent | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
+  // Floating voice card for the latest follow-up reply (the chat trail keeps the text bubble too).
+  const [voice, setVoice] = useState<VoiceReply | null>(null);
+  const focusName = useRef<string | undefined>(undefined);
+  const [wide, setWide] = useState(false);
+  // Mobile voice card floats above the composer dock. It lives in a portal (fixed to the viewport):
+  // nested inside the dock, whose backdrop blur makes it a backdrop root, the sheet text showed through.
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [dockGap, setDockGap] = useState(150);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    if (wide || !voice) return;
+    const el = dockRef.current;
+    if (!el) return;
+    const measure = () => setDockGap(Math.max(80, Math.round(window.innerHeight - el.getBoundingClientRect().top + 10)));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("scroll", measure); window.removeEventListener("resize", measure); };
+  }, [wide, voice]);
+  const liveStates = useRef<Record<string, string>>({});
+  const [liveOn, setLiveOn] = useState(false);
+  const liveState = useMemo(() => {
+    const mk = (k: string) => (s: string) => {
+      liveStates.current[k] = s;
+      setLiveOn(Object.values(liveStates.current).some((v) => v !== "idle"));
+    };
+    return { ask: mk("ask"), chat: mk("chat") };
+  }, []);
   const [chat, setChat] = useState("");
   // Poster snap: which composer it opened from, and the ask it produced (for the "From your photo" chip).
   const [snap, setSnap] = useState<null | "ask" | "chat">(null);
@@ -448,7 +500,7 @@ export function SoWhereApp() {
       showFixture(demo as FixtureId);
       setQuery(demo === "meet" ? CHIPS[0].ask : CHIPS[3].ask);
       setActiveChip(demo === "meet" ? "meet" : "walkin");
-    } else if (demo === "place" || demo === "place-candidates" || demo === "place-nomatch") {
+    } else if (demo === "place" || demo === "place-candidates" || demo === "place-nomatch" || demo === "place-landmark") {
       setSnapDemo(demo);
       setSnapMode("place");
       setSnap("ask");
@@ -460,6 +512,7 @@ export function SoWhereApp() {
     const onResize = () => {
       const wide = window.innerWidth >= 1024;
       setMobile(window.innerWidth < 768);
+      setWide(wide);
       setPadding(wide ? { top: 110, right: 90, bottom: 90, left: 500 } : { top: 110, right: 56, bottom: 36, left: 36 });
     };
     onResize();
@@ -476,7 +529,9 @@ export function SoWhereApp() {
       if (awaitingReply.current) {
         awaitingReply.current = false;
         const text = state.reply || agentReply(shown, result);
-        setTurns((t) => [...t, { id: Date.now(), role: "agent", text, leaveBy: leaveByOf(result) }]);
+        const id = Date.now();
+        setTurns((t) => [...t, { id, role: "agent", text, leaveBy: leaveByOf(result) }]);
+        setVoice({ id, text, leaveBy: leaveByOf(result), place: focusName.current, autoplay: true });
       }
       setShown(result);
       if (refining) say("Picks updated");
@@ -498,7 +553,11 @@ export function SoWhereApp() {
     }
     if (status === "clarify" && awaitingReply.current) {
       awaitingReply.current = false;
-      if (state.reply) setTurns((t) => [...t, { id: Date.now(), role: "agent", text: state.reply! }]);
+      if (state.reply) {
+        const id = Date.now();
+        setTurns((t) => [...t, { id, role: "agent", text: state.reply! }]);
+        setVoice({ id, text: state.reply, autoplay: true });
+      }
     }
   }, [status]);
 
@@ -510,6 +569,7 @@ export function SoWhereApp() {
       setRefining(false);
       setShown(null);
       setTurns([]);
+      setVoice(null);
       setPhotoAsk(null);
       setPlaceSnap(null);
       baseAsk.current = text;
@@ -559,9 +619,9 @@ export function SoWhereApp() {
     if (window.innerWidth < 768) window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
   }, [reduced]);
   // "Meet here": the suggested ask goes through the normal plan flow; if there's no friend info, the planner asks.
-  const meetHere = useCallback(() => {
+  const meetHere = useCallback((nearby?: boolean) => {
     if (!placeSnap) return;
-    const q = placeSnap.query;
+    const q = nearby === true ? placeSnap.nearbyQuery : placeSnap.query;
     setSnap(null);
     setSnapDemo(null);
     setQuery(q);
@@ -616,6 +676,9 @@ export function SoWhereApp() {
       const focus = fc ? { id: fc.id, name: fc.name, lat: fc.location.lat, lng: fc.location.lng } : undefined;
       setRefining(true);
       setDetailId(null);
+      setVoice(null);
+      focusName.current = fc?.name;
+      primeVoice(); // inside the user's send, so the spoken reply may autoplay
       setTurns((t) => [...t, { id: Date.now(), role: "user", text: label ?? text }]);
       awaitingReply.current = true;
       submit(text, undefined, you ?? undefined, { refine: prev, display: baseAsk.current, focus, result: state.result ?? shown });
@@ -787,7 +850,7 @@ export function SoWhereApp() {
                   className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal transition-[height] duration-200 placeholder:text-ink-3 focus:outline-none"
                 />
                 <CameraButton open={snap === "ask"} onClick={() => setSnap((v) => (v === "ask" ? null : "ask"))} />
-                {LIVE_VOICE ? <LiveVoiceButton onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("ask") : undefined} fallbackListening={speech.listening && voiceTarget.current === "ask"} /> : speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : null}
+                {LIVE_VOICE ? <LiveVoiceButton onStateChange={liveState.ask} onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("ask") : undefined} fallbackListening={speech.listening && voiceTarget.current === "ask"} /> : speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "ask"} onClick={mic("ask")} /> : null}
                 <motion.button
                   type="submit"
                   disabled={!query.trim() || status === "running"}
@@ -899,12 +962,21 @@ export function SoWhereApp() {
             {view && !(panelOpen && mobile) ? (
               <motion.div
                 key="dock"
+                ref={dockRef}
                 initial={{ y: 24, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 24, opacity: 0 }}
                 transition={{ delay: 0.3, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 className="sticky bottom-0 z-20 flex flex-col gap-2 border-t border-white/70 bg-white/85 px-4 py-3 shadow-[0_-10px_24px_-18px_rgba(74,52,30,0.35)] backdrop-blur-xl backdrop-saturate-150 lg:rounded-b-[22px] lg:px-5"
               >
+                {!wide && hydrated
+                  ? createPortal(
+                      <div className="pointer-events-none fixed inset-x-3 z-[60] flex justify-center" style={{ bottom: dockGap }}>
+                        <VoiceCardSlot reply={voice} live={liveOn} onClose={() => setVoice(null)} />
+                      </div>,
+                      document.body,
+                    )
+                  : null}
                 <AnimatePresence initial={false}>
                   {snap === "chat" ? (
                     <motion.div key="snap-chat" ref={snapRef} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: reduced ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
@@ -933,7 +1005,7 @@ export function SoWhereApp() {
                     className="min-w-0 flex-1 bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal placeholder:text-ink-3 focus:outline-none"
                   />
                   <CameraButton size="sm" open={snap === "chat"} onClick={() => setSnap((v) => (v === "chat" ? null : "chat"))} />
-                  {LIVE_VOICE ? <LiveVoiceButton size="sm" onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("chat") : undefined} fallbackListening={speech.listening && voiceTarget.current === "chat"} /> : speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : null}
+                  {LIVE_VOICE ? <LiveVoiceButton size="sm" onStateChange={liveState.chat} onTool={liveTools.onTool} context={liveTools.context} onFallback={speech.supported ? mic("chat") : undefined} fallbackListening={speech.listening && voiceTarget.current === "chat"} /> : speech.supported ? <MicButton size="sm" listening={speech.listening && voiceTarget.current === "chat"} onClick={mic("chat")} /> : null}
                   <motion.button
                     type="submit"
                     disabled={!chat.trim() || status === "running"}
@@ -984,6 +1056,12 @@ export function SoWhereApp() {
           </div>
         </motion.aside>
 
+        {wide ? (
+          <div className={cn("pointer-events-none absolute bottom-6 left-[476px] right-4 z-30 flex justify-center transition-[right] duration-500", panelOpen && "right-[424px]", state.example && "bottom-14")}>
+            <VoiceCardSlot reply={voice} live={liveOn} onClose={() => setVoice(null)} />
+          </div>
+        ) : null}
+
         {placeSnap ? (
           <DetailPanel
             card={placeSnap.card}
@@ -992,7 +1070,7 @@ export function SoWhereApp() {
             example={placeSnap.example}
             onClose={() => setPlaceSnap(null)}
             onSend={() => setFriendOpen(true)}
-            snap={{ open: placeSnap.open, onMeet: meetHere, onFriend: () => { setFriendOpen(true); say("Draft ready · nothing is sent"); } }}
+            snap={{ open: placeSnap.open, onMeet: () => meetHere(), landmark: placeSnap.landmark, onNearby: () => meetHere(true), onFriend: () => { setFriendOpen(true); say("Draft ready · nothing is sent"); } }}
           />
         ) : result ? <DetailPanel card={detail} mobile={mobile} result={result} example={state.example} onClose={closeDetail} onSend={() => { setSendOpen(true); say("Draft ready · nothing is sent"); }} /> : null}
         {placeSnap ? <SendPlanDialog title="Send to a friend" open={friendOpen} onOpenChange={setFriendOpen} draft={placeSnap.draft} /> : null}
