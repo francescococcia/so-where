@@ -1,104 +1,180 @@
-# Lumap Near Me: what's happening around you, in plain English (Encode London 2026)
+# So where?
 
-**One map for a London neighbourhood, built from live open data:** TfL lines, stations and roadworks, planning applications, weather, air quality, flood alerts and Luma events. Ask questions in plain English and get answers with sources, freshness and confidence. When it suggests a place, it plans the trip with TfL (step-free options, live disruptions, walking or cycling, weather advice). Take a photo to draft a Luma event or a new map entry; nothing is published until you approve it, and every step goes in an action log.
+**Tell it where you both are; it finds the fair middle in London and a place that's actually open, then checks its own pick.**
 
-**For:** people who just arrived in a London area (organisers, newcomers, wheelchair users) who want to know what's on, what's changing and how to get there. Plan: `knowledge/plan.md`. Pitch and demo: `knowledge/pitch.md`.
+Live: **https://so-where.vercel.app** · try it with no setup: [`?demo=meet`](https://so-where.vercel.app/?demo=meet)
 
-**Live demo:** [lumap-self.vercel.app](https://lumap-self.vercel.app) · Built for the **Encode London Hackathon** (23–25 Oct 2026): The Real World + Agents That Ship.
+> The base map and chat existed before Encode kickoff; features listed as Encode-built were made during the hackathon.
 
-> **Disclosure:** The base map and chat existed before Encode kickoff; features listed as Encode-built were made during the hackathon. Last pre-Encode commit: `5809e2d` (tag `encode-baseline`); see `git diff encode-baseline..encode-london`.
+---
 
-![Lumap: map with pins and the venue panel](docs/screenshot.png)
+## The problem
 
-## Status (Encode checkpoints)
-- [x] CP1 Fri 18:00: check-in (idea, bounty)
-- [x] CP2 Sat 18:00: progress (demo link, repo, problem). Bounties: The Real World, Agents That Ship
-- [ ] CP3 Sun 12:00 GMT: final submission (3-min video, repo, bounties)
+"Where shall we meet?" takes a dozen messages in London. One of you is at Old Street, the other is in Brixton. Picking "somewhere in the middle" by eye ignores how the Tube actually runs. Search results don't tell you whether a place is open at 7 on Friday, whether a line is down, or whether it will rain on the terrace. Most apps also want your friend's exact location, and some invent star ratings and "busy now" bars.
 
-## Built at Encode (Fri 23 Oct 17:00 onwards)
-- [ ] Neighbourhood briefing `/api/near`: TfL, roadworks, planning, weather, air quality, flood alerts, with source + time on every line
-- [ ] Map layers for each source, next to the existing venues and Luma events
-- [ ] Ask agent with tool calls (Gemini): sourced answers, confidence, "data missing" said plainly
-- [ ] Get there: TfL Journey Planner with step-free options, disruptions and weather advice
-- [ ] Photo intake: EXIF GPS read then stripped, faces blurred in the browser, photo read with confidence
-- [ ] Photo → Luma event (approve first) · Photo → OpenStreetMap note + Google Maps "Add a missing place" link (approve first)
-- [ ] Action log of every tool call and approval
-- [x] General polish on Fri evening (sign-in, date picker, postcode origin, Ask fixes). Not part of the Encode feature.
+## What it does
 
-## Already there before Encode
-- **Find a room:** area, capacity, date and time → PostGIS search within walking distance, the best three with a reason each.
-- **Map and venue panel:** MapLibre pins; click for capacity, distance, trust status, organiser details and directions.
-- **Vouch-based trust:** venues and reports need vouched organisers (Supabase RLS, a shared review queue, a 2-vouch trigger).
-- **Ask Lumap:** text or voice (Web Speech API), answered from Cognee community memory + Grok, with sources.
-- **Events feed:** `/api/calendar.ics`, a ranked London community events feed.
+| | Feature | |
+|---|---|---|
+| 🧭 | **Fair middle.** Compares central hubs by real TfL journey time for both of you and picks the fairest split ("you 20 min, them 21") | Encode-built |
+| ✅ | **Argon picks, then gets checked.** Gemini 4 Argon chooses from a pool that has already been checked. Its picks are re-checked against opening hours, TfL, weather and step-free access. If the top pick fails, it re-picks once. The verify row is shown on screen | Encode-built |
+| 🎙️ | **Voice, any language.** Speak in Italian (or any language). It plans and answers in your language | Encode-built |
+| 🔊 | **Spoken voice card.** A short spoken summary of the plan (it can be muted) | Encode-built |
+| 💬 | **Follow-ups.** "Cheaper", "quieter", "later", and compound questions like "what time do they close? and what time do you recommend?" | Encode-built |
+| ✨ | **Vibe match.** "A cosy quiet pub" runs MongoDB Atlas hybrid search (vector + text). Cards that matched on meaning get a *Vibe match* chip | Encode-built |
+| 🚇 | **Live line status.** MongoDB Atlas Stream Processing pulls TfL line status every 60 s. Journeys on disrupted lines are padded and marked "rerouted" | Encode-built |
+| 📷 | **Snap a place or poster.** Photograph a sign, landmark or event poster and it finds the place, with an honest certainty level. Faces are blurred on your device before upload. Then tap "Meet here" | Encode-built |
+| ✉️ | **Send plan.** Opens a draft you can copy or share. Nothing is sent automatically, and your friend's area is never included | Encode-built |
+| 🗺️ | Base map (MapLibre, OpenFreeMap tiles) and chat shell | Pre-existing |
 
-## Models & data sources
-*(fill in as built; full table with endpoints in `knowledge/plan.md` §5)*
-| Model / source | Used for |
+Every fact on a card has a source and an as-of time. Anything the app couldn't check is listed under **"Couldn't check"** (for example prices, or how busy a place will be).
+
+## How it works
+
+```mermaid
+flowchart LR
+  U["You: text / voice / photo"] -->|any language| T["Gemini Live + translate"]
+  T --> P["Parse ask<br/>rules + Gemini intent fill"]
+  P --> R["Resolve places<br/>TfL StopPoint · Wikidata · Nominatim"]
+  R --> H["Compare hubs<br/>TfL Journey Planner"]
+  H --> V["Venues near the fair middle<br/>Atlas Search (geo + fuzzy text)"]
+  V --> VB["Vibe<br/>Atlas $rankFusion:<br/>$vectorSearch (voyage-4) + $search"]
+  H --> LS["Line status<br/>Atlas Stream Processing → line_status"]
+  H --> W["Weather<br/>Open-Meteo"]
+  VB --> A["gemini-4-argon<br/>picks from checked pool"]
+  LS --> A
+  W --> A
+  A --> C{"Deterministic re-check<br/>hours · TfL · rain · step-free"}
+  C -- fail --> A
+  C -- pass --> O["Cards + map + voice card"]
+  O --> D["Send plan → draft only"]
+  O -. anonymised .-> M[("Atlas plan_runs<br/>no text, no coordinates")]
+```
+
+The planner streams each step to the UI as NDJSON, so the "How we got here" list shows the real sources and timings live. Core code: `src/lib/plan.ts`, `src/lib/verify.ts`, `src/app/api/plan/route.ts`.
+
+## Gemini models, and why each one
+
+| Model | Used for | Where |
+|---|---|---|
+| **gemini-4-argon** | Planner pick + verify/re-pick loop; vision for posters and snaps | `src/lib/plan-model.ts`, `src/lib/verify.ts`, `src/lib/vision.ts`, `/api/poster`, `/api/place-snap` |
+| **gemini-3.8-live** | Real-time voice conversation | `src/lib/live-config.ts`, `/api/live-token` |
+| **gemini-3.5-live-translate-preview** | Speech in any language | `src/lib/translate.ts` |
+| **gemini-3.5-flash-lite** (fallback gemini-3.8-flash) | Text translation of replies and cards | `src/lib/translate.ts`, `/api/translate` |
+| **gemini-3.8-flash-tts** (fallbacks gemini-3.8-flash-lite-tts, gemini-2.5-flash-preview-tts) | Spoken voice card | `/api/speak` |
+| gemini-3-flash-preview | Filling gaps in the parsed ask (thinking level low); also the planner fallback if Argon isn't available | `src/lib/gemini-intent.ts` |
+| gemini-2.5-flash | One-line venue blurbs | `src/lib/blurb.ts` |
+| **gemini-embedding-001** (768-dim) | Fallback vibe vectors if Atlas Automated Embedding is unavailable | `src/lib/mongo-vectors.ts` |
+
+**Why Argon.** Picking a meeting place means weighing several things against each other: fairness, opening hours, the weather, the vibe and access. Argon is good at that kind of reasoning, and it explains the trade-off in one line ("confirmed open until 23:00 … though step-free access is not tagged"). We don't trust it blindly, though:
+
+- Argon only chooses from a pool that has already been checked, and cards are only ever built from that pool.
+- Every pick is re-checked by deterministic rules:
+  - **Hard fails:** closed at the plan time, closes within 1 h, no TfL journey, over the time limit, outdoor-only when rain is forecast, or not step-free when you asked for step-free.
+  - **Soft flags:** hours not listed, or facts that aren't tagged.
+- If the top pick fails, the failures go back to Argon for one re-pick.
+- Argon sees your ask with your friend's area removed, and never any coordinates.
+
+In vision, Argon reads the sign. It also gives up to 5 vibe tags and a one-line description of only what is **visible**, with no ratings. It reports a high / medium / low certainty with a reason (`src/lib/snap-certainty.ts`).
+
+## MongoDB Atlas: 6 features
+
+Database `sowhere`:
+
+| Collection | Contents |
 |---|---|
-| Gemini API (`gemini-3.8-flash` for Ask tool calls; `gemini-4-argon` for photo read + verification, if entered) | Ask agent, photo understanding |
-| TfL Unified API (Journey, Line status, StopPoint, Road disruptions) | journeys, step-free stations, disruptions, roadworks |
-| Planning London Datahub | planning applications near a point |
-| Open-Meteo | hourly weather |
-| LAQN (Imperial College London) | air quality index |
-| Environment Agency flood monitoring | flood alerts |
-| Luma (seed snapshot; public API for event creation with Luma Plus) | events, "create an event here" |
-| OpenStreetMap Notes API | "add this place" notes |
-| xAI Grok + Cognee Cloud | existing Ask answers |
-| postcodes.io | origin geocoding |
-| MongoDB Atlas (if used) | source snapshots, action log, hybrid search |
+| `venues` | 7,225 OSM venues from the 24 Oct snapshot |
+| `events` | Luma events |
+| `plan_runs` | Anonymised plan runs |
+| `line_status` | Live TfL line status |
+| `line_status_dlq` | Dead-letter queue for the stream |
 
-Attribution: Powered by TfL Open Data · Planning London Datahub (GLA) · Open-Meteo · LAQN · Environment Agency (OGL v3) · © OpenStreetMap contributors.
+| # | Atlas feature | What it does in the app | Code |
+|---|---|---|---|
+| 1 | **Atlas Search** (`venues_search`, `events_search`) | Finds venues near the fair middle with `compound` geoWithin + fuzzy text, and matches snapped sign names to venues. Falls back to `$geoNear`, then Overpass, then the snapshot | `src/lib/mongo-venues.ts`, `src/lib/place-snap.ts`, `src/lib/destination.ts` |
+| 2 | **Vector Search** (`venues_vector`, filters on category / visitable / lat / lng) | Finds venues by meaning for vibe asks ("cosy, quiet") | `src/lib/mongo-vectors.ts` |
+| 3 | **Hybrid `$rankFusion`** | Fuses `$vectorSearch` + `$search` (weights 1/1, with `scoreDetails`). The step reads "MongoDB Atlas hybrid search · vibe match: cosy, quiet" | `src/lib/mongo-vectors.ts` |
+| 4 | **Automated Embedding** | Atlas embeds venue text and queries itself, so the app holds no embedding key for this path | `venues_vector` index (autoEmbed); `scripts/seed_vectors.mjs` |
+| 5 | **Voyage AI `voyage-4`** | The embedding model behind Automated Embedding | `venues_vector` index definition |
+| 6 | **Stream Processing** `tfl_line_status` (workspace SP2) | Every 60 s: cron `$source` → `$https` GET TfL line status (tube, Elizabeth line, DLR, Overground) → `$merge` into `sowhere.line_status`. The planner uses the rows only if they are fresh (<10 min) for every line it needs. Disrupted lines add +15 / +5 min, and cards say "· rerouted" | `scripts/stream-tfl-pipeline.cjs`, `scripts/stream-tfl.processor.json`, `scripts/asp-setup.sh`, `src/lib/line-status.ts` |
 
-## Responsibility
-- Photos: GPS is read in the browser and then stripped with all EXIF; faces (and plates, when detected) are blurred before anything is published. Raw photos are not stored.
-- No personal location is stored; logs keep a rounded location only.
-- Every answer shows its sources and how fresh they are; missing or unclear data is said plainly, never guessed.
-- The agent never publishes without approval (Luma, OSM), and every action is logged.
+**Fallbacks.** The vibe step has a 1.5 s budget. If Automated Embedding isn't available, it runs an exact cosine aggregation over the gemini-embedding-001 vectors, fuses that with `$search` by reciprocal-rank fusion in the app, and then falls back to text only. `VIBE=off` turns the vibe step off. The *Vibe match* chip is shown only for venues that came from the vector search.
 
-## Stack
+**Aggregations.** `/api/stats` runs a `$facet` over `plan_runs`. It reports plans by intent, top hubs, how many facts were confirmed, venue sources and eval privacy rates. A `plan_runs` record stores no query text and no coordinates, and the hub is not recorded when it is within 1 km of you. Code: `src/lib/plan-memory.ts`, `src/app/api/stats/route.ts`.
 
-- Next.js 15 (App Router) and TypeScript
-- Tailwind CSS v4, shadcn/ui, Motion and lucide-react, with a light theme
-- MapLibre GL 4 with CARTO Positron tiles
-- Supabase Postgres with PostGIS and row-level security
-- Cognee Cloud for community memory, plus an xAI (Grok) LLM
-- Deployed on Vercel
+All six were checked live on production on 25 Oct (08:04–08:05 London). The steps "MongoDB Atlas Search … Searched 7,225 venues", "$rankFusion: $vectorSearch (Automated Embedding, voyage-4) + $search" and "MongoDB Atlas Stream Processing · live line status … streamed every 60 s" all appeared in a real plan.
 
-## Vouch trust model
+## Data sources
 
-The city starts with a small set of trusted root organisers. An approved organiser can vouch for another, and only vouched organisers can add or edit venue records. Row-level security in Supabase enforces this (`supabase/policies.sql`). Venues need two vouches before they appear publicly, unvouched users never see venue contact details, and revoking a vouch hides that organiser's edits again.
+- **TfL Unified API:** station list, StopPoint, Journey Planner and line status. Powered by TfL Open Data.
+- **Open-Meteo:** the forecast for the plan time (CC BY 4.0).
+- **OpenStreetMap:** the 24 Oct venue snapshot (stored in Atlas), with live Overpass as a fallback. Map tiles from OpenFreeMap. © OpenStreetMap contributors.
+- **Wikidata, then OSM Nominatim:** turns landmark names into points (`src/lib/landmark.ts`). Wikipedia supplies the "Why here" line for landmarks.
+- **Luma:** events.
 
-## Data
+## Privacy and human control
 
-The old **EXAMPLE** venues have been removed. Venue types, hours and capacity come only from public pages (venue websites, Luma, listing sites), with every source URL kept in `src/data/venue-facts.json`. Recurring sessions such as Co-Working Fridays at Somerset House are in `src/data/recurring-sessions.json`. No venue contact details are published, and the events feed comes from public event listings (`seed/`). The three trust roots in `config/city.json` are still placeholder accounts.
+- **Never auto-sends.** "Send plan" opens a draft with *Copy text* or your device's *Share* sheet. The dialog says: "Nothing is sent from here. Their area is never included."
+- **Your friend's location** is rounded to ~500 m (`roundToArea` in `src/lib/geo.ts`), is never stored, and never appears in the draft.
+- **Your location** is rounded to ~100 m ("Location on · rounded to ~100 m"). Snap requests are rounded as soon as they reach the server.
+- **Face blur on your device.** MediaPipe BlazeFace (or the browser's native FaceDetector) blurs faces before a photo leaves the phone (`src/lib/face-blur.ts`). A chip shows "Faces blurred · N", "No faces seen" or "Face blur unavailable on this device".
+- **Photos, audio and text are never stored or logged.** "Photo isn't saved." `plan_runs` holds no query text and no coordinates.
+- **No made-up data.** No ratings and no busyness or noise. "Couldn't check" lists what no source covers, for example "Prices: none of our sources lists them."
 
-## Run it locally
+## Evals
 
-1. Copy `.env.example` to `.env` and fill in the values below.
-2. In the Supabase SQL editor, run `supabase/schema.sql`, `supabase/policies.sql`, `supabase/search.sql` and `supabase/seed.sql`, in that order.
-3. Optionally, load community memory with `python scripts/cognee_load.py`.
-4. Run `npm install` and then `npm run dev`, and open http://localhost:3000.
+`npm run eval` (`scripts/run_evals.ts`). Last full run before the merge: **88 / 92 pass.** Separately, the chat follow-up unit tests passed 10/10 and refine-chat 3/3. `next build` passes. The 4 known failures:
 
-### Environment variables
+| Case | Why it fails |
+|---|---|
+| `refine-italian-only-matches` | Headline wording: it says "within 30 min of" where the case expects "near". Failed before this run too |
+| `snap-landmark-low-confidence` | The message wording changed to "Couldn't read the sign clearly", and the case still expects the old text. Failed before this run too |
+| `halfway-no-zero-middle` | Live TfL data put the middle at Elephant & Castle with "you 0 min". Also fails on an earlier clean commit |
+| `refine-meet-at-place` | The live OSM name is "Kings Arms" without "The", so the expected text doesn't match. Also fails on an earlier clean commit |
 
-Never commit real values.
+## Running locally
 
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`: the browser search client
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY`: server routes
-- `SUPABASE_SERVICE_ROLE_KEY`: seeding only; keep it off the server and out of Vercel
-- `LLM_API_KEY`: xAI (Grok)
-- `COGNEE_API_KEY`, `COGNEE_BASE_URL`, `COGNEE_TENANT_ID`
-- `COGNEE_DATASET`: optional; defaults to `lumap_london`
+```bash
+npm install
+cp .env.example .env.local   # fill in the names below
+npm run dev
+npm run seed:mongo && npm run seed:vectors   # load venues + vectors into Atlas
+npm run test:mongo
+npm run eval
+```
 
-## Fork it for another city
+Environment variable **names** only:
 
-`config/city.json` holds the city name, slug, map centre and trusted root organisers. To start a fork, edit that file, replace the London seeds in `seed/` and `supabase/seed.sql`, add your root organisers, and apply the Supabase schema and policies.
+- **Required:** `GEMINI_API_KEY`, `MONGODB_URI`, `MONGODB_DB`, `TFL_APP_KEY`
+- **Planner / vision:** `PLAN_MODEL`, `PLAN_ARGON`, `PLAN_PICK_THINKING`, `PLAN_VERIFY_THINKING`, `PLAN_GUARD_MS`, `VISION_MODEL`, `GEMINI_MODEL`
+- **Voice / translation:** `LIVE_MODEL`, `LIVE_VOICE`, `NEXT_PUBLIC_LIVE_VOICE`, `TRANSLATE_MODEL`, `TTS`, `TTS_MODEL`
+- **Blurbs / vibe:** `BLURBS`, `BLURB_MODEL`, `VIBE`, `VIBE_EMBED`, `VIBE_EMBED_MODEL`
+- **Overpass:** `OVERPASS_URL`, `OVERPASS_URLS`
+- **Stream Processing setup** (`scripts/asp-setup.sh`): `SP_CLUSTER_CONN`, `SP_NAME`, `SP_TFL_CONN`
+- **Pre-existing base app:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+## Demo links
+
+These work with no keys and no mic. They show canned **Example data** that is clearly labelled.
+
+| Link | Shows |
+|---|---|
+| [`?demo=meet`](https://so-where.vercel.app/?demo=meet) | A meet-halfway plan (Old Street ↔ Clapham → Borough) |
+| [`?demo=saturday`](https://so-where.vercel.app/?demo=saturday) | "What's on near me that I can just walk into?": three free, no-sign-up places near Old Street |
+| [`?demo=repick`](https://so-where.vercel.app/?demo=repick) | The Argon verify row after a re-pick: "Repicked: The Trinity (hours not listed) → The Blue Maid" |
+| [`?demo=translate`](https://so-where.vercel.app/?demo=translate) | An ask in Italian, answered in Italian (offline) |
+| [`?demo=clarify`](https://so-where.vercel.app/?demo=clarify) | A live ask that is missing a place, so the app asks "Where's Sam coming from?" |
+| [`?demo=place`](https://so-where.vercel.app/?demo=place) | Snap a place: found, with "Meet here" |
+| [`?demo=place-landmark`](https://so-where.vercel.app/?demo=place-landmark) | Snap a landmark: University of Greenwich, with "Why here" and "Meet here" |
+| [`?demo=place-candidates`](https://so-where.vercel.app/?demo=place-candidates) | Sign matches several places: "Which one?" |
+| [`?demo=place-nomatch`](https://so-where.vercel.app/?demo=place-nomatch) | No match, handled honestly |
+
+## What's next
+
+- Sunny-terrace check: a 3D sun/shadow analysis so "sunny beer garden at 5pm" is answered with evidence, not guessed.
+- The Gemini Interactions API, for longer-running, resumable planning sessions.
+- Calendar: suggest times when both people are free (an `.ics` export already exists).
 
 ## Licence
 
-[MIT](LICENSE) © 2026 Francesco Coccia
-
-## Provenance
-The base map and chat existed before Encode kickoff (copied from github.com/francescococcia/lumap, branch encode-london at 3937a6e); features listed as Encode-built were made during the hackathon.
-
+MIT © 2026 Francesco Coccia
