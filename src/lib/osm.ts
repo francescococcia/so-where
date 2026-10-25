@@ -4,16 +4,20 @@
 import OpeningHours from "opening_hours";
 import snapshot from "@/data/osm-snapshot.json";
 import { metresBetween } from "@/lib/geo";
-import { getJson } from "@/lib/http";
+import { USER_AGENT } from "@/lib/http";
 import { londonWallAsLocal } from "@/lib/london-time";
 import type { LatLng, Verdict } from "@/lib/plan-types";
 
 export type OsmKind = "pub" | "cafe" | "restaurant" | "free";
 export type OsmPlace = { type: string; id: number; location: LatLng; tags: Record<string, string>; distanceM: number };
-// source is "OSM", "OSM snapshot" or the MongoDB Atlas label; via/stepSource are set when MongoDB served the query.
-export type OsmResult = { places: OsmPlace[]; source: string; asOf: string; live: boolean; ms: number; note?: string; via?: string; stepSource?: string };
+// source is "OSM live (Overpass)", "OSM snapshot" or the MongoDB Atlas label; via/stepSource are set when MongoDB
+// served the query; `more` lists extra sources that topped up a thin result (snapshot, live Overpass).
+export type OsmResult = { places: OsmPlace[]; source: string; asOf: string; live: boolean; ms: number; note?: string; via?: string; stepSource?: string; more?: { source: string; asOf: string }[] };
 
-const OVERPASS = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
+export const OVERPASS_LIVE = "OSM live (Overpass)";
+/** Public Overpass mirrors, tried in order (each is often overloaded). OVERPASS_URL / OVERPASS_URLS override. */
+export const OVERPASS_MIRRORS = (process.env.OVERPASS_URLS || process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter,https://overpass.kumi.systems/api/interpreter,https://overpass.private.coffee/api/interpreter")
+  .split(",").map((u) => u.trim()).filter(Boolean);
 
 const FILTERS: Record<OsmKind, string[]> = {
   pub: ['["amenity"~"^(pub|bar|biergarten)$"]["name"]'],
@@ -60,36 +64,136 @@ export function matches(kind: OsmKind, t: Record<string, string>, type?: string)
 }
 
 type OverpassEl = { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> };
+type El = { type: string; id: number; lat: number; lng: number; tags: Record<string, string> };
+type Snap = { fetched_at: string; elements: El[] };
 
-export async function findPlaces(kind: OsmKind, center: LatLng, radiusM: number): Promise<OsmResult> {
-  const around = `(around:${Math.round(radiusM)},${center.lat.toFixed(5)},${center.lng.toFixed(5)})`;
-  const body = `[out:json][timeout:6];(${FILTERS[kind].map((f) => `nwr${f}${around};`).join("")});out center tags 200;`;
-  const r = await getJson<{ elements?: OverpassEl[]; osm3s?: { timestamp_osm_base?: string } }>(OVERPASS, {
-    init: { method: "POST", body: `data=${encodeURIComponent(body)}`, headers: { "Content-Type": "application/x-www-form-urlencoded" } },
-    ttlMs: 10 * 60_000,
-    maxPerHost: 2,
-  });
-  const shape = (els: { type: string; id: number; lat: number; lng: number; tags: Record<string, string> }[]) =>
-    els
-      .map((e) => ({ type: e.type, id: e.id, location: { lat: e.lat, lng: e.lng }, tags: e.tags, distanceM: metresBetween(center, { lat: e.lat, lng: e.lng }) }))
-      .filter((p) => p.distanceM <= radiusM && matches(kind, p.tags, p.type))
-      .sort((a, b) => a.distanceM - b.distanceM);
-  if (r.ok && Array.isArray(r.data.elements)) {
-    const els = r.data.elements
-      .map((e) => ({ type: e.type, id: e.id, lat: e.lat ?? e.center?.lat ?? NaN, lng: e.lon ?? e.center?.lon ?? NaN, tags: e.tags ?? {} }))
-      .filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
-    return { places: shape(els), source: "OSM", asOf: r.fetchedAt, live: true, ms: r.ms };
+export type OverpassDeps = { fetch?: typeof fetch; mirrors?: string[]; perMirrorMs?: number; budgetMs?: number };
+export type OverpassLive = { ok: true; elements: El[]; mirror: string; fetchedAt: string; ms: number; cached: boolean } | { ok: false; error: string; ms: number };
+
+// In-process only (never written anywhere): results for 10 min keyed by kind + a bbox snapped outward to a
+// 0.005° grid (~500 m), so nearby asks share one query; after every mirror fails, skip live calls for 60 s.
+const GRID = 0.005;
+const LIVE_TTL_MS = 10 * 60_000;
+const DOWN_MS = 60_000;
+const liveCache = new Map<string, { at: number; r: Extract<OverpassLive, { ok: true }> }>();
+let downUntil = 0;
+
+/** Bbox (s, w, n, e) covering the circle, snapped outward to the grid. */
+export function gridBbox(center: LatLng, radiusM: number): [number, number, number, number] {
+  const dLat = radiusM / 111_320;
+  const dLng = radiusM / (111_320 * Math.cos((center.lat * Math.PI) / 180));
+  const dn = (x: number) => +(Math.floor(x / GRID) * GRID).toFixed(3);
+  const up = (x: number) => +(Math.ceil(x / GRID) * GRID).toFixed(3);
+  return [dn(center.lat - dLat), dn(center.lng - dLng), up(center.lat + dLat), up(center.lng + dLng)];
+}
+
+export function resetOverpassForTests() {
+  liveCache.clear();
+  downUntil = 0;
+}
+
+/**
+ * ONE live Overpass query (name, amenity / tourism, cuisine, opening_hours… all tags) for `kind` inside the
+ * grid bbox around the circle. Mirrors in order, ~6 s each, 12 s total. Never throws.
+ */
+export async function overpassLive(kind: OsmKind, center: LatLng, radiusM: number, deps: OverpassDeps = {}): Promise<OverpassLive> {
+  const t0 = Date.now();
+  const bbox = gridBbox(center, radiusM);
+  const key = `${kind}|${bbox.join(",")}`;
+  const hit = liveCache.get(key);
+  if (hit && Date.now() - hit.at < LIVE_TTL_MS) return { ...hit.r, cached: true, ms: 0 };
+  if (!deps.fetch && Date.now() < downUntil) return { ok: false, error: "unreachable (all mirrors failed in the last minute)", ms: 0 };
+  const f = deps.fetch ?? fetch;
+  const mirrors = deps.mirrors ?? OVERPASS_MIRRORS;
+  const per = deps.perMirrorMs ?? 6000;
+  const budget = deps.budgetMs ?? 12_000;
+  const body = `[out:json][timeout:6];(${FILTERS[kind].map((flt) => `nwr${flt}(${bbox.join(",")});`).join("")});out center tags 400;`;
+  const errors: string[] = [];
+  for (const url of mirrors) {
+    const left = budget - (Date.now() - t0);
+    if (left < 500) { errors.push("budget spent"); break; }
+    const host = new URL(url).host;
+    // A plain (ref'd) timer, not AbortSignal.timeout: the abort must fire even when nothing else is pending.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(Object.assign(new Error("timeout"), { name: "TimeoutError" })), Math.min(per, left));
+    try {
+      const res = await f(url, {
+        method: "POST",
+        body: `data=${encodeURIComponent(body)}`,
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": USER_AGENT, Accept: "application/json" },
+        signal: ac.signal,
+        cache: "no-store",
+      });
+      if (!res.ok) { errors.push(`${host} HTTP ${res.status}`); continue; }
+      const j = (await res.json()) as { elements?: OverpassEl[]; remark?: string };
+      if (!Array.isArray(j.elements) || (!j.elements.length && j.remark && /timed out|runtime error/i.test(j.remark))) { errors.push(`${host} ${j.remark ? "query timed out" : "bad reply"}`); continue; }
+      const elements = j.elements
+        .map((e) => ({ type: e.type, id: e.id, lat: e.lat ?? e.center?.lat ?? NaN, lng: e.lon ?? e.center?.lon ?? NaN, tags: e.tags ?? {} }))
+        .filter((e) => Number.isFinite(e.lat) && Number.isFinite(e.lng));
+      const r = { ok: true as const, elements, mirror: host, fetchedAt: new Date().toISOString(), ms: Date.now() - t0, cached: false };
+      liveCache.set(key, { at: Date.now(), r });
+      if (liveCache.size > 200) liveCache.delete(liveCache.keys().next().value as string);
+      return r;
+    } catch (e) {
+      const n = (e as Error)?.name;
+      errors.push(`${host} ${n === "TimeoutError" || n === "AbortError" || ac.signal.aborted ? "timeout" : "unreachable"}`);
+    } finally {
+      clearTimeout(timer);
+    }
   }
-  const snap = snapshot as { fetched_at: string; elements: { type: string; id: number; lat: number; lng: number; tags: Record<string, string> }[] };
+  if (!deps.fetch) downUntil = Date.now() + DOWN_MS;
+  return { ok: false, error: errors.join(", ") || "no mirrors", ms: Date.now() - t0 };
+}
+
+const shapeNear = (kind: OsmKind, center: LatLng, radiusM: number, els: El[]): OsmPlace[] =>
+  els
+    .map((e) => ({ type: e.type, id: e.id, location: { lat: e.lat, lng: e.lng }, tags: e.tags, distanceM: metresBetween(center, { lat: e.lat, lng: e.lng }) }))
+    .filter((p) => p.distanceM <= radiusM && matches(kind, p.tags, p.type))
+    .sort((a, b) => a.distanceM - b.distanceM);
+
+/** The bundled OSM snapshot (central hubs + the outer-hub extract) near a point. */
+export function snapshotPlaces(kind: OsmKind, center: LatLng, radiusM: number): { places: OsmPlace[]; asOf: string } {
+  const snap = snapshot as unknown as Snap;
+  return { places: shapeNear(kind, center, radiusM, snap.elements), asOf: snap.fetched_at };
+}
+
+/** Live Overpass places near a point (mirrors, cache), or the failure. */
+export async function livePlaces(kind: OsmKind, center: LatLng, radiusM: number, deps?: OverpassDeps) {
+  const r = await overpassLive(kind, center, radiusM, deps);
+  return r.ok ? { ...r, places: shapeNear(kind, center, radiusM, r.elements) } : r;
+}
+
+/** No MongoDB: live Overpass (mirrors) first, topped up / replaced by the bundled snapshot. */
+export async function findPlaces(kind: OsmKind, center: LatLng, radiusM: number, deps?: OverpassDeps): Promise<OsmResult> {
+  const r = await livePlaces(kind, center, radiusM, deps);
+  const snap = snapshotPlaces(kind, center, radiusM);
+  if (r.ok) {
+    const seen = new Set(r.places.map((p) => `${p.type}/${p.id}`));
+    const extra = r.places.length < MIN_CANDIDATES ? snap.places.filter((p) => !seen.has(`${p.type}/${p.id}`)) : [];
+    return {
+      places: [...r.places, ...extra].sort((a, b) => a.distanceM - b.distanceM),
+      source: OVERPASS_LIVE,
+      asOf: r.fetchedAt,
+      live: true,
+      ms: r.ms,
+      via: `${r.places.length} from ${OVERPASS_LIVE.replace(")", `, ${r.mirror}${r.cached ? ", cached" : ""})`)}${extra.length ? ` + ${extra.length} from the OSM snapshot` : ""}`,
+      stepSource: OVERPASS_LIVE,
+      ...(extra.length ? { more: [{ source: "OSM snapshot", asOf: snap.asOf }] } : {}),
+    };
+  }
   return {
-    places: shape(snap.elements),
+    places: snap.places,
     source: "OSM snapshot",
-    asOf: snap.fetched_at,
+    asOf: snap.asOf,
     live: false,
     ms: r.ms,
-    note: `Live Overpass ${r.ok ? "returned no elements" : r.error}; used the OSM snapshot from ${snap.fetched_at.slice(0, 10)}`,
+    stepSource: "OSM snapshot (live Overpass failed)",
+    note: `Live Overpass failed (${r.error}); used the OSM snapshot from ${snap.asOf.slice(0, 10)}`,
   };
 }
+
+/** Fewer than this many candidates for a category and the finder looks further (snapshot, then live Overpass). */
+export const MIN_CANDIDATES = 3;
 
 export type HoursCheck = {
   state: "open" | "closed" | "unknown";

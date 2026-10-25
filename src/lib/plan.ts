@@ -680,6 +680,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
   }
   endVenues(osm.pk.picks.length ? "done" : "failed", `${osmR.via ? `${osmR.via} · ${osmR.places.length} within 500 m` : `${osmR.places.length} found within 500 m (${osmR.source}${osmR.live ? "" : ", live call " + (osmR.note?.match(/Overpass (\w+)/)?.[1] ?? "failed")})`} · ${osm.pk.closed} closed at ${londonClock(when.toISOString())}${osm.pk.soonDropped ? ` · ${osm.pk.soonDropped} closing within the hour dropped` : ""} · ${osm.pk.picks.length} kept · ${weatherDecision(wm, osm.pk.picks.map((x) => x.p))}`, osmR.stepSource);
   addSource(sources, osm.r.source, osm.r.asOf);
+  for (const x of osm.r.more ?? []) addSource(sources, x.source, x.asOf);
   if ((osmR as { lateBars?: boolean }).lateBars) unknowns.push(`Few cafés near ${best.hub.name} are open at ${londonClock(when.toISOString())}, so bars open late are included.`);
   if (!osm.r.live && osm.r.note) unknowns.push(osm.r.note + ".");
   if (!("error" in ls)) addSource(sources, "TfL Line Status", ls.fetchedAt);
@@ -790,6 +791,7 @@ async function nearMe(ctx: Ctx & { you: LatLng; youName?: string }): Promise<Pla
   }
   if (osm) {
     addSource(sources, osm.source, osm.asOf);
+    for (const x of osm.more ?? []) addSource(sources, x.source, x.asOf);
     if (!osm.live && osm.note) unknowns.push(osm.note + ".");
     if ((osm as { lateBars?: boolean }).lateBars) unknowns.push(`Few cafés nearby are open at ${t}, so bars open late are included.`);
   }

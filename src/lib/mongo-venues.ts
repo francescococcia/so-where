@@ -4,7 +4,7 @@
 import type { Db, Document } from "mongodb";
 import type { SeedEvent } from "@/lib/events";
 import { metresBetween } from "@/lib/geo";
-import { findPlaces, matches, type OsmKind, type OsmPlace, type OsmResult } from "@/lib/osm";
+import { MIN_CANDIDATES, OVERPASS_LIVE, findPlaces, livePlaces, matches, snapshotPlaces, type OverpassDeps, type OsmKind, type OsmPlace, type OsmResult } from "@/lib/osm";
 import type { LatLng } from "@/lib/plan-types";
 import { getDb, withTimeout } from "@/lib/mongo";
 import { EVENTS_SEARCH_INDEX, VENUES_SEARCH_INDEX, type EventDoc, type VenueDoc } from "@/lib/mongo-seed";
@@ -121,9 +121,41 @@ export async function mongoVenuesNear(kind: OsmKind, center: LatLng, radiusM: nu
   }
 }
 
-/** Venue finder for the plan: MongoDB Atlas first, then the existing live Overpass → bundled snapshot path. */
-export async function findVenues(kind: OsmKind, center: LatLng, radiusM: number): Promise<OsmResult> {
-  return (await mongoVenuesNear(kind, center, radiusM)) ?? findPlaces(kind, center, radiusM);
+/**
+ * Venue finder for the plan: MongoDB Atlas first. When Atlas has fewer than MIN_CANDIDATES for the category
+ * (it only holds the seeded hubs), the bundled OSM snapshot (with the outer-hub extract) tops it up, then live
+ * Overpass (mirrors, 12 s budget, 10-min in-process cache). Live results are used in memory only: nothing is
+ * written back to Atlas from the request path. No MongoDB: live Overpass → bundled snapshot.
+ */
+export async function findVenues(kind: OsmKind, center: LatLng, radiusM: number, deps?: { mongo?: OsmResult | null; overpass?: OverpassDeps }): Promise<OsmResult> {
+  const m = deps && "mongo" in deps ? deps.mongo ?? null : await mongoVenuesNear(kind, center, radiusM);
+  if (!m) return findPlaces(kind, center, radiusM, deps?.overpass);
+  if (m.places.length >= MIN_CANDIDATES) return m;
+  const key = (p: OsmPlace) => `${p.type}/${p.id}`;
+  const seen = new Set(m.places.map(key));
+  const snap = snapshotPlaces(kind, center, radiusM).places.filter((p) => !seen.has(key(p)));
+  for (const p of snap) seen.add(key(p));
+  const out: OsmResult = { ...m, places: [...m.places, ...snap], more: [...(m.more ?? [])] };
+  const bits = [`${m.places.length} in Atlas`];
+  if (snap.length) {
+    bits.push(`+ ${snap.length} from the bundled OSM snapshot`);
+    out.more!.push({ source: "OSM snapshot", asOf: snapshotPlaces(kind, center, 0).asOf });
+  }
+  if (out.places.length < MIN_CANDIDATES) {
+    const live = await livePlaces(kind, center, radiusM, deps?.overpass);
+    if (live.ok) {
+      const add = live.places.filter((p) => !seen.has(key(p)));
+      out.places = [...out.places, ...add];
+      bits.push(`+ ${add.length} from ${OVERPASS_LIVE.replace(")", `, ${live.mirror}${live.cached ? ", cached" : ""})`)}`);
+      out.more!.push({ source: OVERPASS_LIVE, asOf: live.fetchedAt });
+      out.live = true;
+      out.stepSource = `${m.stepSource ?? m.source} + ${OVERPASS_LIVE}`;
+    } else bits.push(`live Overpass failed (${live.error})`);
+  }
+  out.places.sort((a, b) => a.distanceM - b.distanceM);
+  out.via = `${m.via ?? m.source} · ${bits.join(" ")}`;
+  if (out.live) delete out.note;
+  return out;
 }
 
 export function eventSearchPipeline(center: LatLng, radiusM: number, at: Date, dayEnd: Date): Document[] {

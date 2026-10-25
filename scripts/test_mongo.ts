@@ -13,6 +13,9 @@ import { getDb, resetMongoForTests } from "@/lib/mongo";
 import { seedAll, venueDocs } from "@/lib/mongo-seed";
 import { KIND_FILTER, findVenues, mongoEventsNear, mongoVenuesNear } from "@/lib/mongo-venues";
 import { matches, type OsmKind } from "@/lib/osm";
+// Venue count follows the bundled snapshot (2,765 → 7,225 when server9 added the outer-hub extract).
+const N_VENUES = venueDocs().length;
+const N_FMT = N_VENUES.toLocaleString("en-GB");
 import { planRunDoc, planStats, recordPlanRun, tieBreakByHistory } from "@/lib/plan-memory";
 import type { PlanResultWithAgent } from "@/lib/plan-types";
 import type { HubScore, Journey } from "@/lib/tfl";
@@ -65,7 +68,7 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
   await test("seed: venues/events loaded with GeoJSON + 2dsphere, counts printed", async () => {
     const r = await seedAll(db, () => {});
     assert.equal(r.counts.venues, venueDocs().length);
-    assert.equal(r.counts.venues, 2765);
+    assert.equal(r.counts.venues, N_VENUES);
     assert.equal(r.counts.events, seedEvents().length);
     const v = await db.collection("venues").findOne({ _id: "node/26699558" as never });
     assert.ok(v && v.location.type === "Point" && v.location.coordinates[0] < 0 && v.name === "The Flying Horse" && v.category === "pub" && v.opening_hours && v.check_date === "2026-01-07");
@@ -84,9 +87,9 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
     const before = JSON.stringify(await db.collection("venues").find().sort({ _id: 1 }).toArray());
     const logs: string[] = [];
     const r = await seedAll(db, (m) => logs.push(m));
-    assert.equal(r.counts.venues, 2765);
+    assert.equal(r.counts.venues, N_VENUES);
     assert.equal(r.counts.events, seedEvents().length);
-    assert.ok(logs.some((l) => /^venues: 2765 docs \(0 new/.test(l)), logs.join("\n"));
+    assert.ok(logs.some((l) => new RegExp(`^venues: ${N_VENUES} docs \\(0 new`).test(l)), logs.join("\n"));
     assert.ok(logs.some((l) => /^events: \d+ docs \(0 new/.test(l)), logs.join("\n"));
     assert.equal(JSON.stringify(await db.collection("venues").find().sort({ _id: 1 }).toArray()), before);
   });
@@ -95,7 +98,7 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
     await test(`venues: $geoNear fallback for ${kind} within ${r} m matches the snapshot path exactly`, async () => {
       const res = await mongoVenuesNear(kind, c, r, db);
       assert.ok(res, "null result");
-      assert.match(res.via!, /^Searched 2,765 venues in MongoDB Atlas \(2dsphere \$geoNear; Atlas Search unavailable\)$/);
+      assert.match(res.via!, new RegExp(`^Searched ${N_FMT} venues in MongoDB Atlas \\(2dsphere \\$geoNear; Atlas Search unavailable\\)$`));
       assert.equal(res.stepSource, "MongoDB Atlas $geoNear");
       assert.equal(res.source, "MongoDB Atlas (OSM snapshot 24 Oct)");
       const got = res.places.map((p) => `${p.type}/${p.id}`).sort();
@@ -206,7 +209,7 @@ function fakeResult(over: Partial<PlanResultWithAgent> = {}): PlanResultWithAgen
     const venues = r.steps.find((s) => s.id === "venues");
     console.log("      venues step:", venues?.source, "|", venues?.detail);
     console.log("      compare step:", r.steps.find((s) => s.id === "compare")?.detail);
-    assert.match(venues?.detail ?? "", /Searched 2,765 venues in MongoDB Atlas/);
+    assert.match(venues?.detail ?? "", new RegExp(`Searched ${N_FMT} venues in MongoDB Atlas`));
     assert.ok(r.sources.some((s) => s.name === "MongoDB Atlas (OSM snapshot 24 Oct)"), JSON.stringify(r.sources));
     assert.ok(r.cards.length >= 1);
     assert.equal(await planRunWrite(r), true, "plan_runs insert should complete (route awaits this before closing)");

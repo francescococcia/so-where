@@ -293,8 +293,18 @@ export async function landmarkCard(l: Landmark, blurbDeps: BlurbDeps = {}): Prom
 export const LANDMARK_MIN = 0.6;
 /** "That's the University of Greenwich. Meet here, or find somewhere nearby?" */
 export const landmarkMessage = (name: string) => `That's ${/^the\s/i.test(name) ? "" : "the "}${name}. Meet here, or find somewhere nearby?`;
+// The model read a landmark-like name ("UNIVERSITY OF GREENWICH") but left `landmark` null: when no venue
+// matches, try that name as a landmark too (the resolver still needs a ≥0.8 name match inside London).
+const LANDMARK_WORDS = /\b(university|college|museum|gallery|cathedral|church|abbey|chapel|station|palace|tower|bridge|castle|observatory|library|theatre|hall|eye|market|monument|stadium|arena)\b/i;
+export function nameAsLandmark(x: SnapExtract): SnapLandmark | null {
+  const n = (x.name ?? x.signText ?? "").replace(/\s+/g, " ").trim();
+  if (n.length < 3 || n.length > 80 || !LANDMARK_WORDS.test(n) || x.kind === "pub" || x.kind === "cafe" || x.kind === "restaurant" || x.kind === "bar") return null;
+  const name = n === n.toUpperCase() ? n.toLowerCase().replace(/\b(\w)(\w*)/g, (_, a: string, b: string) => (/^(of|the|and|in|at)$/.test(a + b) ? a + b : a.toUpperCase() + b)).replace(/^./, (c) => c.toUpperCase()) : n;
+  return { name, confidence: 0.7 };
+}
+
 async function landmarkSnap(extracted: SnapExtract, base: { extracted: SnapExtract; suggestedQuery: null }, blurbDeps: BlurbDeps, budgetMs: number): Promise<Omit<PlaceSnapResponse, "model"> | null> {
-  const lm = extracted.landmark;
+  const lm = extracted.landmark ?? nameAsLandmark(extracted);
   if (!lm || lm.confidence < LANDMARK_MIN || budgetMs < 1500) return null;
   const l = await resolveLandmark(lm.name, { budgetMs: Math.min(6000, budgetMs - 1000) }).catch(() => null);
   if (!l) return null;

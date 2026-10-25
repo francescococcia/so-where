@@ -8,7 +8,8 @@ import { setForecastOverride } from "@/lib/weather";
 import { setClockOverride } from "@/lib/plan";
 import { londonToday } from "@/lib/dates";
 import { londonToUtc } from "@/lib/london-time";
-import { hoursAt } from "@/lib/osm";
+import { gridBbox, hoursAt, OVERPASS_MIRRORS, resetOverpassForTests } from "@/lib/osm";
+import { findVenues } from "@/lib/mongo-venues";
 import { backtrackPenalty, tidySegments, type LegSegment } from "@/lib/tfl";
 import { parsePlanAsk } from "@/lib/ask-local";
 import { parseDestination } from "@/lib/destination";
@@ -43,14 +44,14 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number; /** server8: card within maxM of this point, no such facts, never swapped by verify. */ near?: { lat: number; lng: number; maxM: number }; noFacts?: string[]; landmark?: boolean }; daysAhead?: number };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number; /** server8: card within maxM of this point, no such facts, never swapped by verify. */ near?: { lat: number; lng: number; maxM: number }; noFacts?: string[]; landmark?: boolean }; daysAhead?: number; /** server9: venues step detail/source matches; every card within maxM of a point. */ venuesFrom?: string; cardsNear?: { lat: number; lng: number; maxM: number } };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
 // `unit`: in-process checks of a helper (no HTTP): "hours" parses OSM opening_hours, "segments" tidies stretches.
 type HoursUnit = { oh: string; date: string; at: string; state: "open" | "closed" | "unknown"; closesAt?: string };
-type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7" | "server8";
+type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7" | "server8" | "server9";
   // server6 "snap a place": a fixture extract stands in for Gemini (test hook); the route runs for real (fixture image bytes).
   snap?: { extract: SnapExtract; landmark?: boolean; nearbyQuery?: string; kind?: string; at?: { lat: number; lng: number; maxM: number }; you?: { lat: number; lng: number }; area?: string; place?: string; suggestedQuery?: string; minCandidates?: number; message?: string; firstCandidate?: string; noCandidates?: boolean }; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
 // `clock`: pin "now" to HH:MM London (today if still ahead, else tomorrow, so live TfL/forecast calls stay in the
@@ -410,6 +411,54 @@ async function unitChecks(c: Case): Promise<Chk[]> {
       setLandmarkResolverForTests(null);
     }
   }
+  if (c.unit === "server9") {
+    // Thin Atlas result (Atlas only holds the central hubs): the bundled snapshot, then live Overpass, top it up.
+    const thin = (n = 0) => ({ places: [], source: "MongoDB Atlas (OSM snapshot 24 Oct)", asOf: "2026-10-24T19:44:45.780Z", live: false, ms: 1, note: "Venues come from the OSM snapshot of 24 Oct stored in MongoDB Atlas, not a live Overpass call", via: `Searched ${n} venues in MongoDB Atlas (2dsphere $geoNear)`, stepSource: "MongoDB Atlas $geoNear" });
+    const calls: string[] = [];
+    let mode: "ok" | "hang" = "ok";
+    const fake = (async (u: string | URL | Request, init?: RequestInit) => {
+      const url = String(u);
+      calls.push(`${new URL(url).host} ${decodeURIComponent(String(init?.body ?? ""))}`);
+      if (mode === "hang") return new Promise<Response>((_, rej) => init?.signal?.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "TimeoutError" }))));
+      if (url.includes("overpass-api.de")) throw Object.assign(new Error("timeout"), { name: "TimeoutError" });
+      if (url.includes("kumi")) return new Response("busy", { status: 429 });
+      const el = (id: number, lat: number, lng: number, name: string, oh?: string) => ({ type: "node", id, lat, lon: lng, tags: { amenity: "cafe", name, cuisine: "coffee_shop", ...(oh ? { opening_hours: oh } : {}) } });
+      return new Response(JSON.stringify({ elements: [el(9001, 51.6501, -0.2001, "Fixture Beans", "Mo-Su 08:00-18:00"), el(9002, 51.6505, -0.2010, "Fixture Brew", "Mo-Su 07:00-17:00"), el(9003, 51.6490, -0.1995, "Fixture Cup"), { type: "way", id: 9004, center: { lat: 51.6503, lon: -0.2003 }, tags: { amenity: "pub", name: "Not A Cafe" } }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    const deps = { fetch: fake, mirrors: OVERPASS_MIRRORS };
+    resetOverpassForTests();
+    add("mirrors in order: overpass-api.de, overpass.kumi.systems, overpass.private.coffee", OVERPASS_MIRRORS.map((u) => new URL(u).host).join(",") === "overpass-api.de,overpass.kumi.systems,overpass.private.coffee" || !!process.env.OVERPASS_URLS || !!process.env.OVERPASS_URL, OVERPASS_MIRRORS);
+    // Greenwich: Atlas empty → the bundled snapshot (outer-hub extract) has enough, so no live call.
+    const GREENWICH = { lat: 51.4831, lng: -0.0061 };
+    const g = await findVenues("cafe", GREENWICH, 1200, { mongo: thin(2765), overpass: deps });
+    add("Greenwich: Atlas empty → ≥3 cafés from the bundled snapshot, no live call", g.places.length >= 3 && calls.length === 0 && /bundled OSM snapshot/.test(g.via ?? "") && !!g.more?.some((m) => m.source === "OSM snapshot"), { n: g.places.length, via: g.via, calls: calls.length });
+    // Nowhere in Atlas or the snapshot: live Overpass, first two mirrors fail, the third answers.
+    const FAR = { lat: 51.65, lng: -0.2 };
+    const f = await findVenues("cafe", FAR, 600, { mongo: thin(2765), overpass: deps });
+    add("live fallback: mirrors tried in order until one answers", calls.map((x) => x.split(" ")[0]).join(",") === "overpass-api.de,overpass.kumi.systems,overpass.private.coffee", calls.map((x) => x.split(" ")[0]));
+    const bb = gridBbox(FAR, 600);
+    add("live query: cafe filter inside the grid-snapped bbox, timeout 6", /\[timeout:6\]/.test(calls[0] ?? "") && calls[0].includes('nwr["amenity"="cafe"]["name"]') && calls[0].includes(`(${bb.join(",")})`), calls[0]);
+    add("gridBbox covers the circle", metresBetween(FAR, { lat: bb[0], lng: FAR.lng }) >= 600 && metresBetween(FAR, { lat: bb[2], lng: FAR.lng }) >= 600 && metresBetween(FAR, { lat: FAR.lat, lng: bb[1] }) >= 600 && metresBetween(FAR, { lat: FAR.lat, lng: bb[3] }) >= 600, bb);
+    add("live venues mapped into the venue shape (cafés only, sorted, distances)", f.places.length === 3 && f.places.every((p) => p.tags.amenity === "cafe" && p.type === "node" && typeof p.distanceM === "number") && f.places[0].distanceM <= f.places[2].distanceM, f.places.map((p) => [p.tags.name, Math.round(p.distanceM)]));
+    const beans = f.places.find((p) => p.tags.name === "Fixture Beans");
+    const at11 = londonToUtc("2026-10-26", 11, 0);
+    add("hours from live OSM parsed by osm.ts (open at 11:00, until 18:00)", !!beans && hoursAt(beans.tags, at11, beans.location).state === "open" && hoursAt(beans.tags, at11, beans.location).closesAt === "18:00", beans && hoursAt(beans.tags, at11, beans.location));
+    add("step detail says 'OSM live (Overpass, <mirror>)'; sources list it; live, no snapshot-only note", /OSM live \(Overpass, overpass\.private\.coffee\)/.test(f.via ?? "") && /OSM live \(Overpass\)/.test(f.stepSource ?? "") && !!f.more?.some((m) => m.source === "OSM live (Overpass)") && f.live && !f.note, { via: f.via, stepSource: f.stepSource, more: f.more, note: f.note });
+    const before = calls.length;
+    const f2 = await findVenues("cafe", { lat: 51.6502, lng: -0.2001 }, 600, { mongo: thin(2765), overpass: deps });
+    add("10-min in-process cache keyed by grid bbox + category (nearby repeat: no new call)", calls.length === before && f2.places.length === 3 && /cached/.test(f2.via ?? ""), { calls: calls.length - before, via: f2.via });
+    await findVenues("restaurant", FAR, 600, { mongo: thin(2765), overpass: deps });
+    add("a different category is a different cache key", calls.length > before, calls.length - before);
+    // Budget: every mirror hangs → per-mirror timeout and the total budget stop it.
+    resetOverpassForTests();
+    mode = "hang";
+    const t0 = Date.now();
+    const h = await findVenues("cafe", FAR, 600, { mongo: thin(2765), overpass: { ...deps, perMirrorMs: 250, budgetMs: 600 } });
+    const took = Date.now() - t0;
+    add("budget: hung mirrors stop within the total budget; Atlas result kept with the failure in the detail", took < 1500 && h.places.length === 0 && /live Overpass failed/.test(h.via ?? "") && !h.live, { took, via: h.via });
+    resetOverpassForTests();
+    add("snapshot file under 8 MB", readFileSync("src/data/osm-snapshot.json").length < 8_000_000, readFileSync("src/data/osm-snapshot.json").length);
+  }
   if (c.unit === "server5") {
     const today = "2026-10-25";
     // "When do I leave?" follow-ups (typos included) vs real refinements.
@@ -510,6 +559,11 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
   add("no '[…]' placeholder in any output string", placeholders.length === 0, placeholders.slice(0, 3));
   add("≤3 cards", r.cards.length <= 3, r.cards.length);
   if (e.minCards) add(`≥${e.minCards} card`, r.cards.length >= e.minCards, r.cards.length);
+  if (e.venuesFrom) {
+    const st = r.steps.find((x) => x.id === "venues");
+    add(`venues step says where from (/${e.venuesFrom}/)`, !!st && new RegExp(e.venuesFrom).test(`${st.detail} [${st.source}]`), st && `${st.detail} [${st.source}]`);
+  }
+  if (e.cardsNear) add(`every card within ${e.cardsNear.maxM} m of ${e.cardsNear.lat}, ${e.cardsNear.lng}`, r.cards.length > 0 && r.cards.every((k) => metresBetween(k.location, e.cardsNear!) <= e.cardsNear!.maxM), r.cards.map((k) => [k.name, Math.round(metresBetween(k.location, e.cardsNear!))]));
   const facts = r.cards.flatMap((x) => x.facts);
   add("every fact has a source", facts.every((f) => typeof f.source === "string" && f.source.trim().length > 0), facts.length);
   add("every source has asOf", r.sources.length > 0 && r.sources.every((s) => !!s.asOf), r.sources.map((s) => s.name));
