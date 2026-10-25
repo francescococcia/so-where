@@ -9,7 +9,7 @@ import { VerdictChip } from "./verdict-chip";
 import { fmtAsOf, fmtTime, gmapsDirections } from "./format";
 import { WeatherIcon, weatherKind } from "./fact-icon";
 import { CuisineChip, ROUTE, splitSubtitle } from "./plan-card";
-import { JourneySentence } from "./journey";
+import { JourneyTimeline } from "./journey";
 import { useActiveSeg } from "./vehicles";
 import { PhotoHero, RatingSlot, placeMeta, whyHere } from "./place-photo";
 import { BestFor, LeaveByChip, SourcePill, leaveByOf } from "./blurb";
@@ -73,17 +73,12 @@ function Tile({ label, value, dot, tone, i }: { label: string; value: string; do
   );
 }
 
-/** One person's journey; the segment the map vehicle is on gets a soft highlight. */
+/** One person's journey as a step timeline; the step the map vehicle is on gets a soft highlight. */
 function JourneyRow({ cardId, leg, area }: { cardId: string; leg: Leg; area?: string }) {
   const active = useActiveSeg(cardId, leg.who);
   return (
-    <li className="grid grid-cols-[auto_1fr] gap-x-2.5 text-[14px] text-ink-2">
-      <span className={cn("mt-[7px] size-2.5 rounded-full ring-2 ring-white transition-transform duration-300", active != null && "scale-125")} style={{ background: ROUTE[leg.who] }} aria-hidden />
-      <span>
-        <span className="font-semibold text-ink">{leg.who === "you" ? "You" : "Them"} </span>
-        <JourneySentence leg={leg} active={active} />
-        {area ? <span className="block text-[12px] text-ink-3">from ~{area}</span> : null}
-      </span>
+    <li>
+      <JourneyTimeline leg={leg} active={active} who={leg.who === "you" ? "You" : "Them"} color={ROUTE[leg.who]} area={area} />
     </li>
   );
 }
@@ -187,7 +182,7 @@ export function PlaceDetail({ card, result, example, onClose, onSend }: { card: 
       ) : null}
 
       {/* Journeys */}
-      <motion.ul {...item(4)} className="flex flex-col gap-2.5">
+      <motion.ul {...item(4)} className="flex flex-col gap-4">
         {card.legs.map((l, k) => (
           <JourneyRow key={l.who + k} cardId={card.id} leg={l} area={l.who === "them" ? result.them?.area : undefined} />
         ))}

@@ -182,6 +182,93 @@ export function JourneySentence({ leg, small, className, active }: { leg: Leg; s
   );
 }
 
+// ---------- Step list (ui14): compact one-liner for cards, vertical timeline for the detail panel ----------
+
+const segColor = (seg: Segment) => (seg.mode === "walk" ? WALK_GREY : lineHex(seg) ?? "#4a4d55");
+const lineLabel = (seg: Segment) => seg.line ?? MODE_WORD[seg.mode].replace(/^./, (c) => c.toUpperCase());
+const mins = (seg: Segment) => (seg.minutes != null ? `${seg.est ? "~" : ""}${seg.minutes} min` : "");
+
+/** "Walk 3 min to Elephant & Castle" / "Bus 63 · Elephant & Castle → Southwark · 6 min". */
+export function stepText(seg: Segment): { lead: string; rest: string } {
+  if (seg.mode === "walk") return { lead: `Walk${mins(seg) ? ` ${mins(seg)}` : ""}`, rest: seg.to ? `to ${seg.to}` : "" };
+  const route = seg.from && seg.to ? `${seg.from} → ${seg.to}` : seg.to ? `to ${seg.to}` : seg.from ? `from ${seg.from}` : "";
+  return { lead: lineLabel(seg), rest: [route, mins(seg)].filter(Boolean).join(" · ") };
+}
+
+/** Card one-liner: "[walk 3] → [Bus 63] → [walk 6]", never wraps (clips at the card edge). */
+export function JourneyCompact({ leg, className }: { leg: Leg; className?: string }) {
+  const segs = segmentsOf(leg);
+  const label = segs.map((sg, i) => `${i ? (sg.join === "or" ? " or " : " then ") : ""}${sg.mode === "walk" ? `walk ${sg.minutes ?? ""}`.trim() : lineLabel(sg)}`).join("");
+  return (
+    <span className={cn("flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap [mask-image:linear-gradient(90deg,#000_88%,transparent)]", className)} aria-label={label}>
+      {segs.map((sg, i) => (
+        <span key={i} className="inline-flex shrink-0 items-center gap-1" aria-hidden>
+          {i ? <span className="px-0.5 text-[11px] text-ink-3">{sg.join === "or" ? "or" : "→"}</span> : null}
+          {sg.mode === "walk" ? (
+            <span className="num inline-flex h-[18px] items-center gap-0.5 rounded-[6px] bg-sunk px-1.5 text-[11.5px] font-medium text-ink-2">
+              <Footprints className="size-3" />
+              {sg.minutes ?? ""}
+            </span>
+          ) : (
+            <LinePill seg={{ ...sg, line: lineLabel(sg).replace(/\s+line$/i, "") }} small />
+          )}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** Detail timeline: one row per step, badge on a thin connector coloured per step (dotted grey for walks). */
+export function JourneyTimeline({ leg, active, who, color, area, className }: { leg: Leg; active?: number | null; who: string; color: string; area?: string; className?: string }) {
+  const segs = segmentsOf(leg);
+  return (
+    <div className={className}>
+      <p className="flex items-baseline gap-2">
+        <span className="size-2.5 shrink-0 translate-y-[-1px] self-center rounded-full ring-2 ring-white" style={{ background: color }} aria-hidden />
+        <span className="text-[14.5px] font-semibold text-ink">
+          {who} <span className="num font-semibold">· {leg.minutes} min</span>
+        </span>
+        {area ? <span className="truncate text-[12px] text-ink-3">from ~{area}</span> : null}
+      </p>
+      <ol className="mt-1.5 flex flex-col">
+        {segs.map((sg, i) => {
+          const c = segColor(sg);
+          const last = i === segs.length - 1;
+          const { lead, rest } = stepText(sg);
+          const on = active === i;
+          return (
+            <li key={i} className="relative">
+              {sg.join === "or" ? <p className="mb-1 ml-[34px] font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-3">or</p> : null}
+              <div className={cn("relative grid grid-cols-[24px_1fr] items-start gap-x-2.5 rounded-[10px] py-1 pl-0.5 pr-2 transition-[background-color,box-shadow] duration-300", on && ACTIVE_SEG)} data-active={on || undefined}>
+                {/* connector to the next step, in this step's colour */}
+                {!last && segs[i + 1]?.join !== "or" ? (
+                  <span
+                    aria-hidden
+                    className="absolute bottom-[-6px] left-[13px] top-[26px] w-0"
+                    style={sg.mode === "walk" ? { borderLeft: `2px dotted ${c}` } : { borderLeft: `3px solid ${c}`, marginLeft: -0.5 }}
+                  />
+                ) : null}
+                <span
+                  className={cn("relative z-[1] grid size-6 place-items-center rounded-full transition-transform duration-300", on && "scale-110", sg.mode === "walk" ? "bg-white text-ink-3 ring-1 ring-line" : "shadow-e1")}
+                  style={sg.mode === "walk" ? undefined : { background: c, color: inkOn(c) }}
+                  aria-hidden
+                >
+                  <ModeIcon mode={sg.mode} className="size-3.5" />
+                </span>
+                <p className="min-w-0 pt-[3px] text-[13.5px] leading-[18px] text-ink-2">
+                  <span className="font-semibold text-ink">{lead}</span>
+                  {rest ? <span className="num"> {sg.mode === "walk" ? rest : `· ${rest}`}</span> : null}
+                </p>
+              </div>
+              {!last ? <div className="h-1.5" aria-hidden /> : null}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
 // ---------- Map geometry: one coloured stretch per segment ----------
 
 type LL = { lat: number; lng: number };

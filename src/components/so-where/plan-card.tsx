@@ -6,7 +6,7 @@ import type { Fact, PlanCard as Card, Verdict } from "@/lib/plan-types";
 import { cn } from "@/lib/utils";
 import { PhotoThumb } from "./place-photo";
 import { CountUp, useTilt } from "./motion-bits";
-import { JourneySentence } from "./journey";
+import { JourneyCompact } from "./journey";
 import { TONE_CLASS, costAnswer, cuisineChip, openAnswer } from "./answers";
 import { WeatherIcon, weatherKind } from "./fact-icon";
 import { BestFor, BlurbShimmer, cardArea, noPlaceholder } from "./blurb";
@@ -140,12 +140,13 @@ export function PlanCard({
 
             <ul className="mt-2.5 flex flex-col gap-1.5">
               {card.legs.map((l, k) => (
-                <li key={l.who + k} className="grid grid-cols-[auto_1fr] gap-x-2 text-[13px] text-ink-2">
-                  <span className="mt-[7px] size-2 rounded-full" style={{ background: ROUTE[l.who] }} aria-hidden />
-                  <span>
-                    {card.legs.length > 1 ? <span className="font-semibold text-ink">{WHO[l.who]}: </span> : null}
-                    <JourneySentence leg={l} small />
+                <li key={l.who + k} className="flex min-w-0 items-center gap-2 text-[13px] text-ink-2">
+                  <span className="size-2 shrink-0 rounded-full" style={{ background: ROUTE[l.who] }} aria-hidden />
+                  <span className="num shrink-0 font-semibold text-ink">
+                    {card.legs.length > 1 ? `${WHO[l.who]} · ` : ""}
+                    {l.minutes} min
                   </span>
+                  <JourneyCompact leg={l} className="min-w-0 flex-1" />
                 </li>
               ))}
             </ul>
