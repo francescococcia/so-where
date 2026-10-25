@@ -7,6 +7,13 @@ import { GoogleGenAI, Modality } from "@google/genai";
 export const TEXT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
 export const AUDIO_MODEL = "gemini-3.5-live-translate-preview";
 
+/** Translations come back as natural English ("See you at X", "Let's meet at X"); the planner's rules read "Meet at X". */
+export function plannerEnglish(t: string): string {
+  return t
+    .replace(/^\s*(?:see you|let'?s meet|we(?:'ll| will)? meet|i(?:'ll| will)? meet you|meeting)\s+(at|in|by)\b/i, (_m, p: string) => `Meet ${p.toLowerCase()}`)
+    .replace(/^\s*(?:take|bring|get) me to\b/i, "Get me to");
+}
+
 export type Translation = { lang: string; langName: string; english: string; model: string | null; original?: string };
 
 /** Native names for the chip ("Italiano · translated by …"). */
@@ -94,7 +101,7 @@ Message: ${JSON.stringify(t)}`,
   const english = typeof o?.english === "string" ? o.english.trim() : "";
   if (!english) return null;
   const lang = code(o?.lang);
-  return { lang, langName: langName(lang), english: english.slice(0, 500), model: r.model };
+  return { lang, langName: langName(lang), english: plannerEnglish(english).slice(0, 500), model: r.model };
 }
 
 /** English reply → the user's language, venue names and times kept as-is. */
@@ -155,7 +162,7 @@ export async function audioToEnglish(pcm: Buffer): Promise<{ original: string; e
   }
   english = english.replace(/\s+/g, " ").trim();
   original = original.replace(/\s+/g, " ").trim();
-  return english ? { original: original || english, english, model: AUDIO_MODEL } : null;
+  return english ? { original: original || english, english: plannerEnglish(english), model: AUDIO_MODEL } : null;
 }
 
 /** Language of a short transcript, for the chip and the reply language (cheap text call). */
