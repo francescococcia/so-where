@@ -19,7 +19,8 @@ import { forecastAt, type Forecast } from "@/lib/weather";
 import { weatherDecision, weatherFitFact, weatherMode, weatherRank, type WeatherMode } from "@/lib/venue-weather";
 import { applyRefinements, clock12, cuisineLabel, cuisineMatch, cuisineOf, joinRefine, pickHub, prefRank, refineReply, seatingWish, splitRefine, type Pref, type RefinedAsk, type Refinement } from "@/lib/refine";
 import { goDraft, meetDraft, nearDraft } from "@/lib/draft-message";
-import { eventDates, parseDestination, resolveDestination, shortDay, type Destination } from "@/lib/destination";
+import { eventDates, nameScore, parseDestination, resolveDestination, shortDay, type Destination } from "@/lib/destination";
+import { resolveLandmark } from "@/lib/landmark";
 import type { Blurb } from "@/lib/blurb";
 import { mentionsArea, sameArea, scrubArea, venueArea } from "@/lib/venue-area";
 import { STEP_FREE_ASK, verifyPicks, type PlanResultVerified } from "@/lib/verify";
@@ -82,6 +83,11 @@ async function resolveTyped(typed: string): Promise<Resolved> {
   }
   if (g.confidence === "medium") return { place: null, readAs: null, suggestions, confidence: "medium" };
   const t = await searchPlace(typed);
+  // Not a station or area TfL knows by that name: a landmark ("University of Greenwich") via Wikidata / Nominatim.
+  if (!t.place || nameScore(typed, t.place.name) < 0.6) {
+    const lm = await resolveLandmark(typed, { budgetMs: 4000, skipTfl: true }).catch(() => null);
+    if (lm) return { place: { query: typed, name: lm.name, id: null, location: lm.location, modes: [], source: lm.source, asOf: lm.asOf }, readAs: null, suggestions, confidence: "low" };
+  }
   return { place: t.place, readAs: null, suggestions, confidence: "low" };
 }
 
@@ -909,10 +915,10 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
   }
   if (ask.youApprox) unknowns.push("Your side is a broad area, not a station, so your journey time is approximate.");
 
-  const endPlace = begin("place", "Finding the place you named", "Atlas Search · OSM · postcodes.io");
+  const endPlace = begin("place", "Finding the place you named", "Atlas Search · OSM · postcodes.io · Wikidata");
   const found = await resolveDestination(dest, ctx.you);
   if (!found) {
-    endPlace("failed", "No match in the OSM venues, Nominatim or a postcode");
+    endPlace("failed", "No match in the OSM venues, Nominatim, Wikidata or a postcode");
     addSource(sources, "OSM Nominatim", new Date().toISOString());
     for (const [id, label] of [["travel", "Checking TfL journeys"], ["lines", "Checking line status"], ["weather", "Checking the forecast"]]) begin(id, label)("skipped", "Needs the place first");
     unknowns.push(`Couldn't place "${dest.venue}": add the street or postcode and try again.`);
@@ -962,8 +968,8 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
     // The event's own times ("Fri 23 Oct 12:00 – Sun 25 Oct 16:30"), never the trip's now-slot as its start.
     facts.push(fact("When", ev?.end ? `${shortDay(ev.start)}${ev.startTime ? ` ${ev.startTime}` : ""} – ${shortDay(ev.end)}${dest.endTime ? ` ${dest.endTime}` : ""}${ev.status === "past" ? " (over)" : ev.status === "ongoing" ? " (on now)" : ""}` : ev?.status === "past" ? `${span}${ev.startTime ? ` ${ev.startTime}` : ""}${dest.endTime ? `${ev.startTime ? "–" : ", until "}${dest.endTime}` : ""} (over)` : `${londonLabel(when)}${dest.endTime && (ev?.startTime || !ev) ? `–${dest.endTime}` : ""}`, "likely", "Your ask"));
     unknowns.push(`${dest.title}: date, time and entry are as given (e.g. on the poster), not checked against a listing.`);
-  } else if (h) facts.push(fact(`Open ${londonDayShort(when)}`, h.value, h.verdict, found.source, found.asOf));
-  else unknowns.push(`${found.name}: opening hours not listed.`);
+  } else if (h && !found.landmark) facts.push(fact(`Open ${londonDayShort(when)}`, h.value, h.verdict, found.source, found.asOf));
+  else if (!found.landmark) unknowns.push(`${found.name}: opening hours not listed.`);
   facts.push(
     a || b
       ? fact("Travel", `TfL planner: you ${a ? `${a.minutes} min` : "no time"}${ctx.them ? `, ${who} ${b ? `${b.minutes} min` : "no time"}` : ""} to ${found.name}, arriving by ${t}`, "confirmed", "TfL", (a ?? b)!.fetchedAt)
@@ -987,7 +993,7 @@ async function goTo(ctx: Ctx & { dest: Destination; you: LatLng & { id?: string 
     id: isEvent ? `dest-${slug}` : (found.id ?? `dest-${slug}`),
     kind: isEvent ? "event" : "venue",
     name: isEvent ? dest.title! : found.name,
-    subtitle: (isEvent ? [`${londonDayShort(when)} ${t}${dest.endTime ? `–${dest.endTime}` : ""}`, found.name, addr] : [kindLabel(tags), addr]).filter(Boolean).join(" · "),
+    subtitle: (isEvent ? [`${londonDayShort(when)} ${t}${dest.endTime ? `–${dest.endTime}` : ""}`, found.name, addr] : [found.landmark ? "Landmark" : kindLabel(tags), addr]).filter(Boolean).join(" · "),
     ...areaOf(tags, found.location),
     location: found.location,
     legs,

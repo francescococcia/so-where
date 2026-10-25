@@ -313,7 +313,8 @@ const THEM_PRONOUN_RE = /\b(she|he|they)(?:'s|'re| is| are| lives| works| will b
 const THEM_NAME_RE = /\b([A-Z][a-z]{1,15})(?:'s| is| lives| works| will be)\s+(?:currently\s+|now\s+|based\s+)?(?:at|in|near|around|by|over in|coming from|from)\s+([^,.;!?]+)/;
 const WITH_FROM_RE = /\bwith\s+(?:my\s+\w+\s+|([A-Z][a-z]{1,15})\s+)?(?:who'?s\s+|who is\s+)?(?:in|from|at|near|around)\s+([A-Z][^,.;!?]+)/;
 const BETWEEN_RE = /\bbetween\s+([A-Z][^,.;!?]+?)\s+and\s+([A-Z][^,.;!?]+)/;
-const NEAR_PLACE_RE = /\b(?:near|around|in|by)\s+((?:[A-Z][\w'&.-]*)(?:\s+(?:[A-Z&][\w'&.-]*|and\s+Castle))*)/;
+// "near University of Greenwich", "near Museum of the Home": "of (the)" joins capitalised words.
+const NEAR_PLACE_RE = /\b(?:near|around|in|by)\s+((?:[A-Z][\w'&.-]*)(?:\s+(?:[A-Z&][\w'&.-]*|and\s+Castle|of(?:\s+the)?\s+[A-Z][\w'&.-]*))*)/;
 
 /** No other person: "i'm solo", "alone", "just me", "no one", "on my own". */
 export const SOLO_RE = /\b(?:solo|alone|by myself|on my own)\b|\bjust (?:me|myself)\b|\bonly me\b|\bno[- ]?one\b|\bnobody\b/i;

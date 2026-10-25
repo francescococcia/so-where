@@ -14,6 +14,7 @@ import { visionGenerate } from "@/lib/vision";
 import { getDb, withTimeout } from "@/lib/mongo";
 import { VENUES_SEARCH_INDEX, type VenueDoc } from "@/lib/mongo-seed";
 import { findVenues } from "@/lib/mongo-venues";
+import { resolveLandmark, type Landmark } from "@/lib/landmark";
 import { addressOf, hoursAt, kindLabel, type OsmKind } from "@/lib/osm";
 import type { PlanCardWithHours } from "@/lib/plan";
 import type { Fact, LatLng } from "@/lib/plan-types";
@@ -24,11 +25,14 @@ export type SnapKind = "pub" | "cafe" | "restaurant" | "bar" | "shop" | "other";
 /** What the photo itself shows about the place: tags only for things visible (cosy, busy, terrace, outdoor seating, dog-friendly …),
  *  line ≤90 chars. Never ratings or claims the photo can't show. null when nothing is visible beyond the sign. */
 export type SnapVibe = { tags: string[]; line: string };
-export type SnapExtract = { name: string | null; kind: SnapKind; signText: string | null; cuisine: string | null; confidence: number; vibe: SnapVibe | null };
+/** A recognisable building / landmark (university, museum, station, church, famous building), from its architecture
+ *  as well as any text. null when it's not one (or the model can't tell). */
+export type SnapLandmark = { name: string; confidence: number };
+export type SnapExtract = { name: string | null; kind: SnapKind; signText: string | null; cuisine: string | null; confidence: number; vibe: SnapVibe | null; landmark: SnapLandmark | null };
 /** A plan-style card for the snapped place, plus flat lat/lng/address and the /api/photo lookup for it. */
 /** opensAt: London "HH:MM" of the next opening when closed now (null when open/unknown/no opening in 7 days);
  *  opensDay: short day ("Mon") when that opening is not today, else null. */
-export type SnapCard = PlanCardWithHours & { lat: number; lng: number; address: string | null; opensAt: string | null; opensDay: string | null; photoQuery: string };
+export type SnapCard = Omit<PlanCardWithHours, "kind"> & { /** "landmark": a recognised building, not a venue: hoursKnown false, no Open fact. */ kind: PlanCardWithHours["kind"] | "landmark"; lat: number; lng: number; address: string | null; opensAt: string | null; opensDay: string | null; photoQuery: string };
 export type SnapCandidate = { id: string; name: string; lat: number; lng: number; address: string | null; area: string | null; suggestedQuery: string };
 export type PlaceSnapResponse = {
   extracted: SnapExtract;
@@ -36,6 +40,8 @@ export type PlaceSnapResponse = {
   candidates?: SnapCandidate[];
   message?: string;
   suggestedQuery: string | null;
+  /** Landmark snaps: "Coffee near <name>" (find somewhere nearby instead of meeting at the landmark itself). */
+  nearbyQuery?: string;
   /** Vision model that read the photo ("test-fixture" under the eval hook). */
   model: string;
 };
@@ -51,15 +57,17 @@ const SCHEMA = {
     cuisine: S,
     confidence: { type: "NUMBER" },
     vibe: { type: "OBJECT", nullable: true, properties: { tags: { type: "ARRAY", items: { type: "STRING" } }, line: { type: "STRING" } }, required: ["tags", "line"] },
+    landmark: { type: "OBJECT", nullable: true, properties: { name: { type: "STRING" }, confidence: { type: "NUMBER" } }, required: ["name", "confidence"] },
   },
   required: ["kind", "confidence"],
-  propertyOrdering: ["name", "kind", "signText", "cuisine", "confidence", "vibe"],
+  propertyOrdering: ["name", "kind", "signText", "cuisine", "confidence", "vibe", "landmark"],
 };
 const PROMPT = [
   "This photo shows a place in London: a shop front, pub sign, café or restaurant front, its sign, or the inside of one. Fill the JSON fields.",
   `name: the place's name as on the sign, in normal capitalisation ("THE KINGS ARMS" → "The Kings Arms"); not a brand on an awning ad, not a street name. null if no name is readable.`,
-  `kind: pub | cafe | restaurant | bar | shop | other (other = not a venue). If the photo is taken inside a place, kind is what the room looks like (coffee counter → cafe, beer taps → pub). signText: the main sign text exactly as printed, one line; indoors, any visible words such as a brand on a banner, menu board or cups. cuisine: e.g. "thai", "italian", "coffee" if the sign shows it, else null.`,
+  `kind: pub | cafe | restaurant | bar | shop | other (other = not a venue). If the photo is taken inside a place, kind is what the room looks like (coffee counter → cafe, beer taps → pub). signText: only text actually on a sign (or, indoors, a brand on a banner, menu board or cups), exactly as printed, one line; not dates, times, captions, on-screen or overlay text unless clearly part of the sign. cuisine: e.g. "thai", "italian", "coffee" if the sign shows it, else null.`,
   "confidence 0–1 for how sure you are of the name. Never invent a name.",
+  `landmark: if the photo shows a recognisable building or landmark in London (a university, museum, gallery, station, church or cathedral, palace, bridge, famous building), recognised from its architecture as well as any text: {name: its usual full name ("Old Royal Naval College", "University of Greenwich", "St Paul's Cathedral"), confidence 0–1}. Also when the photo is of a screen or a print showing it. null for ordinary shops, pubs, cafés and restaurants, or if you can't tell.`,
   `vibe: only what is VISIBLE in this photo. tags: up to 5 short lowercase tags such as "cosy", "busy", "quiet", "terrace", "outdoor seating", "dog-friendly" (only if a dog/bowl/sign is visible), "flower baskets", "candlelit", "big windows". line: one plain sentence ≤90 characters describing what the photo shows ("Corner pub with hanging baskets and a few tables outside"). No ratings, stars, prices, opinions of quality, or anything you can't see: don't infer tags from words on a sign (a "beer garden" sign isn't visible outdoor seating). null if nothing beyond the sign is visible.`,
 ].join("\n");
 
@@ -67,7 +75,14 @@ const str = (v: unknown, max = 120) => (typeof v === "string" && v.trim() ? v.tr
 export function cleanSnap(raw: unknown): SnapExtract {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const conf = typeof o.confidence === "number" && Number.isFinite(o.confidence) ? Math.max(0, Math.min(1, o.confidence)) : 0;
-  return { name: str(o.name, 80), kind: KINDS.find((k) => k === o.kind) ?? "other", signText: str(o.signText, 160), cuisine: str(o.cuisine, 30)?.toLowerCase() ?? null, confidence: Math.round(conf * 100) / 100, vibe: cleanVibe(o.vibe) };
+  return { name: str(o.name, 80), kind: KINDS.find((k) => k === o.kind) ?? "other", signText: str(o.signText, 160), cuisine: str(o.cuisine, 30)?.toLowerCase() ?? null, confidence: Math.round(conf * 100) / 100, vibe: cleanVibe(o.vibe), landmark: cleanLandmark(o.landmark) };
+}
+export function cleanLandmark(v: unknown): SnapLandmark | null {
+  const o = v && typeof v === "object" ? (v as { name?: unknown; confidence?: unknown }) : null;
+  const name = str(o?.name, 80);
+  if (!o || !name || name.length < 3) return null;
+  const c = typeof o.confidence === "number" && Number.isFinite(o.confidence) ? Math.max(0, Math.min(1, o.confidence)) : 0;
+  return { name, confidence: Math.round(c * 100) / 100 };
 }
 
 // Ratings / quality claims a photo can't support.
@@ -241,6 +256,52 @@ export async function snapCard(v: Venue, now: Date, blurbDeps: BlurbDeps = {}, w
   };
 }
 
+/** A recognised landmark as a card: no hours (hoursKnown false, no Open fact), area + address, strict Wikipedia blurb. */
+export async function landmarkCard(l: Landmark, blurbDeps: BlurbDeps = {}): Promise<SnapCard> {
+  const area = venueArea({ name: l.name }, l.location);
+  const url = l.tags.wikipedia ? `https://en.wikipedia.org/wiki/${encodeURIComponent(l.tags.wikipedia.slice(3).replace(/ /g, "_"))}` : l.tags.wikidata ? `https://www.wikidata.org/wiki/${l.tags.wikidata}` : l.id?.startsWith("osm-") ? `https://www.openstreetmap.org/${l.id.split("-")[1]}/${l.id.split("-")[2]}` : undefined;
+  const id = l.id ?? `landmark-${l.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 50)}`;
+  // Landmark kind → blurb.ts' strict match: the Wikipedia article must be this name and within 300 m.
+  const blurb: Blurb | null = await buildBlurb({ id, name: l.name, kind: "Landmark", tags: l.tags, location: l.location, area, closesAt: null, ...(url ? { url } : {}) }, "friends", blurbDeps).catch(() => null);
+  const pq = new URLSearchParams({ name: l.name, lat: String(l.location.lat), lng: String(l.location.lng) });
+  if (l.id?.startsWith("osm-")) pq.set("osm", l.id);
+  if (l.tags.wikidata) pq.set("wikidata", l.tags.wikidata);
+  return {
+    id,
+    kind: "landmark",
+    name: l.name,
+    subtitle: ["Landmark", l.address].filter(Boolean).join(" · "),
+    ...(area ? { area } : {}),
+    location: l.location,
+    lat: l.location.lat,
+    lng: l.location.lng,
+    address: l.address,
+    legs: [],
+    facts: [fact("Located", `${l.how} (recognised from the photo)`, "likely", l.source, l.asOf)],
+    why: "The landmark in your photo.",
+    ...(url ? { url } : {}),
+    openAtPlan: null,
+    closesAt: null,
+    closingSoon: false,
+    opensAt: null,
+    opensDay: null,
+    hoursKnown: false,
+    ...(blurb ? { blurb } : {}),
+    photoQuery: `/api/photo?${pq.toString()}`,
+  };
+}
+export const LANDMARK_MIN = 0.6;
+/** "That's the University of Greenwich. Meet here, or find somewhere nearby?" */
+export const landmarkMessage = (name: string) => `That's ${/^the\s/i.test(name) ? "" : "the "}${name}. Meet here, or find somewhere nearby?`;
+async function landmarkSnap(extracted: SnapExtract, base: { extracted: SnapExtract; suggestedQuery: null }, blurbDeps: BlurbDeps, budgetMs: number): Promise<Omit<PlaceSnapResponse, "model"> | null> {
+  const lm = extracted.landmark;
+  if (!lm || lm.confidence < LANDMARK_MIN || budgetMs < 1500) return null;
+  const l = await resolveLandmark(lm.name, { budgetMs: Math.min(6000, budgetMs - 1000) }).catch(() => null);
+  if (!l) return null;
+  const place = await landmarkCard(l, { ...blurbDeps, budgetMs: Math.max(800, Math.min(blurbDeps.budgetMs ?? 3200, budgetMs - 500)) });
+  return { ...base, place, message: landmarkMessage(l.name), suggestedQuery: `Meet at ${l.name}`, nearbyQuery: `Coffee near ${l.name}` };
+}
+
 const NO_MATCH = "Couldn't spot that one — where are you?";
 export const NO_NAME_NEARBY = "Can't see a name. Is it one of these nearby?";
 export const NO_NAME_WHERE = "Can't see a name. Where are you?";
@@ -296,7 +357,11 @@ export async function snapPlace(extracted: SnapExtract, opts: { you?: LatLng | n
   const base = { extracted, suggestedQuery: null };
   const areaAt = opts.area ? matchPlace(opts.area) : null;
   const near = opts.you ?? (areaAt && areaAt.confidence !== "low" && areaAt.best ? areaAt.best.entry.location : null);
+  const left = () => (opts.budgetMs ?? 14_000) - (Date.now() - t0);
   if (!extracted.name || extracted.confidence < 0.3) {
+    // No venue name, but a recognised building (university, museum, station…): place it and offer "meet here / nearby".
+    const lm = await landmarkSnap(extracted, base, deps.blurb ?? {}, left());
+    if (lm) return lm;
     // Indoors / no readable name: rank what's right around you (or the area you gave) by the kind of place,
     // the photo's vibe and any visible text (brands on banners, cups), and ask which one it is.
     if (!near) return { ...base, message: NO_NAME_WHERE };
@@ -330,6 +395,10 @@ export async function snapPlace(extracted: SnapExtract, opts: { you?: LatLng | n
   // No location (or nothing that name close by): search London by name.
   const { rows, via: byName } = await venuesNamed(name, db);
   const all = distinct(rows.sort((a, b) => score(b) - score(a) || kindFirst(extracted.kind)(a) - kindFirst(extracted.kind)(b)));
+  if (!all.length) {
+    const lm = await landmarkSnap(extracted, base, blurbDeps, left());
+    if (lm) return lm;
+  }
   if (!all.length) return { ...base, message: near ? "Couldn't spot that one around there. Try a closer photo of the sign, or type the name." : NO_MATCH };
   const ranked = near ? [...all].sort((a, b) => metresBetween(a.location, near) - metresBetween(b.location, near)) : all;
   if (ranked.length === 1) {

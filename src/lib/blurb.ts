@@ -100,7 +100,8 @@ async function wikipedia(f: typeof fetch, x: BlurbInput, left: () => number): Pr
   const s = await getJson<{ extract?: string; description?: string; content_urls?: { desktop?: { page?: string } }; type?: string; coordinates?: { lat: number; lon: number } }>(f, `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`, Math.min(1200, left()));
   if (!s || s.type === "disambiguation") return description && wikiFits(x, title, description) ? { title, extract: "", description, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}` } : null;
   // Same entity only: the article's name matches, it's within 150 m (when it has coordinates) and it's the same kind of place.
-  if (s.coordinates && metres(x.location, { lat: s.coordinates.lat, lng: s.coordinates.lon }) > 150) return null;
+  // Landmarks (big sites: a campus, a museum) get 300 m; venues 150 m.
+  if (s.coordinates && metres(x.location, { lat: s.coordinates.lat, lng: s.coordinates.lon }) > (x.kind === "Landmark" ? 300 : 150)) return null;
   if (!wikiFits(x, title, `${clean(s.description, 160)} ${firstSentences(clean(s.extract, 600), 1, 300)} ${description}`)) return null;
   return { title, extract: firstSentences(clean(s.extract, 900), 3, 500), description: description || clean(s.description, 160), url: s.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}` };
 }

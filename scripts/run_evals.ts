@@ -23,7 +23,8 @@ import { arrivalClock, isLeaveQuestion, statedOrigin } from "@/lib/leave-time";
 import { splitRefine } from "@/lib/refine";
 import { metresBetween } from "@/lib/geo";
 import { POST as SNAP_POST } from "@/app/api/place-snap/route";
-import { cleanVibe, roundYou, setSnapExtractorForTests, type PlaceSnapResponse, type SnapExtract } from "@/lib/place-snap";
+import { cleanSnap, cleanVibe, roundYou, setSnapExtractorForTests, type PlaceSnapResponse, type SnapExtract } from "@/lib/place-snap";
+import { resolveLandmark, setLandmarkResolverForTests, type Landmark } from "@/lib/landmark";
 import { resetVisionModelForTests, visionGenerate, VISION_FALLBACK } from "@/lib/vision";
 import { PLAN_FALLBACK, planGenerate, resetPlanModelForTests } from "@/lib/plan-model";
 import { checkCard, setPlanPickerForTests, verifyPicks, type Picker, type VCard } from "@/lib/verify";
@@ -42,16 +43,16 @@ function pinnedNow(hhmm: string): Date {
 }
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000);
 
-type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number }; daysAhead?: number };
+type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: string[]; weekday?: string; time?: string; budgetGBP?: number; category?: string; walkIn?: boolean; minCards?: number; themArea?: string; weather?: "wet" | "warm"; clarifySteps?: number; segments?: boolean; noObjects?: boolean; replyMatch?: string[]; seating?: "Outdoor seating" | "Indoor seating"; youCloser?: boolean; dayOffset?: number; openAtPlan?: boolean; hours?: boolean; youStop?: string; replyNot?: string[]; approx?: boolean; cuisine?: string; sameAsBase?: boolean; onlyCuisine?: boolean; headlineMatch?: string; fairBoth?: boolean; leaveBy?: { you?: boolean; them?: boolean; arriveBy?: string }; destination?: { kind?: "event" | "venue"; facts?: string[]; legs?: number; /** server8: card within maxM of this point, no such facts, never swapped by verify. */ near?: { lat: number; lng: number; maxM: number }; noFacts?: string[]; landmark?: boolean }; daysAhead?: number };
 // `answers`: a clarify sequence; each reply is sent as {query: reply, answer: reply, previous: {query: <result.query>, answer: reply}}
 // exactly like the UI, and the same clarify must never come back twice. `refines`: follow-up chat turns, each sent as
 // {mode:"refine", query: r, previous: {query: <result.query>}} (the accumulated ask from the previous turn). `weather`: injected forecast (no Open-Meteo call).
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
 // `unit`: in-process checks of a helper (no HTTP): "hours" parses OSM opening_hours, "segments" tidies stretches.
 type HoursUnit = { oh: string; date: string; at: string; state: "open" | "closed" | "unknown"; closesAt?: string };
-type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7";
+type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7" | "server8";
   // server6 "snap a place": a fixture extract stands in for Gemini (test hook); the route runs for real (fixture image bytes).
-  snap?: { extract: SnapExtract; you?: { lat: number; lng: number }; area?: string; place?: string; suggestedQuery?: string; minCandidates?: number; message?: string; firstCandidate?: string; noCandidates?: boolean }; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
+  snap?: { extract: SnapExtract; landmark?: boolean; nearbyQuery?: string; kind?: string; at?: { lat: number; lng: number; maxM: number }; you?: { lat: number; lng: number }; area?: string; place?: string; suggestedQuery?: string; minCandidates?: number; message?: string; firstCandidate?: string; noCandidates?: boolean }; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
 // `clock`: pin "now" to HH:MM London (today if still ahead, else tomorrow, so live TfL/forecast calls stay in the
 // future); `dayOffset` is then the plan's London date minus the pinned date.
 type Refined = PlanResultWithAgent & { reply?: string; leaveBy?: { you?: string; them?: string; arriveBy: string; date: string } };
@@ -101,6 +102,12 @@ async function call(c: Case) {
 }
 
 type Chk = { name: string; pass: boolean; got?: unknown };
+// server8: landmark resolver fixtures (no Wikidata / Nominatim calls in evals).
+const lmFix = (name: string, lat: number, lng: number, tags: Record<string, string> = {}): Landmark => ({ name, location: { lat, lng }, address: null, tags: { name, ...tags }, id: tags.wikidata ? `wd-${tags.wikidata}` : null, source: "Wikidata", asOf: new Date().toISOString(), how: "Wikidata coordinates", verdict: "confirmed", landmark: true });
+const LANDMARK_FIXTURES: Record<string, Landmark> = {
+  "university of greenwich": lmFix("University of Greenwich", 51.483, -0.006, { wikidata: "Q1896148", wikipedia: "en:University of Greenwich" }),
+  "greenwich fixture hall": lmFix("Greenwich Fixture Hall", 51.483, -0.006),
+};
 async function unitChecks(c: Case): Promise<Chk[]> {
   const out: Chk[] = [];
   const add = (name: string, pass: boolean, got?: unknown) => out.push({ name, pass, ...(got !== undefined ? { got } : {}) });
@@ -180,9 +187,10 @@ async function unitChecks(c: Case): Promise<Chk[]> {
     const ce = cleanExtract({ kind: "event", title: "X", date: "2025-10-31", startTime: "7.30", confidence: 3, url: "vortexjazz.co.uk" }, today);
     add("cleanExtract: past-year date rolls forward, 7.30 → 07:30, confidence clamped, url gets https", ce.date === "2026-10-31" && ce.startTime === "07:30" && ce.confidence === 1 && ce.url === "https://vortexjazz.co.uk", ce);
   }
-  if ((c.unit === "server6" || c.unit === "server7") && c.snap) {
+  if ((c.unit === "server6" || c.unit === "server7" || c.unit === "server8") && c.snap) {
     const sn = c.snap;
     setSnapExtractorForTests(async () => sn.extract);
+    if (c.unit === "server8") setLandmarkResolverForTests(async (n) => LANDMARK_FIXTURES[n.toLowerCase()] ?? null);
     try {
       const img = `data:image/jpeg;base64,${Buffer.from("fixture shopfront photo ".repeat(12)).toString("base64")}`;
       const res = await SNAP_POST(new Request("http://local/api/place-snap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: img, ...(sn.you ? { you: sn.you } : {}), ...(sn.area ? { area: sn.area } : {}) }) }));
@@ -209,8 +217,22 @@ async function unitChecks(c: Case): Promise<Chk[]> {
         const at = sn.you ?? null;
         if (at && b.candidates?.length) add("every candidate within ~250 m (+100 m rounding)", b.candidates.every((x) => metresBetween(at, x) <= 350), b.candidates.map((x) => Math.round(metresBetween(at, x))));
       }
+      if (c.unit === "server8") {
+        const p = b.place;
+        add("landmark echoed in extracted", JSON.stringify(b.extracted.landmark ?? null) === JSON.stringify(sn.extract.landmark ?? null), b.extracted.landmark);
+        if (sn.kind) add(`place.kind = ${sn.kind}`, p?.kind === sn.kind, p?.kind);
+        if (sn.at) add(`place within ${sn.at.maxM} m of ${sn.at.lat}, ${sn.at.lng}`, !!p && metresBetween(p, sn.at) <= sn.at.maxM, p && { lat: p.lat, lng: p.lng });
+        if (sn.landmark) {
+          add("landmark: no hours (hoursKnown false, no open/closed, no Open fact)", !!p && p.hoursKnown === false && p.openAtPlan === null && p.closesAt === null && p.opensAt === null && !p.facts.some((f) => /^Open\b/.test(f.label)), p && { hoursKnown: p.hoursKnown, openAtPlan: p.openAtPlan, facts: p.facts.map((f) => f.label) });
+          add("landmark: area set, no candidates", !!p?.area && !b.candidates?.length, { area: p?.area, candidates: b.candidates?.length });
+          add("landmark blurb (if any) is sourced, no address restated", !p?.blurb || (!!p.blurb.source?.name && !/located at|\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/.test(p.blurb.text)), p?.blurb);
+        }
+        if (sn.nearbyQuery) add(`nearbyQuery = "${sn.nearbyQuery}"`, b.nearbyQuery === sn.nearbyQuery, b.nearbyQuery);
+        else add("no nearbyQuery", b.nearbyQuery === undefined, b.nearbyQuery);
+      }
     } finally {
       setSnapExtractorForTests(null);
+      setLandmarkResolverForTests(null);
     }
   }
   if (c.unit === "server6" && !c.snap) {
@@ -352,6 +374,40 @@ async function unitChecks(c: Case): Promise<Chk[]> {
       add("route: the draft follows the final top pick", !b.cards[0] || b.draftMessage.includes(b.cards[0].name), b.draftMessage);
     } finally {
       setPlanPickerForTests(null);
+    }
+  }
+  if (c.unit === "server8" && !c.snap) {
+    const cs = cleanSnap({ name: null, kind: "other", signText: "UNIVERSITY OF GREENWICH", confidence: 0, landmark: { name: "  University of   Greenwich ", confidence: 1.7 } });
+    add("cleanSnap: landmark name tidied, confidence clamped", cs.landmark?.name === "University of Greenwich" && cs.landmark.confidence === 1, cs.landmark);
+    add("cleanSnap: missing / junk landmark → null", cleanSnap({ kind: "pub", confidence: 0.9 }).landmark === null && cleanSnap({ kind: "pub", confidence: 0.9, landmark: { name: "", confidence: 0.9 } }).landmark === null && cleanSnap({ kind: "pub", confidence: 0.9, landmark: "x" }).landmark === null, null);
+    // Resolver with a fake network: Wikidata's first hit is outside London (skipped), the second is in London.
+    const urls: string[] = [];
+    const fake = (async (u: string | URL | Request) => {
+      const url = String(u);
+      urls.push(url);
+      const j = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.includes("wbsearchentities")) return j({ search: /greenwich/i.test(decodeURIComponent(url)) ? [{ id: "Q1", label: "University of Greenwich" }, { id: "Q2", label: "University of Greenwich" }] : [] });
+      if (url.includes("wbgetentities")) return j({ entities: { Q1: { claims: { P625: [{ mainsnak: { datavalue: { value: { latitude: 51.3, longitude: 0.5 } } } }] } }, Q2: { labels: { en: { value: "University of Greenwich" } }, sitelinks: { enwiki: { title: "University of Greenwich" } }, claims: { P625: [{ mainsnak: { datavalue: { value: { latitude: 51.4831, longitude: -0.0061 } } } }] } } } });
+      if (url.includes("nominatim")) return j(/natural/i.test(decodeURIComponent(url)) ? [{ lat: "51.4967", lon: "-0.1764", name: "Natural History Museum", osm_type: "way", osm_id: 1, address: { house_number: "Cromwell Road", postcode: "SW7 5BD" } }] : []);
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+    const g = await resolveLandmark("University of Greenwich", { fetch: fake, skipTfl: true });
+    add("resolveLandmark: Wikidata P625 inside London (outside-London hit skipped), wikipedia tag kept", !!g && g.source === "Wikidata" && Math.abs(g.location.lat - 51.483) < 0.002 && Math.abs(g.location.lng + 0.006) < 0.002 && g.tags.wikipedia === "en:University of Greenwich" && g.landmark === true, g);
+    const nh = await resolveLandmark("Natural History Museum", { fetch: fake, skipTfl: true });
+    add("resolveLandmark: Nominatim fallback, London viewbox bounded, a real User-Agent, address", !!nh && nh.source === "OSM Nominatim" && !!nh.address && urls.some((u) => u.includes("nominatim") && u.includes("bounded=1") && u.includes("viewbox=-0.52,51.70,0.34,51.28")), { nh, urls: urls.filter((u) => u.includes("nominatim")) });
+    add("resolveLandmark: nothing → null", (await resolveLandmark("Blorptastic Hall", { fetch: fake, skipTfl: true })) === null, null);
+    // "Meet at <landmark>" through the plan route: Atlas / Nominatim miss, the landmark resolver places it.
+    setLandmarkResolverForTests(async (n) => LANDMARK_FIXTURES[n.toLowerCase()] ?? null);
+    try {
+      const e = await post({ query: "Meet at Greenwich Fixture Hall from Old Street tomorrow at 2pm" });
+      const r = e.body as Refined & { verify?: { swapped: unknown[] } };
+      const k = r.cards?.[0];
+      add("plan: one fixed card at the landmark (≤150 m), no middle search", e.status === 200 && !r.clarify && r.cards.length === 1 && !!k && metresBetween(k.location, { lat: 51.483, lng: -0.006 }) <= 150 && !r.middle && !r.steps.some((s) => s.id === "compare" || s.id === "venues"), { status: e.status, cards: r.cards?.map((x) => [x.name, x.location]), headline: r.headline });
+      add("plan: no hours checks (no Open fact, no 'opening hours' unknown, hoursKnown false), Landmark subtitle", !!k && !k.facts.some((f) => /^Open\b/.test(f.label)) && !r.unknowns.some((u) => /opening hours/i.test(u)) && (k as { hoursKnown?: boolean }).hoursKnown === false && /^Landmark/.test(k.subtitle), k && { facts: k.facts.map((f) => f.label), unknowns: r.unknowns, subtitle: k.subtitle });
+      add("plan: never swapped by verify", !r.verify || r.verify.swapped.length === 0, r.verify);
+      add("plan: place step names Wikidata", /Wikidata/.test(r.steps.find((s) => s.id === "place")?.detail ?? ""), r.steps.find((s) => s.id === "place")?.detail);
+    } finally {
+      setLandmarkResolverForTests(null);
     }
   }
   if (c.unit === "server5") {
@@ -588,6 +644,9 @@ function check(c: Case, r: Refined, asked: string[], base?: { youMin: number | n
     if (d.kind) add(`card kind = ${d.kind}`, r.cards[0]?.kind === d.kind, r.cards[0]?.kind);
     for (const l of d.facts ?? []) add(`card has a '${l}' fact`, !!r.cards[0]?.facts.some((f) => f.label === l || f.label.startsWith(`${l} `)), r.cards[0]?.facts.map((f) => f.label));
     if (d.legs) add(`${d.legs} leg(s)`, r.cards[0]?.legs.length === d.legs, r.cards[0]?.legs.map((l) => l.who));
+    if (d.near) add(`card within ${d.near.maxM} m of ${d.near.lat}, ${d.near.lng}`, !!r.cards[0] && metresBetween(r.cards[0].location, d.near) <= d.near.maxM, r.cards[0]?.location);
+    for (const l of d.noFacts ?? []) add(`no '${l}' fact`, !r.cards[0]?.facts.some((f) => f.label === l || f.label.startsWith(`${l} `)), r.cards[0]?.facts.map((f) => f.label));
+    if (d.near) add("never swapped by verify", !(r as { verify?: { swapped: unknown[] } }).verify?.swapped.length, (r as { verify?: unknown }).verify);
     if (r.them) add("their area not in reply/draft/unknowns/steps' parse signals", ![r.draftMessage, r.reply ?? "", ...r.unknowns, r.steps.find((s) => s.id === "parse")?.detail ?? ""].some((t) => t.toLowerCase().includes(r.them!.area.toLowerCase())), null);
   }
   if (e.headlineMatch) add(`headline matches /${e.headlineMatch}/i`, new RegExp(e.headlineMatch, "i").test(r.headline), r.headline);

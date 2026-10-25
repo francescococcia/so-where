@@ -8,6 +8,7 @@ import { getDb, withTimeout } from "@/lib/mongo";
 import { VENUES_SEARCH_INDEX, type VenueDoc } from "@/lib/mongo-seed";
 import snapshot from "@/data/osm-snapshot.json";
 import type { LatLng } from "@/lib/plan-types";
+import { nominatimSlot, resolveLandmark } from "@/lib/landmark";
 
 export type Destination = {
   title: string | null; // event name, when the ask names one ("Jazz Night at The Vortex")
@@ -119,7 +120,7 @@ export function parseDestination(raw: string): Destination | null {
   };
 }
 
-export type FoundPlace = { name: string; location: LatLng; address: string | null; tags: Record<string, string>; id: string | null; source: string; asOf: string; how: string; verdict: "confirmed" | "likely"; /** false: the venue itself wasn't found, only its street / area. */ pinned?: boolean };
+export type FoundPlace = { name: string; location: LatLng; address: string | null; tags: Record<string, string>; id: string | null; source: string; asOf: string; how: string; verdict: "confirmed" | "likely"; /** true: a landmark (university, museum, station…) from Wikidata / Nominatim / TfL, not a venue — no hours checks. */ landmark?: boolean; /** false: the venue itself wasn't found, only its street / area. */ pinned?: boolean };
 
 const UA = "SoWhere/0.1 (London meet-up planner; place lookup)";
 export const nameScore = (a: string, b: string) => {
@@ -179,6 +180,7 @@ async function nominatim(name: string, address: string | null, near: LatLng): Pr
   const q = [name, address ?? "London"].join(", ");
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=gb&viewbox=-0.52,51.70,0.34,51.28&bounded=1&extratags=1&addressdetails=1&q=${encodeURIComponent(q)}`;
   try {
+    await nominatimSlot();
     const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json", "Accept-Language": "en-GB" }, signal: AbortSignal.timeout(4000) });
     if (!r.ok) return null;
     const rows = (await r.json()) as NomRow[];
@@ -211,6 +213,10 @@ export async function resolveDestination(d: Pick<Destination, "venue" | "address
   if (agrees(nom)) return { ...nom!, address: nom!.address ?? d.address };
   if (pcPoint && pc && !("error" in pc) && IN_LONDON(pcPoint))
     return { name: d.venue, location: pcPoint, address: d.address, tags: { name: d.venue }, id: null, source: "postcodes.io", asOf: new Date().toISOString(), how: `postcode ${pc.label} centre`, verdict: "likely" };
+  // Not a venue: a landmark ("University of Greenwich", "British Museum") via Wikidata, then TfL stations.
+  // Nominatim already had its go above. Skipped when a postcode was given (that already placed it).
+  const lm = pcPoint ? null : await resolveLandmark(d.venue, { skipNominatim: true, budgetMs: 5000 });
+  if (lm) return { ...lm, address: lm.address ?? d.address };
   const g = matchPlace(d.venue);
   if (g.confidence === "high" && g.best) {
     const e = g.best.entry;
