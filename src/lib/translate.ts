@@ -11,7 +11,8 @@ export const AUDIO_MODEL = "gemini-3.5-live-translate-preview";
 export function plannerEnglish(t: string): string {
   return t
     .replace(/^\s*(?:see you|let'?s meet|we(?:'ll| will)? meet|i(?:'ll| will)? meet you|meeting)\s+(at|in|by)\b/i, (_m, p: string) => `Meet ${p.toLowerCase()}`)
-    .replace(/^\s*(?:take|bring|get) me to\b/i, "Get me to");
+    .replace(/^\s*(?:take|bring|get) me to\b/i, "Get me to")
+    .replace(/^\s*(?:a\s+)?caf[eé]s?\b/i, "Coffee");
 }
 
 export type Translation = { lang: string; langName: string; english: string; model: string | null; original?: string };

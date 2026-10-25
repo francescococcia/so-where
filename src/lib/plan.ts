@@ -457,7 +457,9 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
   // Follow-up chat: {mode:"refine", query: <refinement>, previous:{query}} → "<previous>; refine: <refinement>".
   const refineText = req.refine !== undefined && req.previous?.query ? joinRefine(req.previous.query, req.refine) : null;
   const merged = !refineText && req.previous?.query ? await mergeAnswer(req.previous.query, req.previous.answer || req.query, today, reqYou) : null;
-  const text = (refineText ?? merged?.text ?? String(req.query ?? "")).slice(0, 1500);
+  // "at the Old Royal Naval College" / "near the University of Greenwich": a lowercase "the" before a proper name
+  // stops the place lookup, so drop it ("at The Rake", a name with a capital The, is left alone).
+  const text = (refineText ?? merged?.text ?? String(req.query ?? "")).slice(0, 1500).replace(/\b(at|near|to|by|from|around)\s+the\s+(?=[A-Z])/g, "$1 ");
   const split = splitRefine(text);
   let ask = split.refinements.length ? parsePlanAsk(split.base, today) : (merged?.ask ?? parsePlanAsk(text, today));
   let parseSource = "rules";
