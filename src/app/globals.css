@@ -468,3 +468,39 @@ button.sw-map-chip:focus-visible { outline: 2px solid var(--sw-signal-strong); o
 .sw-typing i:nth-child(3) { animation-delay: 0.32s; }
 @keyframes sw-typing { 0%, 70%, 100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-3px); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .sw-typing i { animation: none; opacity: 0.6; } }
+
+/* ================= ui23: You / Them pucks ================= */
+/* Same family as the numbered venue pins: 34 px head, 2.5 px white ring, stem, soft drop shadow. You = orange
+   (white glyph on orange), Them = sky. Anchored at the stem foot so the head stands above 3D buildings. */
+.sw-pin { z-index: 3; }
+.sw-puck { --who: var(--sw-route-you); --who-soft: rgba(255, 107, 44, .30); position: relative; z-index: 2; cursor: pointer; display: grid; place-items: center; outline: none; }
+.sw-puck--them { --who: var(--sw-route-them); --who-soft: rgba(20, 120, 163, .28); }
+.sw-puck-body { position: relative; display: flex; flex-direction: column; align-items: center; transform-origin: 50% 100%; animation: sw-puck-in .55s var(--sw-ease-out) both; transition: transform .22s var(--sw-ease-out); }
+.sw-puck-head { position: relative; z-index: 1; width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; color: #fff; background: radial-gradient(120% 120% at 30% 20%, color-mix(in srgb, var(--who) 78%, #fff) 0%, var(--who) 55%, color-mix(in srgb, var(--who) 82%, #000) 100%); border: 2.5px solid #fff; box-shadow: 0 0 0 1px rgba(21,23,28,.06), 0 2px 4px rgba(74,52,30,.16), 0 10px 20px -4px rgba(74,52,30,.34); }
+.sw-puck-head svg { width: 18px; height: 18px; }
+.sw-puck-halo { position: absolute; top: 0; left: 50%; width: 34px; height: 34px; margin-left: -17px; border-radius: 999px; background: var(--who-soft); animation: sw-puck-halo 2.4s var(--sw-ease-out) infinite; pointer-events: none; }
+.sw-puck--them .sw-puck-halo { animation-delay: 1.2s; }
+.sw-puck-stem { display: block; width: 3px; height: 16px; margin-top: -1px; background: linear-gradient(var(--who), #b9b2a5); border-radius: 0 0 2px 2px; box-shadow: 0 3px 4px rgba(74,52,30,.25); }
+.sw-puck-foot { display: block; width: 10px; height: 4px; margin-top: -2px; border-radius: 999px; background: var(--who); opacity: .35; filter: blur(1px); }
+.sw-puck-tag { position: absolute; left: 26px; bottom: 26px; pointer-events: none; white-space: nowrap; padding: 5px 10px 5px 14px; border-radius: 12px; background: rgba(255,255,255,.86); -webkit-backdrop-filter: blur(12px) saturate(1.5); backdrop-filter: blur(12px) saturate(1.5); box-shadow: inset 3px 0 0 var(--who), 0 0 0 1px rgba(255,255,255,.7), var(--sw-shadow-float); color: var(--sw-ink); font: 600 12.5px/1.3 var(--font-schibsted), sans-serif; animation: sw-fade .45s var(--sw-ease-out) both; }
+.sw-puck-tag b { font-weight: 700; }
+.sw-puck-tag small { display: block; margin-top: 1px; font: 400 11px/1.3 var(--font-geist-mono), monospace; color: var(--sw-ink-3); }
+.sw-puck-eta { display: none; margin-top: 3px; padding-top: 3px; border-top: 1px solid rgba(21,23,28,.08); font: 600 11.5px/1.3 var(--font-geist-mono), monospace; color: var(--sw-ink-2); }
+.sw-puck.is-open .sw-puck-eta { display: block; }
+.sw-puck.is-open { z-index: 7; }
+.sw-puck:hover .sw-puck-body, .sw-puck:focus-visible .sw-puck-body, .sw-puck.is-open .sw-puck-body { transform: translateY(-4px) scale(1.12); }
+.sw-puck:hover { z-index: 7; }
+.sw-puck:focus-visible .sw-puck-head { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--who), 0 10px 20px -4px rgba(74,52,30,.34); }
+@keyframes sw-puck-in { 0% { transform: translateY(-14px) scale(.4); opacity: 0 } 60% { transform: translateY(1px) scale(1.08); opacity: 1 } 100% { transform: none; opacity: 1 } }
+@keyframes sw-puck-halo { 0% { transform: scale(1); opacity: .9 } 100% { transform: scale(2.4); opacity: 0 } }
+@media (max-width: 699px) {
+  .sw-puck-head { width: 30px; height: 30px; }
+  .sw-puck-head svg { width: 16px; height: 16px; }
+  .sw-puck-halo { width: 30px; height: 30px; margin-left: -15px; }
+  .sw-puck-tag { left: 22px; bottom: 24px; font-size: 11.5px; padding: 4px 8px 4px 12px; }
+  .sw-puck-tag small { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sw-puck-halo { display: none; }
+  .sw-puck-body, .sw-puck-tag { animation: none; }
+}

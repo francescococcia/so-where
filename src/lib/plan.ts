@@ -412,6 +412,11 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? C
   if (!rr) return r;
   const p = londonParts(new Date(r.when));
   const top = r.cards[0];
+  // "near there" means the plan's place (Waterloo, the middle), not whichever card happened to be on top; name the
+  // card only when the follow-up names it or says this/that/it.
+  const fName = rr.focusName;
+  const namesCard = !!fName && (new RegExp(fName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(req.refine ?? "") || /\b(this|that|it)\b/i.test(req.refine ?? ""));
+  if (fName && !namesCard) rr.focusName = r.intent === "meet_halfway" ? (r.middle?.name ?? rr.hubName ?? fName) : undefined;
   const seat = top?.facts.find((f) => f.label === "Outdoor seating" || f.label === "Indoor seating");
   let reply = refineReply({
     refinement: rr.refinement,

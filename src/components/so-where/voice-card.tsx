@@ -150,11 +150,12 @@ function downloadReminder(lb: LeaveBy, place: string | undefined, legs: Legs) {
 // ---------------------------------------------------------------- speech engine
 type Engine = { progress: () => number; level: () => number; stop: () => void };
 
-async function fetchVoice(text: string, signal: AbortSignal, lang?: string): Promise<ArrayBuffer | null> {
+/** The audio plus the TTS model that really answered (X-TTS-Model), so the card can name it. */
+async function fetchVoice(text: string, signal: AbortSignal, lang?: string): Promise<{ raw: ArrayBuffer; model: string | null } | null> {
   try {
     const r = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(lang && lang !== "en" ? { text, lang } : { text }), signal });
     if (!r.ok) return null;
-    return await r.arrayBuffer();
+    return { model: r.headers.get("X-TTS-Model"), raw: await r.arrayBuffer() };
   } catch {
     return null;
   }
@@ -354,7 +355,8 @@ export function VoiceCard({ reply, live, onClose, className }: { reply: VoiceRep
   const [shown, setShown] = useState(0);
   const engine = useRef<Engine | null>(null);
   const abort = useRef<AbortController | null>(null);
-  const cache = useRef<{ text: string; buf: AudioBuffer } | null>(null);
+  const cache = useRef<{ text: string; buf: AudioBuffer; by: string | null } | null>(null);
+  const [voiceBy, setVoiceBy] = useState<string | null>(null);
   const run = useRef(0);
 
   const foreign = !!reply.lang && reply.lang !== "en" && !!reply.english;
@@ -401,26 +403,30 @@ export function VoiceCard({ reply, live, onClose, className }: { reply: VoiceRep
       setPhase("done");
     };
     let buf = cache.current?.text === text ? cache.current.buf : null;
+    let by = buf ? cache.current?.by ?? null : null;
     if (!buf) {
       const ac = new AbortController();
       abort.current = ac;
       const timer = setTimeout(() => ac.abort(), 9000);
-      const raw = await fetchVoice(text, ac.signal, speakLang);
+      const got = await fetchVoice(text, ac.signal, speakLang);
       clearTimeout(timer);
       if (run.current !== my) return;
       const c = audioCtx();
-      if (raw && c) {
+      if (got && c) {
         try {
-          buf = await c.decodeAudioData(raw);
-          cache.current = { text, buf };
+          buf = await c.decodeAudioData(got.raw);
+          by = got.model;
+          cache.current = { text, buf, by };
         } catch {
           buf = null;
         }
       }
       if (run.current !== my) return;
     }
-    const e = (buf ? playBuffer(buf, done) : null) ?? speakBrowser(text, done, speakLang);
+    const fromBuf = buf ? playBuffer(buf, done) : null;
+    const e = fromBuf ?? speakBrowser(text, done, speakLang);
     if (!e) return done();
+    setVoiceBy(fromBuf ? by : "browser voice");
     engine.current = e;
     setPhase("speaking");
     if (reduced) setShown(words.length);
@@ -504,7 +510,10 @@ export function VoiceCard({ reply, live, onClose, className }: { reply: VoiceRep
       <div className="relative flex items-center gap-2.5">
         <VoiceOrb state={phase === "loading" ? "thinking" : speaking ? "speaking" : "idle"} getLevel={speaking ? level : undefined} size={34} />
         <div className="min-w-0 flex-1">
-          <p className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3" aria-live="polite">{status}</p>
+          <p className="truncate text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3" aria-live="polite">
+            {status}
+            {voiceBy && phase !== "loading" ? <span className="font-mono text-[10.5px] font-normal normal-case tracking-normal" title="Voice model that read this reply"> · {voiceBy}</span> : null}
+          </p>
           <Waveform level={level} active={speaking} reduced={reduced} />
         </div>
         <div className="flex shrink-0 items-center gap-0.5">

@@ -9,8 +9,12 @@ import { LIVE_VOICE_NAME } from "@/lib/live-config";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Newest first; TTS_MODEL (env) wins. A model the key can't open is skipped for the life of the server. */
-const MODELS = ["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts", "gemini-2.5-flash-preview-tts"];
+/** TTS_MODEL (env) wins, then gemini-3.8-flash-tts (the brief's model, nicer prosody, ~2.8 s for a reply), then
+ * flash-lite-tts (~1.8 s) in the same request if the first errors or is slow. A model the key can't open is skipped
+ * for the life of the server. The X-TTS-Model header names the model that really answered. */
+const MODELS = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-2.5-flash-preview-tts"];
+/** Give the first model this long before falling back (the client gives up at 9 s and uses speechSynthesis). */
+const FIRST_MS = 5000;
 const dead = new Set<string>();
 const MAX_CHARS = 400;
 const PER_MIN = 12;
@@ -79,14 +83,20 @@ export async function POST(req: Request) {
   const ai = new GoogleGenAI({ apiKey: key });
   const models = [process.env.TTS_MODEL, ...MODELS].filter((m, i, a): m is string => !!m && a.indexOf(m) === i && !dead.has(m));
   const tries = models.flatMap((m) => (languageCode ? [{ model: m, languageCode }, { model: m, languageCode: undefined }] : [{ model: m, languageCode: undefined }]));
+  const started = Date.now();
   for (const { model, languageCode: lc } of tries) {
     if (dead.has(model)) continue;
+    const left = 8000 - (Date.now() - started);
+    if (left < 1200) break;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), model === models[0] ? Math.min(FIRST_MS, left) : left);
     try {
       const res = await ai.models.generateContent({
         model,
         contents: [{ parts: [{ text }] }], // text only: style prompts get read aloud by some TTS models
-        config: { responseModalities: ["AUDIO"], speechConfig: { ...(lc ? { languageCode: lc } : {}), voiceConfig: { prebuiltVoiceConfig: { voiceName: LIVE_VOICE_NAME } } } },
+        config: { abortSignal: ac.signal, responseModalities: ["AUDIO"], speechConfig: { ...(lc ? { languageCode: lc } : {}), voiceConfig: { prebuiltVoiceConfig: { voiceName: LIVE_VOICE_NAME } } } },
       });
+      clearTimeout(timer);
       const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
       const data = part?.inlineData?.data;
       if (!data) continue;
@@ -94,10 +104,12 @@ export async function POST(req: Request) {
       const raw = Buffer.from(data, "base64");
       const audio = /wav/i.test(mime) || raw.subarray(0, 4).toString() === "RIFF" ? raw : wav(raw, Number(/rate=(\d+)/.exec(mime)?.[1] ?? 24000));
       return new Response(new Uint8Array(audio), {
-        headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store", "X-TTS-Model": model },
+        headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store", "X-TTS-Model": model, "X-TTS-Ms": String(Date.now() - started), "Access-Control-Expose-Headers": "X-TTS-Model, X-TTS-Ms" },
       });
     } catch (e) {
+      clearTimeout(timer);
       const status = (e as { status?: number }).status;
+      if (ac.signal.aborted) continue; // too slow: next model
       if (status === 400 && lc) continue; // maybe just the language code: retry this model without it
       if (status === 404 || status === 400 || status === 403) dead.add(model);
       if (status === 429) return json(429, "Voice is busy. Try again in a moment.");

@@ -896,7 +896,7 @@ export function SoWhereApp() {
 
         {/* Map: on top on phones, full-bleed behind the panel on desktop */}
         <div className="relative h-[46svh] min-h-[300px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto">
-          <PlanMap result={mapResult} selectedId={placeSnap ? placeSnap.card.id : selectedId} hoverId={hoverId} focusId={placeSnap ? placeSnap.card.id : detailId} scanning={status === "running" && !placeSnap} onSelect={placeSnap ? () => {} : select} onHover={setHoverId} padding={panelOpen && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} />
+          <PlanMap result={mapResult} selectedId={placeSnap ? placeSnap.card.id : selectedId} hoverId={hoverId} focusId={placeSnap ? placeSnap.card.id : detailId} scanning={status === "running" && !placeSnap} onSelect={placeSnap ? () => {} : select} onHover={setHoverId} padding={panelOpen && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} deviceYou={you} />
           <div className={cn("pointer-events-none absolute right-3 top-3 z-10 transition-[right] duration-500 max-sm:right-2 max-sm:top-2 max-sm:origin-top-right max-sm:scale-[.92] lg:right-4 lg:top-4", panelOpen && !mobile && "md:right-[412px] lg:right-[412px]")}>
             <MapChips result={mapResult} cardId={placeSnap ? placeSnap.card.id : detailId ?? selectedId} />
           </div>

@@ -6,7 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { LatLng, Leg, PlanResultWithAgent } from "@/lib/plan-types";
 import hubsDoc from "@/data/hubs.json";
 import { SO_WHERE_STYLE } from "./map-style";
-import { legStretches, type MapStretch } from "./journey";
+import { legStretches, segmentsOf, type MapStretch } from "./journey";
 import { findBuilding } from "./building-highlight";
 import { badge, buildTrack, clearActiveSeg, midpoints, sampleTrack, setActiveSeg, type Track, type Who } from "./vehicles";
 
@@ -26,6 +26,8 @@ type Props = {
   onHover: (id: string | null) => void;
   padding: MapPadding;
   reduced: boolean;
+  /** The device position (already rounded to ~100 m) when "Use my location" is on: draws an honest ~100 m ring. */
+  deviceYou?: LatLng | null;
 };
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -110,9 +112,15 @@ function addLayers(map: MLMap) {
   map.addLayer({ id: "lit-bldg-glow", type: "line", source: "lit-bldg", paint: { "line-color": ACCENT, "line-width": 14, "line-blur": 10, "line-opacity": 0.4 } }, under);
   map.addLayer({ id: "lit-bldg-body", type: "fill-extrusion", source: "lit-bldg", paint: { "fill-extrusion-color": ACCENT, "fill-extrusion-base": ["get", "b"], "fill-extrusion-height": ["get", "h"], "fill-extrusion-opacity": 0.95, "fill-extrusion-vertical-gradient": true } }, before);
   map.addLayer({ id: "lit-bldg-cap", type: "fill-extrusion", source: "lit-bldg", paint: { "fill-extrusion-color": "#ffc6a3", "fill-extrusion-base": ["get", "h"], "fill-extrusion-height": ["+", ["get", "h"], 0.7], "fill-extrusion-opacity": 0.95, "fill-extrusion-vertical-gradient": false } }, before);
+  // Their ~500 m area: a soft sky disc with a feathered edge (no harsh dashes); the puck sits at its centre.
   map.addSource("them-area", { type: "geojson", data: FC() });
-  map.addLayer({ id: "them-area-fill", type: "fill", source: "them-area", paint: { "fill-color": "#1478a3", "fill-opacity": 0.08 } }, before);
-  map.addLayer({ id: "them-area-line", type: "line", source: "them-area", paint: { "line-color": "#1478a3", "line-opacity": 0.6, "line-width": 1.6, "line-dasharray": [2, 2] } }, before);
+  map.addLayer({ id: "them-area-fill", type: "fill", source: "them-area", paint: { "fill-color": COLOR.them, "fill-opacity": 0.11 } }, under);
+  map.addLayer({ id: "them-area-glow", type: "line", source: "them-area", paint: { "line-color": COLOR.them, "line-width": 10, "line-blur": 8, "line-opacity": 0.16 } }, under);
+  map.addLayer({ id: "them-area-line", type: "line", source: "them-area", paint: { "line-color": COLOR.them, "line-opacity": 0.42, "line-width": 1.2 } }, under);
+  // Your ~100 m accuracy ring (only for a device position, which is rounded to ~100 m).
+  map.addSource("you-acc", { type: "geojson", data: FC() });
+  map.addLayer({ id: "you-acc-fill", type: "fill", source: "you-acc", paint: { "fill-color": ACCENT, "fill-opacity": 0.12 } }, under);
+  map.addLayer({ id: "you-acc-line", type: "line", source: "you-acc", paint: { "line-color": COLOR.you, "line-opacity": 0.4, "line-width": 1.2 } }, under);
 
   // Fair-middle halo: soft concentric "reach" rings, the inner one breathes.
   map.addSource("halo", { type: "geojson", data: FC() });
@@ -156,7 +164,52 @@ function tag(html: string, extra = "") {
   return el(`<div class="sw-tag ${extra}">${html}</div>`);
 }
 
-export default function PlanMap({ result, selectedId, hoverId, focusId, scanning, onSelect, onHover, padding, reduced }: Props) {
+const PERSON = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.2" r="4.4" fill="currentColor"/><path d="M3.8 20.4c.6-4.3 4-6.9 8.2-6.9s7.6 2.6 8.2 6.9c.1.6-.3 1.1-.9 1.1H4.7c-.6 0-1-.5-.9-1.1Z" fill="currentColor"/></svg>`;
+
+/** You / Them puck: same family as the numbered venue pins (34 px head, white ring, stem), anchored at the stem foot
+ * so it stands above the 3D buildings. Tap or Enter toggles the journey time to pick #1. */
+function puck(o: { who: "you" | "them"; title: string; sub?: string; eta?: string; aria: string; delay: number }) {
+  const node = el(
+    `<div class="sw-puck-body" style="animation-delay:${o.delay}s"><span class="sw-puck-halo" aria-hidden="true"></span><div class="sw-puck-head">${PERSON}</div><i class="sw-puck-stem"></i><i class="sw-puck-foot"></i></div>` +
+      `<div class="sw-puck-tag" style="animation-delay:${o.delay + 0.15}s"><b>${o.title}</b>${o.sub ? `<small>${o.sub}</small>` : ""}${o.eta ? `<span class="sw-puck-eta">${o.eta}</span>` : ""}</div>`,
+    `sw-puck sw-puck--${o.who}`
+  );
+  node.setAttribute("role", "button");
+  node.setAttribute("aria-label", o.aria);
+  queueMicrotask(() => node.setAttribute("aria-label", o.aria)); // maplibregl.Marker overwrites it with "Map marker"
+  node.setAttribute("aria-expanded", "false");
+  node.tabIndex = 0;
+  const toggle = (e: Event) => {
+    e.stopPropagation();
+    if (!o.eta) return;
+    const on = !node.classList.contains("is-open");
+    node.classList.toggle("is-open", on);
+    node.setAttribute("aria-expanded", String(on));
+  };
+  node.addEventListener("click", toggle);
+  node.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") toggle(e);
+  });
+  return node;
+}
+
+/** Your start as a name, only when we really know it: the first journey stretch's "from", else "I'm at X" in the ask. */
+function startName(result: PlanResultWithAgent): string | null {
+  const leg = result.cards[0]?.legs.find((l) => l.who === "you");
+  const from = leg ? segmentsOf(leg).find((s) => s.from)?.from : undefined;
+  if (from && !/your location|^you$|current/i.test(from)) return from.replace(/\s+(underground|tube|rail)?\s*station$/i, "");
+  const m = (result.query || "").match(/\bI(?:'| a)?m\s+(?:at|in|near|by|around)\s+([A-Z][\w'’&. -]{2,30}?)(?=[,.;!?]|\s+(?:and|but|so|she|he|they|we)\b|$)/);
+  return m ? m[1].trim() : null;
+}
+
+/** Distance in metres between two points (equirectangular is plenty at city scale). */
+function metres(a: LatLng, b: LatLng) {
+  const x = (b.lng - a.lng) * Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180)) * 111320;
+  const y = (b.lat - a.lat) * 110574;
+  return Math.hypot(x, y);
+}
+
+export default function PlanMap({ result, selectedId, hoverId, focusId, scanning, onSelect, onHover, padding, reduced, deviceYou }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const markers = useRef<Marker[]>([]);
@@ -176,6 +229,8 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
   const [ready, setReady] = useState(false);
   const cb = useRef({ onSelect, onHover });
   cb.current = { onSelect, onHover };
+  const deviceRef = useRef(deviceYou);
+  deviceRef.current = deviceYou;
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
   const scanRef = useRef(scanning);
@@ -212,6 +267,8 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
       setReady(true);
     });
     mapRef.current = map;
+    // Demo links only: let screenshot scripts move the camera.
+    if (/[?&]demo=/.test(window.location.search)) (window as unknown as { __swmap?: MLMap }).__swmap = map;
     return () => {
       map.remove();
       mapRef.current = null;
@@ -326,6 +383,10 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     markers.current = [];
     pins.current.clear();
     (map.getSource("them-area") as GeoJSONSource).setData(FC(result?.them ? [circle(result.them.center, result.them.radiusM)] : []));
+    // ~100 m ring only when the plan started from the device position (rounded ~100 m), never a fake precise dot.
+    const dev = deviceRef.current;
+    const youApprox = !!(result && dev && metres(result.you, dev) < 160);
+    (map.getSource("you-acc") as GeoJSONSource).setData(FC(result && youApprox ? [circle(result.you, 100)] : []));
     (map.getSource("halo") as GeoJSONSource).setData(FC(result?.middle ? [1100, 600, 250].map((r) => circle(result.middle!.location, r)) : []));
     if (!result) {
       (map.getSource("route-you") as GeoJSONSource).setData(EMPTY_LINE);
@@ -339,8 +400,22 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
       markers.current.push(m);
     };
 
+    const top = result.cards[0];
+    const etaFor = (who: "you" | "them") => {
+      const m = top?.legs.find((l) => l.who === who)?.minutes;
+      return m != null && top ? `${m} min to ${esc(top.name)}` : undefined;
+    };
     if (result.them) {
-      add(new maplibregl.Marker({ element: tag(`${esc(`Their area · ${result.them.area}`)}<small>rounded ~${Math.round(result.them.radiusM)} m · not stored</small>`, "sw-area-tag"), anchor: "center" }).setLngLat(ll(result.them.center)));
+      // Only the rounded area: its name and radius, never anything more precise.
+      const area = result.them.area.replace(/\s*\(approx\.?\)\s*$/i, "").trim();
+      const r = Math.round((result.them.radiusM || 500) / 50) * 50;
+      add(
+        new maplibregl.Marker({
+          element: puck({ who: "them", title: `Them · ${esc(/\barea$/i.test(area) ? area : `${area} area`)}`, sub: `~${r} m · not stored`, eta: etaFor("them"), aria: `Them, somewhere around ${area} (about ${r} metres)`, delay: reduced ? 0 : 0.85 }),
+          anchor: "bottom",
+          offset: [0, 4],
+        }).setLngLat(ll(result.them.center))
+      );
     }
 
     result.cards.slice(0, 3).forEach((c, i) => {
@@ -377,8 +452,14 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     // A snapped place without a known location has no "You" (result.you is just the place).
     const snapNoYou = (result as { snapOnly?: boolean; youKnown?: boolean }).snapOnly && !(result as { youKnown?: boolean }).youKnown;
     if (!snapNoYou) {
-      add(new maplibregl.Marker({ element: el("<i></i><b></b>", "sw-you"), anchor: "center" }).setLngLat(ll(result.you)));
-      add(new maplibregl.Marker({ element: tag("You"), anchor: "left", offset: [16, 0] }).setLngLat(ll(result.you)));
+      const from = startName(result);
+      add(
+        new maplibregl.Marker({
+          element: puck({ who: "you", title: `You${from ? ` · ${esc(from)}` : ""}`, sub: youApprox ? "~100 m" : undefined, eta: etaFor("you"), aria: `You${from ? `, at ${from}` : ""}`, delay: reduced ? 0 : 0.7 }),
+          anchor: "bottom",
+          offset: [0, 4],
+        }).setLngLat(ll(result.you))
+      );
     }
 
     fitRef.current = () => {
