@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { ArrowRight, LocateFixed, MessageCircleQuestion } from "lucide-react";
 import type { Clarify } from "@/lib/plan-types";
 
-export function ClarifyBox({ clarify, onAnswer, onLocate }: { clarify: Clarify; onAnswer: (answer: string) => void; onLocate?: () => void }) {
+export function ClarifyBox({ clarify, onAnswer, onLocate, heard, listening, mic }: { clarify: Clarify; onAnswer: (answer: string) => void; onLocate?: () => void; heard?: string; listening?: boolean; mic?: ReactNode }) {
   const [text, setText] = useState("");
+  // A spoken answer fills the box live and sends itself after a short pause.
+  useEffect(() => { if (heard) setText(heard); }, [heard]);
   const send = (a: string) => a.trim() && onAnswer(a.trim());
   return (
     <motion.section
@@ -57,9 +59,10 @@ export function ClarifyBox({ clarify, onAnswer, onLocate }: { clarify: Clarify; 
           id="clarify-answer"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Or type it…"
+          placeholder={listening ? "Listening…" : mic ? "Or type or say it…" : "Or type it…"}
           className="sw-field h-11 min-w-0 flex-1 px-3 text-[16px] text-ink caret-signal placeholder:text-ink-3 focus:bg-surface focus:shadow-[0_0_0_1.5px_var(--sw-signal),var(--sw-shadow-focus)] focus:outline-none"
         />
+        {mic}
         <button type="submit" aria-label="Answer" className="sw-btn sw-btn-primary size-11 shrink-0 rounded-[12px]" disabled={!text.trim()}>
           <ArrowRight className="size-5" aria-hidden />
         </button>

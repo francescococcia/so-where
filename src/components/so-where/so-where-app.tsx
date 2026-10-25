@@ -444,7 +444,7 @@ export function SoWhereApp() {
       ro.disconnect();
     };
   }, [snap, reduced]);
-  const [pending, setPending] = useState<null | "ask" | "chat">(null);
+  const [pending, setPending] = useState<null | "ask" | "chat" | "clarify">(null);
   const pendingTimer = useRef<number | null>(null);
   const baseAsk = useRef("");
   const awaitingReply = useRef(false);
@@ -704,7 +704,8 @@ export function SoWhereApp() {
   );
 
   // Voice: fill the box live; after a final result, send after a short pause unless cancelled.
-  const voiceTarget = useRef<"ask" | "chat">("ask");
+  const voiceTarget = useRef<"ask" | "chat" | "clarify">("ask");
+  const [clarifyHeard, setClarifyHeard] = useState("");
   const cancelPending = useCallback(() => {
     if (pendingTimer.current) window.clearTimeout(pendingTimer.current);
     pendingTimer.current = null;
@@ -712,7 +713,7 @@ export function SoWhereApp() {
   }, []);
   const PENDING_MS = 1600;
   const speech = useSpeech({
-    onText: (t) => (voiceTarget.current === "chat" ? setChat(t) : setQuery(t)),
+    onText: (t) => (voiceTarget.current === "chat" ? setChat(t) : voiceTarget.current === "clarify" ? setClarifyHeard(t) : setQuery(t)),
     onFinal: (t) => {
       const target = voiceTarget.current;
       setPending(target);
@@ -722,12 +723,15 @@ export function SoWhereApp() {
         if (target === "chat") {
           setChat("");
           refine(t);
+        } else if (target === "clarify") {
+          setClarifyHeard("");
+          answerClarify(t);
         } else askOrAnswer(t);
       }, PENDING_MS);
     },
     onError: (m) => say(m),
   });
-  const mic = (target: "ask" | "chat") => () => {
+  const mic = (target: "ask" | "chat" | "clarify") => () => {
     cancelPending();
     voiceTarget.current = target;
     speech.toggle();
@@ -910,7 +914,7 @@ export function SoWhereApp() {
               {/* Live timeline while working; once results are in, the strip moves below the cards (quiet). */}
               {state.steps.length && status !== "error" && !(finished && view) ? <AgentSteps steps={state.steps} finished={finished} elapsedMs={state.elapsedMs} /> : null}
 
-              {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={answerClarify} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} /> : null}
+              {status === "clarify" && state.clarify ? <ClarifyBox clarify={state.clarify} onAnswer={answerClarify} onLocate={state.clarify.missing === "my_location" && !you ? locate : undefined} heard={clarifyHeard} listening={speech.listening && voiceTarget.current === "clarify"} mic={speech.supported ? <MicButton listening={speech.listening && voiceTarget.current === "clarify"} onClick={mic("clarify")} className="rounded-[12px] bg-white/70 ring-1 ring-black/5" /> : null} /> : null}
 
               {view ? <Trail turns={turns} typing={refining && status === "running"} /> : null}
               {view ? (
