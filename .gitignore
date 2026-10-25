@@ -11,3 +11,4 @@ build/
 raw/
 .vercel
 .env*
+!.env.example

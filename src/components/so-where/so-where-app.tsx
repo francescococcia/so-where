@@ -27,7 +27,7 @@ import { LiveVoiceButton } from "./live-voice";
 import { BCP47, VoiceCardSlot, primeVoice, type VoiceReply } from "./voice-card";
 import { useLiveTools } from "./live-tools";
 
-/** Live voice (Gemini Live). Off unless NEXT_PUBLIC_LIVE_VOICE=1; the Web Speech mic stays the fallback. */
+/** Live voice (Gemini Live). On unless NEXT_PUBLIC_LIVE_VOICE=0; the Web Speech mic stays the fallback. */
 const LIVE_VOICE = process.env.NEXT_PUBLIC_LIVE_VOICE !== "0";
 import { MapChips } from "./map-chips";
 import { friendlyDraft } from "./draft";
@@ -1013,7 +1013,7 @@ export function SoWhereApp() {
                 askOrAnswer(query);
               }}
             >
-              <div className="-mx-1 mb-2.5 flex flex-wrap gap-1.5 px-1" role="group" aria-label="Quick starts">
+              <div className={cn("-mx-1 mb-2.5 flex flex-wrap gap-1.5 px-1", status === "result" && "max-lg:hidden")} role="group" aria-label="Quick starts">
                 {CHIPS.map((c, ci) => {
                   const on = activeChip === c.id;
                   return (

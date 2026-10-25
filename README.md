@@ -14,18 +14,18 @@ Live: **https://so-where.vercel.app** · try it with no setup: [`?demo=meet`](ht
 
 ## What it does
 
-| | Feature | |
-|---|---|---|
-| 🧭 | **Fair middle.** Compares central hubs by real TfL journey time for both of you and picks the fairest split ("you 20 min, them 21") | Encode-built |
-| ✅ | **Argon picks, then gets checked.** Gemini 4 Argon chooses from a pool that has already been checked. Its picks are re-checked against opening hours, TfL, weather and step-free access. If the top pick fails, it re-picks once. The verify row is shown on screen | Encode-built |
-| 🎙️ | **Voice, any language.** Speak in Italian (or any language). It plans and answers in your language | Encode-built |
-| 🔊 | **Spoken voice card.** A short spoken summary of the plan (it can be muted) | Encode-built |
-| 💬 | **Follow-ups.** "Cheaper", "quieter", "later", and compound questions like "what time do they close? and what time do you recommend?" | Encode-built |
-| ✨ | **Vibe match.** "A cosy quiet pub" runs MongoDB Atlas hybrid search (vector + text). Cards that matched on meaning get a *Vibe match* chip | Encode-built |
-| 🚇 | **Live line status.** MongoDB Atlas Stream Processing pulls TfL line status every 60 s. Journeys on disrupted lines are padded and marked "rerouted" | Encode-built |
-| 📷 | **Snap a place or poster.** Photograph a sign, landmark or event poster and it finds the place, with an honest certainty level. Faces are blurred on your device before upload. Then tap "Meet here" | Encode-built |
-| ✉️ | **Send plan.** Opens a draft you can copy or share. Nothing is sent automatically, and your friend's area is never included | Encode-built |
-| 🗺️ | Base map (MapLibre, OpenFreeMap tiles) and chat shell | Pre-existing |
+| Feature | |
+|---|---|
+| **Fair middle.** Compares central hubs by real TfL journey time for both of you and picks the fairest split ("you 20 min, them 21") | Encode-built |
+| **Argon picks, then gets checked.** Gemini 4 Argon chooses from a pool that has already been checked. Its picks are re-checked against opening hours, TfL, weather and step-free access. If the top pick fails, it re-picks once. The verify row is shown on screen | Encode-built |
+| **Live voice, any language.** Talk to it in Italian (or any language). It plans and answers in your language | Encode-built |
+| **Spoken voice card.** A short spoken summary of the plan (it can be muted) | Encode-built |
+| **Follow-ups.** "Cheaper", "quieter", "later", and compound questions like "what time do they close? and what time do you recommend?" | Encode-built |
+| **Vibe match.** "A cosy quiet pub" runs MongoDB Atlas hybrid search (vector + text). Cards that matched on meaning get a *Vibe match* chip | Encode-built |
+| **Live line status.** MongoDB Atlas Stream Processing pulls TfL line status every 60 s. Journeys on disrupted lines are padded and marked "rerouted" | Encode-built |
+| **Snap a place or poster.** Photograph a sign, landmark or event poster and it finds the place, with an honest certainty level. Faces are blurred on your device before upload. Then tap "Meet here" | Encode-built |
+| **Send plan.** Opens a draft you can copy or share. Nothing is sent automatically, and your friend's area is never included | Encode-built |
+| Base map (MapLibre, OpenFreeMap tiles) and chat shell | Pre-existing |
 
 Every fact on a card has a source and an as-of time. Anything the app couldn't check is listed under **"Couldn't check"** (for example prices, or how busy a place will be).
 
@@ -51,7 +51,29 @@ flowchart LR
   O -. anonymised .-> M[("Atlas plan_runs<br/>no text, no coordinates")]
 ```
 
-The planner streams each step to the UI as NDJSON, so the "How we got here" list shows the real sources and timings live. Core code: `src/lib/plan.ts`, `src/lib/verify.ts`, `src/app/api/plan/route.ts`.
+The planner streams each step to the UI as NDJSON, so the "How we got here" list shows the real sources and timings live. The list is collapsed under each plan ("10 checks · 8.2 s"); tap it to open. Core code: `src/lib/plan.ts`, `src/lib/verify.ts`, `src/app/api/plan/route.ts`.
+
+## Agents
+
+So where? is built from three Gemini agents plus plain code that checks them.
+
+**1. Planner agent** (`src/lib/plan.ts`, `src/lib/verify.ts`, `/api/plan`). Loop: gather → pick → verify → re-pick.
+- **Tools it gathers with:** TfL (StopPoint, Journey Planner), MongoDB Atlas (Search, `$rankFusion` vibe search, `line_status` from Stream Processing), Open-Meteo weather, Wikidata/Nominatim for landmarks.
+- **Pick:** gemini-4-argon chooses from the checked pool and gives a one-line reason.
+- **Verify:** deterministic rules re-check the pick (hours, TfL journey, rain, step-free).
+- **Re-pick:** if the top pick fails, the failures go back to Argon once. If Argon is too slow, gemini-3-flash-preview picks instead, and the step says so.
+- Gemini only fills gaps in the ask that the rules can't read (`src/lib/gemini-intent.ts`).
+
+**2. Live voice agent** (gemini-3.8-live, `src/lib/live-config.ts`, `src/components/so-where/live-tools.ts`). A real-time voice conversation that answers in the language you speak. It acts only through six tools:
+- `plan(query)`: run the planner;
+- `refine(text)`: a follow-up such as "cheaper";
+- `focus(index|name)`: show one place;
+- `isOpen(name)` and `leaveBy(name)`: answer from the card's sourced facts;
+- `draftMessage()`: opens the Send plan draft. It never sends.
+
+**3. Translate agent** (`src/lib/translate.ts`, `/api/translate`). gemini-3.5-live-translate-preview turns speech in any language into an English ask. gemini-3.5-flash-lite translates replies and cards back, and the voice card speaks them with gemini-3.8-flash-tts.
+
+**Built with AI coding assistants.** Francesco built the Encode features with AI coding agents (Grok Bot and Cursor-style agents) working in the repo, with him reviewing, testing and merging every change.
 
 ## Gemini models, and why each one
 
@@ -123,29 +145,47 @@ All six were checked live on production on 25 Oct (08:04–08:05 London). The st
 
 ## Evals
 
-`npm run eval` (`scripts/run_evals.ts`). Last full run before the merge: **88 / 92 pass.** Separately, the chat follow-up unit tests passed 10/10 and refine-chat 3/3. `next build` passes. The 4 known failures:
+`npm run eval` (`scripts/run_evals.ts`). Last full run (25 Oct, live TfL and Gemini): **90 / 92 pass.** `next build` and `tsc --noEmit` pass. The 2 known failures are wording checks in the eval cases, not wrong plans:
 
 | Case | Why it fails |
 |---|---|
-| `refine-italian-only-matches` | Headline wording: it says "within 30 min of" where the case expects "near". Failed before this run too |
-| `snap-landmark-low-confidence` | The message wording changed to "Couldn't read the sign clearly", and the case still expects the old text. Failed before this run too |
-| `halfway-no-zero-middle` | Live TfL data put the middle at Elephant & Castle with "you 0 min". Also fails on an earlier clean commit |
-| `refine-meet-at-place` | The live OSM name is "Kings Arms" without "The", so the expected text doesn't match. Also fails on an earlier clean commit |
+| `refine-italian-only-matches` | Headline wording: it says "within 30 min of" where the case expects "near" |
+| `snap-landmark-low-confidence` | The message now reads "Couldn't read the sign clearly", and the case still expects the old text |
 
 ## Running locally
 
+Needs **Node 20+** and npm. The demo links below work with no keys at all.
+
 ```bash
+git clone <repo> && cd so-where
 npm install
-cp .env.example .env.local   # fill in the names below
-npm run dev
-npm run seed:mongo && npm run seed:vectors   # load venues + vectors into Atlas
-npm run test:mongo
-npm run eval
+cp .env.example .env.local        # fill in the values (names are listed below)
+npm run dev                       # http://localhost:3000
 ```
 
-Environment variable **names** only:
+With `GEMINI_API_KEY` only, live plans work: venues come from live Overpass, then the bundled OSM snapshot. To use MongoDB Atlas:
 
-- **Required:** `GEMINI_API_KEY`, `MONGODB_URI`, `MONGODB_DB`, `TFL_APP_KEY`
+```bash
+npm run seed:mongo     # loads 7,225 venues into sowhere.venues and creates the Atlas Search indexes
+npm run seed:vectors   # builds embed_text and creates venues_vector (Automated Embedding, voyage-4); add --wait to wait for the indexes
+npm run test:mongo     # unit tests on an in-memory MongoDB (no Atlas needed) plus one live plan
+```
+
+Live line status needs an Atlas Stream Processing workspace: run `scripts/asp-setup.sh` (see `docs/mongodb-stream.md`). Without it, the planner uses TfL journeys without the line-status padding.
+
+Checks:
+
+```bash
+npx tsc --noEmit
+npm run build
+npm run eval           # live evals: needs GEMINI_API_KEY and network
+```
+
+Environment variable **names** only (see `.env.example`):
+
+- **Needed:** `GEMINI_API_KEY`
+- **For MongoDB Atlas:** `MONGODB_URI`, `MONGODB_DB` (default `sowhere`)
+- **Optional:** `TFL_APP_KEY` (TfL works without a key, with lower rate limits)
 - **Planner / vision:** `PLAN_MODEL`, `PLAN_ARGON`, `PLAN_PICK_THINKING`, `PLAN_VERIFY_THINKING`, `PLAN_GUARD_MS`, `VISION_MODEL`, `GEMINI_MODEL`
 - **Voice / translation:** `LIVE_MODEL`, `LIVE_VOICE`, `NEXT_PUBLIC_LIVE_VOICE`, `TRANSLATE_MODEL`, `TTS`, `TTS_MODEL`
 - **Blurbs / vibe:** `BLURBS`, `BLURB_MODEL`, `VIBE`, `VIBE_EMBED`, `VIBE_EMBED_MODEL`

@@ -652,7 +652,9 @@ async function runPlanCore(req: PlanRequest, emit?: StepSink, now = new Date()):
     REFINE_RUNS.set(steps, { refinement: rf.refinement, prefs: rf.refinement.prefs, cuisine: rf.ask.cuisine, focusName: (ask as RefinedAsk).focus?.name });
 
   }
-  endParse("done", `${ask.intent ?? "no intent"} · ${ask.signals.join(" · ") || "nothing recognised"} (${parseSource})`);
+  // Plain words, not field names: "Meet halfway · you: "Old Street" · Fri 30 Oct · 19:00 · pub (rules)".
+  const parseBits = ask.signals.filter((x) => !/^intent\b/.test(x)).map((x) => x.replace(/^day (\d{4}-\d\d-\d\d)$/, (_m, d: string) => shortDay(d)).replace(/^(time|category) /, ""));
+  endParse("done", `${ask.intent === "meet_halfway" ? "Meet halfway" : ask.intent === "near_me" ? "Near you" : "No plan type yet"} · ${parseBits.join(" · ") || "nothing recognised"} (${parseSource})`);
 
   const planned = planTime(ask, req.when, now, unknowns);
   const when = rf?.refinement.shiftMin ? new Date(planned.getTime() + rf.refinement.shiftMin * 60_000) : planned;
@@ -920,7 +922,7 @@ async function meetHalfway(ctx: Ctx & { you: LatLng & { id?: string }; youName: 
         fact("Price", ask.budgetGBP ? `Not listed, can't check £${ask.budgetGBP}` : "Not listed", "unknown", "OSM (no price tag)"),
         stepFree(p.tags, osm.r.asOf, osm.r.source),
       ],
-      why: `${Math.round(p.distanceM)} m from ${best.hub.name}, the fairest hub (${best.a.minutes} vs ${best.b.minutes} min)${untilWhy(h)}${h.verdict === "confirmed" ? "; hours recently checked in OSM" : ""}.`,
+      why: `${Math.round(p.distanceM)} m from ${best.hub.name}, the fairest hub (${best.a.minutes} vs ${best.b.minutes} min)${untilWhy(h)}${h.verdict === "confirmed" ? "; hours checked on OpenStreetMap" : ""}.`,
       url: p.tags.website ?? p.tags["contact:website"] ?? osmUrl(p),
       ...cardHours(h),
       ...cardVibe(osm.r, p),

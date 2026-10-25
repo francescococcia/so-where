@@ -554,7 +554,7 @@ export function VoiceCard({ reply, live, onClose, className }: { reply: VoiceRep
           className="relative mt-2 inline-flex min-h-7 max-w-full items-center gap-1.5 rounded-full bg-white/80 px-2.5 text-[11.5px] font-semibold text-ink-2 ring-1 ring-black/5 hover:bg-white hover:text-ink"
         >
           <Languages className="size-3.5 shrink-0 text-signal-ink" aria-hidden />
-          <span className="truncate">{showEnglish ? "English · tap for " + (reply.langName ?? "original") : `${reply.langName ?? reply.lang} · translated by ${reply.model ?? "Gemini"}`}</span>
+          <span className="truncate">{showEnglish ? "English · tap for " + (reply.langName ?? "original") : `${reply.langName ?? reply.lang} · translated by Gemini`}</span>
         </button>
       ) : null}
 

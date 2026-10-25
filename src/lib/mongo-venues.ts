@@ -108,7 +108,7 @@ export async function mongoVenuesNear(kind: OsmKind, center: LatLng, radiusM: nu
           asOf: asOf.toISOString(),
           live: false,
           ms: Date.now() - t0,
-          note: `Venues come from the OSM snapshot of ${dayLabel(asOf)} stored in MongoDB Atlas, not a live Overpass call`,
+          note: `Venues come from the OSM snapshot of ${dayLabel(asOf)} stored in MongoDB Atlas, not a live lookup`,
           via: `Searched ${fmtN(n)} venues in MongoDB Atlas (${method})`,
           stepSource,
         };

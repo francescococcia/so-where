@@ -45,7 +45,8 @@ Request: ${JSON.stringify(query)}`;
     fill("time", (v) => typeof v === "string" && /^\d{2}:\d{2}$/.test(v));
     fill("category", (v) => ["pub", "cafe", "restaurant", "event"].includes(String(v)));
     fill("budgetGBP", (v) => typeof v === "number" && v > 0 && v < 10000);
-    if (filled.length) ask.signals = [...ask.signals, `Gemini filled: ${filled.join(", ")}`];
+    const WORDS: Record<string, string> = { intent: "plan type", youPlace: "your place", themPlace: "their place", date: "day", time: "time", category: "kind of place", budgetGBP: "budget" };
+    if (filled.length) ask.signals = [...ask.signals, `Gemini filled: ${filled.map((k) => WORDS[k] ?? k).join(", ")}`];
     return { ask, used: true, filled, ms: Date.now() - t0 };
   } catch (e) {
     return { ask: rules, used: false, filled: [], ms: Date.now() - t0, error: String((e as Error)?.name ?? e) };

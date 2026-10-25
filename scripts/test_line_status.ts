@@ -36,7 +36,7 @@ await test("processor's normalise stages on live TfL JSON → one row per line",
   await db.collection("tfl_raw").insertOne({ polledAt: new Date(), lines: tfl });
   await db.collection("tfl_raw").aggregate([{ $project: { _id: 0 } }, ...normaliseStages(VIA_STREAM), { $merge: { into: COLL, on: "_id", whenMatched: "replace", whenNotMatched: "insert" } }]).toArray();
   const rows = await coll.find().toArray();
-  console.log(`      ${rows.length} rows; e.g.`, JSON.stringify(rows.find((r) => r._id === "jubilee")));
+  console.log(`      ${rows.length} rows; e.g.`, JSON.stringify(rows.find((r) => String(r._id) === "jubilee")));
   assert.equal(rows.length, tfl.length);
   for (const r of rows) assert.ok(typeof r.severity === "number" && typeof r.status === "string" && r.updatedAt instanceof Date && r.via === VIA_STREAM);
   const bad = rows.filter((r) => r.severity !== 10).map((r) => `${r.line}: ${r.status}`);

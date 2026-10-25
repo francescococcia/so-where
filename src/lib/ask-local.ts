@@ -313,6 +313,9 @@ const YOU_RE = /\b(?:i'?m|i am|im)\s+(?:currently\s+|now\s+|based\s+|staying\s+)
 const YOU_LIVE_RE = /\bi\s+(?:live|work|stay|study)\s+(?:in|at|near|around|by|next to)\s+([^,.;!?]+?)(?=\s+(?:and|but|while|whereas|so)\b|[,.;!?]|$)/i;
 const THEM_PRONOUN_RE = /\b(she|he|they)(?:'s|'re| is| are| lives| works| will be| 'll be|'ll be)\s+(?:currently\s+|now\s+|based\s+|staying\s+)?(?:at|in|near|around|by|over in|based in|coming from|from|out in)\s+([^,.;!?]+)/i;
 const THEM_NAME_RE = /\b([A-Z][a-z]{1,15})(?:'s| is| lives| works| will be)\s+(?:currently\s+|now\s+|based\s+)?(?:at|in|near|around|by|over in|coming from|from)\s+([^,.;!?]+)/;
+// "my friend is in Brixton", "my mate's at Bank", "our friend lives in Hackney": the rules found both places, so the
+// planner can skip the Gemini fill (~2–3 s). Place = group 2, like the pronoun/name forms above.
+const THEM_FRIEND_RE = /\b(?:my|our)\s+((?:best\s+)?(?:friend|mate|pal|partner|girlfriend|boyfriend|wife|husband|sister|brother|cousin|colleague|date|mum|dad|flatmate))(?:'s| is| lives| works| will be|'ll be)\s+(?:currently\s+|now\s+|based\s+|staying\s+)?(?:at|in|near|around|by|over in|based in|coming from|from|out in)\s+([^,.;!?]+)/i;
 const WITH_FROM_RE = /\bwith\s+(?:my\s+\w+\s+|([A-Z][a-z]{1,15})\s+)?(?:who'?s\s+|who is\s+)?(?:in|from|at|near|around)\s+([A-Z][^,.;!?]+)/;
 const BETWEEN_RE = /\bbetween\s+([A-Z][^,.;!?]+?)\s+and\s+([A-Z][^,.;!?]+)/;
 // "near University of Greenwich", "near Museum of the Home": "of (the)" joins capitalised words.
@@ -433,7 +436,10 @@ export function parsePlanAsk(raw: string, today = londonToday()): PlanAsk {
     if (youPlace) signals.push(`you: "${youPlace}"`);
   }
   if (!themPlace) {
-    const m = THEM_PRONOUN_RE.exec(q) ?? THEM_NAME_RE.exec(q);
+    const f = THEM_FRIEND_RE.exec(q);
+    // Friend form: only a known place or a capitalised name ("my friend is in a good mood" is not a place).
+    const friend = f && (known(cleanPlace(f[2])) || /^[A-Z]/.test(f[2].trim())) ? f : null;
+    const m = THEM_PRONOUN_RE.exec(q) ?? THEM_NAME_RE.exec(q) ?? friend;
     const n = m ? null : (WITH_FROM_RE.exec(q) ?? THEM_SLOT_RE.exec(q));
     themPlace = cleanPlace(m?.[2] ?? n?.[2] ?? n?.[1]);
     if (themPlace) signals.push("other person's place found");

@@ -200,7 +200,7 @@ export async function verifyPicks(pool: VCard[], o: VerifyOpts): Promise<{ cards
   const fabricated = first.ids.filter((id) => !byId.has(id));
   proposedNames = proposed.map((c) => c.name);
   modelMs = first.ms;
-  endPick!("done", `${first.model}${first.guarded ? " (Argon over the latency guard, flash used)" : ""}, ${secs(first.ms)}: ${proposed.map((c) => c.name).join(", ") || "no listed option"}${fabricated.length ? ` · ignored ${fabricated.length} id${fabricated.length > 1 ? "s" : ""} not in the list` : ""}${first.reasons[0] ? ` · "${first.reasons[0]}"` : ""}`, first.model);
+  endPick!("done", `${first.guarded ? "Argon was too slow, Flash picked · " : ""}${secs(first.ms)}: ${proposed.map((c) => c.name).join(", ") || "no listed option"}${fabricated.length ? ` · ignored ${fabricated.length} id${fabricated.length > 1 ? "s" : ""} not in the list` : ""}${first.reasons[0] ? ` · "${first.reasons[0]}"` : ""}`, first.model);
   let model = first.model;
   let rounds = 1;
   const invented = !byId.has(first.ids[0]);
