@@ -32,7 +32,15 @@ type Props = {
   reduced: boolean;
   /** The device position (already rounded to ~100 m) when "Use my location" is on: draws an honest ~100 m ring. */
   deviceYou?: LatLng | null;
+  /** Empty home screen: an example pair (labelled "example") so the map shows what the app does. Cleared by any plan. */
+  idleDemo?: boolean;
 };
+
+// ui32: example pair for the empty screen. Fixed station points (Old Street, Clapham Common) and their plain
+// geometric middle: no journey times, nothing computed or claimed; every label says "example".
+const DEMO_YOU: LatLng = { lat: 51.5263, lng: -0.0878 };
+const DEMO_THEM: LatLng = { lat: 51.4618, lng: -0.1384 };
+const DEMO_MID: LatLng = { lat: (DEMO_YOU.lat + DEMO_THEM.lat) / 2, lng: (DEMO_YOU.lng + DEMO_THEM.lng) / 2 };
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const ll = (p: LatLng): [number, number] => [p.lng, p.lat];
@@ -220,13 +228,17 @@ function metres(a: LatLng, b: LatLng) {
   return Math.hypot(x, y);
 }
 
-export default function PlanMap({ result, selectedId, hoverId, focusId, scanning, scanFocus, onSelect, onHover, padding, reduced, deviceYou }: Props) {
+export default function PlanMap({ result, selectedId, hoverId, focusId, scanning, scanFocus, onSelect, onHover, padding, reduced, deviceYou, idleDemo = false }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const markers = useRef<Marker[]>([]);
   const pins = useRef<Map<string, HTMLElement>>(new Map());
   const draw = useRef<number | null>(null);
   const userBusy = useRef(0); // timestamp of the last user gesture
+  const touched = useRef(false); // any gesture on the map: the empty-screen drift stops for good
+  const demoRef = useRef(idleDemo);
+  demoRef.current = idleDemo;
+  const demoMarkers = useRef<Marker[]>([]);
   const flying = useRef(false);
   const fitRef = useRef<(() => void) | null>(null);
   const padRef = useRef(padding);
@@ -276,7 +288,10 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     });
     map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right");
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), "bottom-right");
-    const busy = () => (userBusy.current = performance.now());
+    const busy = () => {
+      userBusy.current = performance.now();
+      touched.current = true;
+    };
     map.on("mousedown", busy);
     map.on("touchstart", busy);
     map.on("wheel", busy);
@@ -316,6 +331,7 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
           dashT = 0;
           dashI = (dashI + 1) % DASHES.length;
           if (map.getLayer("legs-flow")) map.setPaintProperty("legs-flow", "line-dasharray", DASHES[dashI]);
+          if (demoRef.current && map.getLayer("demo-flow")) map.setPaintProperty("demo-flow", "line-dasharray", DASHES[dashI]);
         }
         // journey vehicles: every frame (2 HTML markers), clock only runs once the route is drawn and the tab is visible
         if (drawn.current && !document.hidden) {
@@ -349,8 +365,8 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
           }
         }
         // idle orbit: only when nobody's touching the map and no camera move is running
-        const idle = now - userBusy.current > 7000 && !flying.current && !map.isMoving();
-        if (idle) map.setBearing(map.getBearing() + dt * (scanRef.current ? 0.006 : 0.0022));
+        const idle = now - userBusy.current > 7000 && !flying.current && !map.isMoving() && !(demoRef.current && touched.current);
+        if (idle) map.setBearing(map.getBearing() + dt * (scanRef.current ? 0.006 : demoRef.current ? 0.003 : 0.0022));
         // scanning: light up candidate hubs one after another
         if (scanRef.current) {
           scanT += dt;
@@ -435,6 +451,48 @@ export default function PlanMap({ result, selectedId, hoverId, focusId, scanning
     map.setFilter("hubs-lit", ["==", ["get", "i"], near[0] ?? -1]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning, ready, focusKey]);
+
+  // ui32: the empty-screen example pair (You at Old Street, them at Clapham, a dotted line and a pulsing middle).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const clear = () => {
+      demoMarkers.current.forEach((m) => m.remove());
+      demoMarkers.current = [];
+      (map.getSource("demo-line") as GeoJSONSource | undefined)?.setData(FC());
+    };
+    if (!idleDemo) {
+      clear();
+      return;
+    }
+    if (!map.getSource("demo-line")) {
+      map.addSource("demo-line", { type: "geojson", data: FC() });
+      map.addLayer({ id: "demo-line", type: "line", source: "demo-line", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 4, "line-opacity": 0.8, "line-dasharray": [0.1, 1.9] } });
+      map.addLayer({ id: "demo-flow", type: "line", source: "demo-line", layout: { "line-cap": "butt", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": 1.4, "line-opacity": 0.7, "line-dasharray": DASHES[0] } });
+    }
+    const seg = (a: LatLng, b: LatLng, color: string): GeoJSON.Feature => ({ type: "Feature", properties: { color }, geometry: { type: "LineString", coordinates: [ll(a), ll(b)] } });
+    (map.getSource("demo-line") as GeoJSONSource).setData(FC([seg(DEMO_YOU, DEMO_MID, COLOR.you), seg(DEMO_MID, DEMO_THEM, COLOR.them)]));
+    const add = (m: Marker) => demoMarkers.current.push(m.addTo(map));
+    const you = puck({ who: "you", title: "You", sub: "Old Street · example", aria: "Example: you at Old Street", delay: reduced ? 0 : 0.3 });
+    const them = puck({ who: "them", title: "Them", sub: "Clapham · example", aria: "Example: them around Clapham", delay: reduced ? 0 : 0.5 });
+    you.classList.add("sw-demo");
+    them.classList.add("sw-demo");
+    add(new maplibregl.Marker({ element: you, anchor: "bottom" }).setLngLat(ll(DEMO_YOU)));
+    add(new maplibregl.Marker({ element: them, anchor: "bottom" }).setLngLat(ll(DEMO_THEM)));
+    add(new maplibregl.Marker({ element: el("<i></i><i></i><b></b>", "sw-mid sw-demo-mid"), anchor: "center" }).setLngLat(ll(DEMO_MID)));
+    add(new maplibregl.Marker({ element: el("Example · the middle", "sw-demo-tag"), anchor: "top", offset: [0, 20] }).setLngLat(ll(DEMO_MID)));
+    if (!touched.current) {
+      const w = map.getContainer().clientWidth;
+      const p = w < 700 ? { top: 120, right: 56, bottom: 70, left: 56 } : { ...padRef.current, top: Math.max(90, padRef.current.top), bottom: Math.max(90, padRef.current.bottom) };
+      const cam = map.cameraForBounds(new maplibregl.LngLatBounds(ll(DEMO_THEM), ll(DEMO_YOU)).extend(ll(DEMO_MID)), { padding: p });
+      if (cam) {
+        const to = { center: cam.center, zoom: Math.min(13.4, cam.zoom ?? 12.5), pitch: 48, bearing: map.getBearing() };
+        if (reduced) map.jumpTo(to);
+        else map.easeTo({ ...to, duration: 1800 });
+      }
+    }
+    return clear;
+  }, [idleDemo, ready, reduced]);
 
   // Markers + cinematic camera: once per result.
   useEffect(() => {

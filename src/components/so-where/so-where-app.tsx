@@ -34,6 +34,8 @@ import { friendlyDraft } from "./draft";
 import { CountUp } from "./motion-bits";
 import type { MapPadding, ScanFocus } from "./plan-map";
 
+const NowStrip = dynamic(() => import("./now-strip"), { ssr: false, loading: () => null });
+
 const PlanMap = dynamic(() => import("./plan-map"), {
   ssr: false,
   loading: () => <div className="absolute inset-0 bg-ground" aria-hidden />,
@@ -234,6 +236,43 @@ function ArgonRow({ verify, top }: { verify?: VerifyInfo; top?: string }) {
   );
 }
 
+const PLACEHOLDERS = [
+  "Date Thursday at 7, I'm at Old Street, she's around Clapham…",
+  "Ci vediamo a metà strada tra Old Street e Clapham?",
+  "Coffee with Sam tomorrow morning, I'm at King's Cross…",
+  "Snap a place: photograph a pub sign to plan around it",
+  "What's on near me tonight that I can just walk into?",
+];
+
+/** Types PLACEHOLDERS one after another while `on`; otherwise shows the first one, static. */
+function useCyclingPlaceholder(on: boolean) {
+  const [text, setText] = useState(PLACEHOLDERS[0]);
+  useEffect(() => {
+    if (!on) {
+      setText(PLACEHOLDERS[0]);
+      return;
+    }
+    let i = 0;
+    let n = PLACEHOLDERS[0].length;
+    let hold = 70; // ~2.8 s on the full line before moving on
+    const t = window.setInterval(() => {
+      const full = PLACEHOLDERS[i];
+      if (n >= full.length) {
+        if (hold-- > 0) return;
+        i = (i + 1) % PLACEHOLDERS.length;
+        n = 0;
+        hold = 70;
+        setText("");
+        return;
+      }
+      n = Math.min(full.length, n + 1);
+      setText(full.slice(0, n) + (n < full.length ? "▍" : ""));
+    }, 40);
+    return () => window.clearInterval(t);
+  }, [on]);
+  return text;
+}
+
 const HERO = "Where shall we meet?".split(" ");
 
 function Hero() {
@@ -244,7 +283,7 @@ function Hero() {
       </div>
       <h1 className="text-[28px] font-bold leading-[1.1] tracking-[-0.025em] text-ink" aria-label="Where shall we meet?">
         {HERO.map((w, i) => (
-          <motion.span key={w + i} aria-hidden className="inline-block" initial={{ opacity: 0, y: 18, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ delay: 0.25 + i * 0.07, type: "spring", stiffness: 320, damping: 24 }}>
+          <motion.span key={w + i} aria-hidden className="inline-block" initial={{ y: 10 }} animate={{ y: 0 }} transition={{ delay: 0.05 + i * 0.05, type: "spring", stiffness: 320, damping: 24 }}>
             {i === HERO.length - 1 ? <span className="text-signal-ink">{w}</span> : w}
             {i < HERO.length - 1 ? "\u00a0" : ""}
           </motion.span>
@@ -609,6 +648,9 @@ export function SoWhereApp() {
     [reduced, stopTyping, pulse]
   );
 
+  // ui32: the empty box types example asks as its placeholder (stops on focus, with text, or with reduced motion).
+  const [askFocus, setAskFocus] = useState(false);
+
   useEffect(() => () => {
     stopTyping();
     if (pulseTimer.current) window.clearTimeout(pulseTimer.current);
@@ -625,6 +667,7 @@ export function SoWhereApp() {
   }, [query]);
 
   const { result, status } = state;
+  const cyclingPlaceholder = useCyclingPlaceholder(!askFocus && !query && status === "idle" && !reduced);
 
   useEffect(() => {
     const demo = new URLSearchParams(window.location.search).get("demo");
@@ -981,7 +1024,7 @@ export function SoWhereApp() {
 
         {/* Map: on top on phones, full-bleed behind the panel on desktop */}
         <div className="relative h-[46svh] min-h-[300px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto">
-          <PlanMap result={mapResult} selectedId={placeSnap ? placeSnap.card.id : selectedId} hoverId={hoverId} focusId={placeSnap ? placeSnap.card.id : detailId} scanning={status === "running" && !placeSnap} scanFocus={scanFocus} onSelect={placeSnap ? () => {} : select} onHover={setHoverId} padding={panelOpen && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} deviceYou={you} />
+          <PlanMap result={mapResult} selectedId={placeSnap ? placeSnap.card.id : selectedId} hoverId={hoverId} focusId={placeSnap ? placeSnap.card.id : detailId} scanning={status === "running" && !placeSnap} idleDemo={status === "idle" && !mapResult && !placeSnap && !state.example} scanFocus={scanFocus} onSelect={placeSnap ? () => {} : select} onHover={setHoverId} padding={panelOpen && !mobile ? { ...padding, right: 420 } : padding} reduced={reduced} deviceYou={you} />
           <div className={cn("pointer-events-none absolute right-3 top-3 z-10 transition-[right] duration-500 max-sm:right-2 max-sm:top-2 max-sm:origin-top-right max-sm:scale-[.92] lg:right-4 lg:top-4", panelOpen && !mobile && "md:right-[412px] lg:right-[412px]")}>
             <MapChips result={mapResult} cardId={placeSnap ? placeSnap.card.id : detailId ?? selectedId} />
           </div>
@@ -996,10 +1039,10 @@ export function SoWhereApp() {
 
         {/* Plan panel */}
         <motion.aside
-          initial={{ opacity: 0, x: -28, scale: 0.985 }}
-          animate={{ opacity: 1, x: 0, scale: 1 }}
+          initial={{ x: -16 }}
+          animate={{ x: 0 }}
           transition={{ type: "spring", stiffness: 220, damping: 28, delay: 0.05 }}
-          className="sw-glass relative z-10 -mt-5 flex flex-col rounded-t-[22px] lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:mt-0 lg:w-[444px] lg:rounded-[22px]"
+          className={cn("sw-glass relative z-10 -mt-5 flex flex-col rounded-t-[22px] lg:absolute lg:bottom-4 lg:left-4 lg:top-4 lg:mt-0 lg:w-[444px] lg:rounded-[22px]", status === "idle" && !placeSnap && "sw-glass-idle")}
         >
           <div ref={scrollRef} className="sw-scroll-fade flex-1 overscroll-contain px-4 pb-6 pt-4 lg:overflow-y-auto lg:px-5 lg:pt-5">
             <Header example={state.example || !!placeSnap?.example} reason={placeSnap?.example ? "demo link" : state.exampleReason} className="mb-5 hidden lg:flex" />
@@ -1014,7 +1057,34 @@ export function SoWhereApp() {
               }}
             >
               <div className={cn("-mx-1 mb-2.5 flex flex-wrap gap-1.5 px-1", status === "result" && "max-lg:hidden")} role="group" aria-label="Quick starts">
-                {CHIPS.map((c, ci) => {
+                {status === "idle" && !placeSnap ? (
+                  <motion.button
+                    type="button"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      const ask = CHIPS[0].ask;
+                      stopTyping();
+                      setActiveChip(CHIPS[0].id);
+                      setQuery(ask);
+                      askOrAnswer(ask);
+                    }}
+                    aria-label={`Try it: ${CHIPS[0].ask}`}
+                    className="sw-hero-card mb-1 flex w-full items-center gap-3 rounded-[18px] px-4 py-3 text-left"
+                  >
+                    <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-white/20"><GitCommitHorizontal className="size-5" aria-hidden /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-mono text-[10.5px] font-semibold uppercase tracking-[.14em] text-white/85">Meet halfway · try it</span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[15px] font-semibold leading-5">
+                        <span className="sw-hero-you" aria-hidden />Old Street <span aria-hidden className="text-white/75">↔</span> <span className="sw-hero-them" aria-hidden />Clapham <span aria-hidden className="text-white/75">→</span> fair middle
+                      </span>
+                    </span>
+                    <ArrowRight className="size-5 shrink-0" aria-hidden />
+                  </motion.button>
+                ) : null}
+                {CHIPS.filter((c, ci) => ci > 0 || !(status === "idle" && !placeSnap)).map((c, ci) => {
                   const on = activeChip === c.id;
                   return (
                     <motion.button
@@ -1029,7 +1099,7 @@ export function SoWhereApp() {
                         typeIn(c.ask);
                       }}
                       aria-pressed={on}
-                      className="sw-chip min-h-9 px-3 text-[13px] font-medium max-lg:min-h-11"
+                      className={cn("sw-chip px-3 font-medium", status === "idle" && !placeSnap ? "min-h-8 text-[12.5px] max-lg:min-h-10" : "min-h-9 text-[13px] max-lg:min-h-11")}
                     >
                       {on ? <motion.span layoutId="chip-on" className="absolute inset-0 -z-10 rounded-full bg-signal-soft" transition={{ type: "spring", stiffness: 500, damping: 36 }} /> : null}
                       <c.Icon className={cn("size-4 transition-colors", on ? "text-signal-ink" : "text-ink-3")} aria-hidden />
@@ -1048,7 +1118,7 @@ export function SoWhereApp() {
                     setSnap((v) => (v === "ask" && snapMode === "place" ? null : "ask"));
                   }}
                   aria-expanded={snap === "ask"}
-                  className={cn("sw-chip min-h-9 px-3 text-[13px] font-medium max-lg:min-h-11", snap === "ask" && "bg-signal-soft")}
+                  className={cn("sw-chip px-3 font-medium", status === "idle" && !placeSnap ? "min-h-8 text-[12.5px] max-lg:min-h-10" : "min-h-9 text-[13px] max-lg:min-h-11", snap === "ask" && "bg-signal-soft")}
                 >
                   <Camera className={cn("size-4 transition-colors", snap === "ask" ? "text-signal-ink" : "text-ink-3")} aria-hidden />
                   <span>Snap a place</span>
@@ -1073,7 +1143,9 @@ export function SoWhereApp() {
                       askOrAnswer(query);
                     }
                   }}
-                  placeholder="Date Thursday at 7, I'm at Old Street, she's around Clapham…"
+                  onFocus={() => setAskFocus(true)}
+                  onBlur={() => setAskFocus(false)}
+                  placeholder={cyclingPlaceholder}
                   className="min-h-[52px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-ink caret-signal transition-[height] duration-200 placeholder:text-ink-3 focus:outline-none"
                 />
                 <CameraButton open={snap === "ask"} onClick={() => setSnap((v) => (v === "ask" ? null : "ask"))} />
@@ -1109,6 +1181,7 @@ export function SoWhereApp() {
               </div>
               <AnimatePresence>{pending === "ask" ? <PendingSend ms={PENDING_MS} onCancel={cancelPending} /> : null}</AnimatePresence>
             </form>
+            {status === "idle" && !placeSnap && snap !== "ask" ? <NowStrip onPick={(ask) => { setActiveChip(null); typeIn(ask); }} /> : null}
             <AnimatePresence initial={false}>
               {snap === "ask" ? (
                 <motion.div key="snap-ask" ref={snapRef} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: reduced ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">

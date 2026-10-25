@@ -534,3 +534,23 @@ button.sw-map-chip:focus-visible { outline: 2px solid var(--sw-signal-strong); o
     mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 16px), transparent 100%);
   }
 }
+
+/* ui32: empty home screen. Idle panel lets the map show through; "right now" cards; featured example card. */
+@media (min-width: 1024px) {
+  .sw-glass.sw-glass-idle { background: rgba(255,255,255,.6); -webkit-backdrop-filter: blur(16px) saturate(160%); backdrop-filter: blur(16px) saturate(160%); transition: background-color .4s ease; }
+}
+.sw-now-card { background: rgba(255,255,255,.66); -webkit-backdrop-filter: var(--sw-glass-blur); backdrop-filter: var(--sw-glass-blur); box-shadow: inset 0 0 0 1px rgba(255,255,255,.75), 0 6px 18px -10px rgba(74,52,30,.35); transition: transform .18s var(--sw-ease-out), box-shadow .18s ease; }
+.sw-now-card:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 1px rgba(255,255,255,.9), 0 10px 22px -10px rgba(74,52,30,.4); }
+.sw-now-card:focus-visible, .sw-hero-card:focus-visible { outline: 2px solid var(--sw-signal); outline-offset: 2px; }
+.sw-hero-card { position: relative; overflow: hidden; color: #fff; background: linear-gradient(135deg, var(--sw-signal-strong) 0%, #b63f0a 100%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.18), 0 12px 26px -12px rgba(194,65,12,.55); transition: transform .18s var(--sw-ease-out), box-shadow .18s ease; }
+.sw-hero-card:hover:not(:disabled) { transform: translateY(-1px); box-shadow: inset 0 0 0 1px rgba(255,255,255,.25), 0 16px 30px -12px rgba(194,65,12,.6); }
+.sw-hero-card:disabled { opacity: .6; }
+.sw-hero-card::after { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 90% at 100% 0%, rgba(255,255,255,.22), transparent 55%); pointer-events: none; }
+.sw-hero-them { display: inline-block; width: 9px; height: 9px; border-radius: 999px; background: #1478a3; box-shadow: 0 0 0 2px #fff; }
+.sw-hero-you { display: inline-block; width: 9px; height: 9px; border-radius: 999px; background: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.45); }
+.sw-demo .sw-puck, .sw-demo-mid { opacity: .92; }
+.sw-demo-tag { font: 700 9.5px/1 var(--font-geist-mono), monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--sw-ink-3); background: rgba(255,255,255,.8); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); padding: 4px 7px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.8), 0 4px 10px -6px rgba(74,52,30,.4); white-space: nowrap; }
+@media (prefers-reduced-transparency: reduce) {
+  .sw-now-card, .sw-demo-tag { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (max-width: 699px) { .sw-demo-tag { display: none; } }
