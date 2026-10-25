@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, ArrowUp, CalendarDays, Camera, Check, CheckCircle2, Coffee, DoorOpen, FlaskConical, GitCommitHorizontal, HelpCircle, Info, Languages, LocateFixed, Loader2, Mic, Navigation, PencilLine, Repeat2, Send, ShieldCheck, Sparkles, X } from "lucide-react";
+import { ArrowRight, ArrowUp, CalendarDays, Camera, Check, CheckCircle2, Coffee, DoorOpen, ExternalLink, FlaskConical, GitCommitHorizontal, HelpCircle, Info, Languages, LocateFixed, Loader2, Mic, Navigation, PencilLine, Repeat2, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import type { PlanResultWithAgent } from "@/lib/plan-types";
 import { translateDemo, type FixtureId } from "@/lib/plan-fixture";
 import type { VerifyInfo } from "@/lib/verify";
@@ -341,7 +341,7 @@ function RouteScan() {
 }
 
 type Toast = { id: number; text: string };
-type Turn = { id: number; role: "user" | "agent"; text: string; leaveBy?: LeaveBy | null };
+type Turn = { id: number; role: "user" | "agent"; text: string; leaveBy?: LeaveBy | null; link?: { label: string; url: string } | null };
 
 
 /** Spoken line for a fresh plan: the top pick, its travel time and its "why here", kept short for the voice card. */
@@ -453,6 +453,12 @@ function Trail({ turns, typing }: { turns: Turn[]; typing?: boolean }) {
                 <span className="min-w-0 whitespace-pre-line [overflow-wrap:anywhere]">
                   {t.text.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim()}
                   {t.leaveBy ? <LeaveByChip lb={t.leaveBy} className="mt-1.5 flex w-fit whitespace-normal" /> : null}
+                  {t.link ? (
+                    <a href={t.link.url} target="_blank" rel="noopener noreferrer" className="sw-btn sw-btn-primary mt-1.5 flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold whitespace-nowrap">
+                      {t.link.label}
+                      <ExternalLink className="size-3.5" aria-hidden />
+                    </a>
+                  ) : null}
                 </span>
               </span>
             )}
@@ -502,7 +508,7 @@ const looksPlain = (t: string) => t.trim().split(/\s+/).length <= 2 && !/[^\x00-
 const recogLang = (code?: string) => (code === "zh" ? "zh-CN" : (code && BCP47[code]) || "en-GB");
 
 /** ui30: server `followUp` on a follow-up answered without a replan (chat-intent.ts). */
-type FollowUp = { kind: string; action?: "share" | "directions" | "start_over" };
+type FollowUp = { kind: string; action?: "share" | "directions" | "start_over"; link?: { label: string; url: string } };
 const followUpOf = (r: unknown): FollowUp | null => {
   const f = (r as { followUp?: FollowUp } | null)?.followUp;
   return f && typeof f.kind === "string" ? f : null;
@@ -763,7 +769,8 @@ export function SoWhereApp() {
         awaitingReply.current = false;
         const text = state.reply || agentReply(shown, result);
         const id = Date.now();
-        setTurns((t) => [...t, { id, role: "agent", text, leaveBy: leaveByOf(result) }]);
+        const link = fu?.link && /^https?:\/\//i.test(fu.link.url) ? fu.link : null;
+        setTurns((t) => [...t, { id, role: "agent", text, leaveBy: leaveByOf(result), link }]);
         voiceOut({ id, text, leaveBy: leaveByOf(result), place: focusName.current, autoplay: true }, id);
       } else if (result.cards.length) {
         // Every fresh answer gets the voice card too, not just follow-ups.

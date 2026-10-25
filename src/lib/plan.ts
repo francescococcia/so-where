@@ -5,7 +5,7 @@
 import { parsePlanAsk, SOLO_RE, type PlanAsk } from "@/lib/ask-local";
 import { LONDON_CENTER } from "@/lib/areas";
 import { arrivalClock, isLeaveQuestion, leaveTimes, type LeaveBy } from "@/lib/leave-time";
-import { chatIntent, chatReply, fallbackReply, type ChatAction, type ChatKind } from "@/lib/chat-intent";
+import { chatIntent, chatReply, fallbackReply, type ChatAction, type ChatKind, type ChatLink } from "@/lib/chat-intent";
 import { classifyQuestion, openWindow, recommendTime, splitQuestions } from "@/lib/follow-up";
 import { londonToday } from "@/lib/dates";
 import { seedEventsOn, type SeedEvent } from "@/lib/events";
@@ -41,7 +41,7 @@ export type PlanResultRefined = PlanResultWithAgent & {
   /** "When do I leave?" follow-ups only (see leave-time.ts). */
   leaveBy?: LeaveBy;
   /** Off-script follow-ups answered without a replan (chat-intent.ts); `action` tells the UI what to highlight. Never sends. */
-  followUp?: { kind: ChatKind | "unknown"; action?: ChatAction };
+  followUp?: { kind: ChatKind | "unknown"; action?: ChatAction; link?: ChatLink };
 };
 export type StepSink = (step: AgentStep) => void;
 
@@ -512,7 +512,7 @@ export async function runPlan(req: PlanRequest, emit?: StepSink, now = CLOCK ? C
     const a = chatReply(chat, base, card, req.refine!);
     const step: AgentStep = { id: "refine", label: "Answering your follow-up", status: "done", detail: `${a.detail} · plan unchanged`, source: "rules", ms: 0 };
     emit?.(step);
-    return { ...base, query: req.previous!.query, steps: [...(base.steps ?? []), step], reply: a.reply, followUp: { kind: chat.kind, ...(a.action ? { action: a.action } : {}) } };
+    return { ...base, query: req.previous!.query, steps: [...(base.steps ?? []), step], reply: a.reply, followUp: { kind: chat.kind, ...(a.action ? { action: a.action } : {}), ...(a.link ? { link: a.link } : {}) } };
   }
   const prev = req.previous?.result;
   const askOpen = !mixed && !!prev?.cards?.length && openQuestionOnly(req, londonToday(now));

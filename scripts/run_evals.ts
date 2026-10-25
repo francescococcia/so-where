@@ -56,7 +56,7 @@ type Expect = { intent?: string; clarify: boolean; missing?: string; middleIn?: 
 type Wx = { tempC: number; rainPct: number; rainMm?: number; sunny?: boolean };
 // `unit`: in-process checks of a helper (no HTTP): "hours" parses OSM opening_hours, "segments" tidies stretches.
 type HoursUnit = { oh: string; date: string; at: string; state: "open" | "closed" | "unknown"; closesAt?: string };
-type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7" | "server8" | "server9" | "server16" | "server17";
+type Case = { id: string; query: string; unit?: "hours" | "segments" | "coarse" | "poster" | "server4" | "server5" | "server6" | "server7" | "server8" | "server9" | "server16" | "server17" | "server18";
   // server6 "snap a place": a fixture extract stands in for Gemini (test hook); the route runs for real (fixture image bytes).
   snap?: { extract: SnapExtract; landmark?: boolean; nearbyQuery?: string; kind?: string; at?: { lat: number; lng: number; maxM: number }; you?: { lat: number; lng: number }; area?: string; place?: string; suggestedQuery?: string; minCandidates?: number; message?: string; firstCandidate?: string; noCandidates?: boolean }; hours?: HoursUnit[]; you?: { lat: number; lng: number }; answer?: string; previous?: { query: string; answer: string }; answers?: string[]; refines?: string[]; focusTop?: boolean; weather?: Wx; clock?: string; expect: Expect };
 // `clock`: pin "now" to HH:MM London (today if still ahead, else tomorrow, so live TfL/forecast calls stay in the
@@ -478,6 +478,33 @@ async function unitChecks(c: Case): Promise<Chk[]> {
     add("start over → UI clears (followUp.action=start_over), no replan", so.followUp?.action === "start_over", so.followUp);
     const fb = fallbackReply("", "Heard"), fbIt = fallbackReply("boh non lo so cosa", "Heard");
     add("friendlier fallback, one sentence, lists what we can do (time / type / quieter / send / directions / when to leave); Italian for Italian", /^Sorry, I didn't catch that for Heard: try a time.*a type.*quieter.*send it to my friend.*directions.*when should I leave"\.$/.test(fb) && !/Not sure what to change/.test(fb) && /^Scusa, non ho capito/.test(fbIt), [fb, fbIt]);
+  }
+  if (c.unit === "server18") {
+    // ui36: "how do I sign up?" follow-up: the event's real URL from the data as a link (Luma → "Register on Luma"); a pub or an
+    // event with no URL → "no sign-up link listed" (+ the venue's own website if the data has one). Never invented, never sent.
+    const words = ["how do I sign up?", "Come posso iscrivermi?", "¿cómo me inscribo?", "where do I register", "tickets?", "biglietti?", "entradas", "comment s'inscrire", "wie kann ich mich anmelden", "how do I join", "come partecipo?", "signup link"];
+    add("sign-up intent: EN / IT / ES / FR / DE phrasings", words.every((q) => chatIntent(q)?.kind === "signup"), words.map((q) => [q, chatIntent(q)?.kind ?? null]).filter((x) => x[1] !== "signup"));
+    const LUMA = "https://lu.ma/zrk45rju";
+    const event = { ...meetFixture, cards: [{ ...meetFixture.cards[0], kind: "event", name: "No Other Land Screening", url: LUMA }, ...meetFixture.cards.slice(1)] } as typeof meetFixture;
+    const prev = c.id === "signup-followup-event" ? event : meetFixture;
+    const ids = prev.cards.map((x) => x.id).join(",");
+    const ask = (q: string) => runPlan({ query: q, refine: q, previous: { query: prev.query, answer: "", result: prev } } as never);
+    const [en, it, es] = await Promise.all(["how do I sign up?", "Come posso iscrivermi?", "¿cómo me inscribo?"].map(ask));
+    const same = [en, it, es].every((r) => r.followUp?.kind === "signup" && r.cards.map((x) => x.id).join(",") === ids && r.draftMessage === prev.draftMessage && !/didn't catch|non ho capito|no lo he entendido/.test(r.reply ?? ""));
+    if (c.id === "signup-followup-event") {
+      add("EN 'how do I sign up?' on an event plan → the event's Luma URL as \"Register on Luma\"", same && en.followUp?.link?.url === LUMA && en.followUp?.link?.label === "Register on Luma" && /Sign-up is on the event's Luma page: "Register on Luma"/.test(en.reply ?? ""), { reply: en.reply, followUp: en.followUp });
+      add("IT 'Come posso iscrivermi?' → Italian reply, button name kept, same Luma URL", it.followUp?.link?.url === LUMA && /^L'iscrizione è sulla pagina Luma dell'evento: "Register on Luma"/.test(it.reply ?? ""), { reply: it.reply, followUp: it.followUp });
+      add("ES '¿cómo me inscribo?' → Spanish reply, same Luma URL", es.followUp?.link?.url === LUMA && /^La inscripción está en la página de Luma/.test(es.reply ?? ""), { reply: es.reply, followUp: es.followUp });
+      const other = chatReply({ kind: "signup" }, event, { ...event.cards[0], url: "https://www.eventbrite.co.uk/e/123" }, "how do I sign up");
+      add("non-Luma event URL → \"Open event page\" with that URL", other.link?.label === "Open event page" && other.link.url === "https://www.eventbrite.co.uk/e/123", other);
+    } else {
+      const site = prev.cards[0].url;
+      add("EN / IT / ES sign-up on a pub plan → 'no sign-up link' (localised), no invented URL" + (site ? "; the venue website offered" : ""), same
+        && /^No sign-up link is listed for /.test(en.reply ?? "") && /^Non c'è un link di iscrizione/.test(it.reply ?? "") && /^No hay un enlace de inscripción/.test(es.reply ?? "")
+        && [en, it, es].every((r) => (site ? r.followUp?.link?.url === site && r.followUp.link.label === "Open website" : !r.followUp?.link)), [en, it, es].map((r) => ({ reply: r.reply, followUp: r.followUp })));
+      const none = chatReply({ kind: "signup" }, meetFixture, { ...meetFixture.cards[0], url: undefined }, "how do I sign up");
+      add("no URL in the data → no link at all", !none.link && /No sign-up link is listed/.test(none.reply), none);
+    }
   }
   if (c.unit === "server9") {
     // Thin Atlas result (Atlas only holds the central hubs): the bundled snapshot, then live Overpass, top it up.

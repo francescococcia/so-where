@@ -8,9 +8,11 @@ import type { PlanCard, PlanResultWithAgent } from "@/lib/plan-types";
 
 export type ChatKind =
   | "share" | "thanks" | "directions" | "call" | "book" | "weather" | "step_free" | "price" | "busy" | "dog" | "wifi"
-  | "start_over" | "about" | "travel_mode";
+  | "start_over" | "about" | "travel_mode" | "signup";
 /** What the UI should surface: highlight Send plan / Directions, or clear to a fresh ask. Never sends anything. */
 export type ChatAction = "share" | "directions" | "start_over";
+/** ui36: a real link from the plan data (event sign-up page or venue website) the UI shows as a button. Opens in a new tab; never sends. */
+export type ChatLink = { label: string; url: string };
 export type ChatIntent = { kind: ChatKind; mode?: "bike" | "walk" | "car" };
 type Lang = "en" | "it" | "es";
 
@@ -19,8 +21,8 @@ const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u
 /** Plainly Italian / Spanish raw text (short replies the translator skipped, or no translation at all). */
 export function chatLang(text: string): Lang {
   const t = ` ${norm(text)} `;
-  const it = (t.match(/ (perfetto|grazie|ciao|faccio|percorso|amico|amica|mandalo|mandala|mandaglielo|inviagli|invialo|inviale|condividi|ricomincia|ricominciamo|chi sei|cosa sai|che tempo|piove|cane|quanto costa|costa|domani|alle|indicazioni|ottimo|va bene|come ci arrivo|chiama|prenota|c e|si puo|puo|posso|gente|affollato|lì|li|aiuto|bici|piedi|non|cosa|che|sono|per|questo|questa|voglio|vorrei|perche|boh|dove|quando|anche|niente) /g) ?? []).length;
-  const es = (t.match(/ (gracias|envialo|enviaselo|enviale|mandaselo|compartelo|comparte|hay|mucha|gente|como llego|perro|cuanto cuesta|cuesta|manana|quien eres|que puedes|vale|perfecto|tiempo|lluvia|llueve|llama|reserva|empezar|de nuevo|ayuda|bici|andando|caminando|puedo|que|quiero|donde|cuando|tambien|nada|esto|por favor|pero|sitio) /g) ?? []).length;
+  const it = (t.match(/ (perfetto|grazie|ciao|faccio|percorso|amico|amica|mandalo|mandala|mandaglielo|inviagli|invialo|inviale|condividi|ricomincia|ricominciamo|chi sei|cosa sai|che tempo|piove|cane|quanto costa|costa|domani|alle|indicazioni|ottimo|va bene|come ci arrivo|chiama|prenota|c e|si puo|puo|posso|gente|affollato|lì|li|aiuto|bici|piedi|non|cosa|che|sono|per|questo|questa|voglio|vorrei|perche|boh|dove|quando|anche|niente|iscrivermi|iscrivo|iscriversi|mi iscrivo|registrarmi|biglietti|biglietto|partecipo) /g) ?? []).length;
+  const es = (t.match(/ (gracias|envialo|enviaselo|enviale|mandaselo|compartelo|comparte|hay|mucha|gente|como llego|perro|cuanto cuesta|cuesta|manana|quien eres|que puedes|vale|perfecto|tiempo|lluvia|llueve|llama|reserva|empezar|de nuevo|ayuda|bici|andando|caminando|puedo|que|quiero|donde|cuando|tambien|nada|esto|por favor|pero|sitio|inscribo|inscribirme|me inscribo|entradas|registro) /g) ?? []).length;
   if (it > es && it > 0) return "it";
   if (es > it && es > 0) return "es";
   return "en";
@@ -49,6 +51,8 @@ const STEP_FREE = /\b(?:step[- ]?free|wheelchair|accessible|accessibility|disabl
 const PRICE = /\b(?:how much|what does .{1,30} cost|what(?:'s| is) the price|price of|prices?|cost(?:s)?|expensive|pricey|quanto costa|quanto viene|prezz\w*|costa|cuanto cuesta|cuanto vale|precio\w*|caro)\b/;
 const BUSY = /\b(?:busy|crowded|packed|rammed|full|queue|queues|wait(?:ing)? time|many people|lots of people|affollat\w*|pieno|gente|coda|lleno|mucha gente|cola)\b/;
 const DOG = /\b(?:dogs?|pets?|puppy|cane|cani|perro|perros|mascota\w*)\b/;
+// ui36: "how do I sign up?" in any language (iscriversi, registrarse, inscribirse, s'inscrire, anmelden, tickets).
+const SIGNUP = /\b(?:iscriv\w*|registr\w*|register\w*|sign ?up|signup|tickets?|biglietti|biglietto|entradas?|inscrib\w*|inscri\w*|anmeld\w*|how (?:do|can|should) (?:i|we) (?:join|attend)|come partecipo|come si partecipa|como participo)\b/;
 const WIFI = /\b(?:wi-?fi|internet|laptop|plugs?|sockets?|charge my phone|work from there|presa|enchufe)\b/;
 // Refinements win over chit-chat: a time, a day, a type or a preference means "change the plan".
 const REFINEISH = /\b(?:\d{1,2}(?::\d\d)?\s*(?:am|pm)?\b|tomorrow|tonight|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday|cheaper|quieter|closer|nearer|instead|different|another|alternative|other|pub|bar|cafe|coffee|restaurant|italian|terrace|indoor|outdoor)\b/;
@@ -57,6 +61,7 @@ const REFINEISH = /\b(?:\d{1,2}(?::\d\d)?\s*(?:am|pm)?\b|tomorrow|tonight|today|
 export function chatIntent(text: string): ChatIntent | null {
   const t = norm(text);
   if (!t || t.length > 200) return null;
+  if (SIGNUP.test(t)) return { kind: "signup" };
   if (SHARE.some((re) => re.test(t))) return { kind: "share" };
   if (THANKS.test(t)) return { kind: "thanks" };
   if (START_OVER.test(t)) return { kind: "start_over" };
@@ -86,7 +91,7 @@ const linkNote = (c: PlanCard | undefined, l: Lang) =>
     : ({ en: " Best to ask them.", it: " Meglio chiedere a loro.", es: " Mejor preguntarles." })[l];
 
 /** The reply (and what the UI should surface) for a chat intent, from the plan on screen only. */
-export function chatReply(intent: ChatIntent, result: PlanResultWithAgent | null, card: PlanCard | undefined, raw: string): { reply: string; action?: ChatAction; detail: string } {
+export function chatReply(intent: ChatIntent, result: PlanResultWithAgent | null, card: PlanCard | undefined, raw: string): { reply: string; action?: ChatAction; detail: string; link?: ChatLink } {
   const l = chatLang(raw);
   const name = card?.name;
   const T = (en: string, it: string, es: string) => ({ en, it, es })[l];
@@ -101,6 +106,28 @@ export function chatReply(intent: ChatIntent, result: PlanResultWithAgent | null
           'Toca "Send plan": tienes el mensaje listo con el sitio, la hora y la ruta, luego "Copy text" o "Share". No se envía nada hasta que tú lo hagas.',
         ),
       };
+    case "signup": {
+      // Only a URL that is in the data (the event's listing, or the venue's own website). Never invented.
+      const url = card?.url && /^https?:\/\//i.test(card.url) ? card.url : undefined;
+      if (card?.kind === "event" && url) {
+        const luma = /(?:^|\.)(?:lu\.ma|luma\.com)$/i.test((() => { try { return new URL(url).hostname; } catch { return ""; } })());
+        const label = luma ? "Register on Luma" : "Open event page";
+        return {
+          link: { label, url },
+          detail: `Sign-up: ${luma ? "Luma" : "event"} page from the listing · nothing sent`,
+          reply: luma
+            ? T(`Sign-up is on the event's Luma page: "${label}".`, `L'iscrizione è sulla pagina Luma dell'evento: "${label}".`, `La inscripción está en la página de Luma del evento: "${label}".`)
+            : T(`Sign-up is on the event's own page: "${label}".`, `L'iscrizione è sulla pagina dell'evento: "${label}".`, `La inscripción está en la página del evento: "${label}".`),
+        };
+      }
+      const what = name ?? T("this place", "questo posto", "este sitio");
+      return {
+        ...(url ? { link: { label: "Open website", url } } : {}),
+        detail: `Sign-up: no sign-up link listed${url ? " · website link" : ""}`,
+        reply: T(`No sign-up link is listed for ${what}.`, `Non c'è un link di iscrizione per ${what}.`, `No hay un enlace de inscripción para ${what}.`)
+          + (url ? T(` Its website: "Open website".`, ` Il suo sito: "Open website".`, ` Su web: "Open website".`) : ""),
+      };
+    }
     case "thanks":
       return { detail: "Thanks: no change", reply: T("You're welcome. Enjoy! Ask if you want to change anything.", "Di niente, buon divertimento! Chiedimi pure se vuoi cambiare qualcosa.", "¡De nada, que lo disfrutes! Dime si quieres cambiar algo.") };
     case "start_over":
